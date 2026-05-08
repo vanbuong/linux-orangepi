@@ -35,12 +35,12 @@ static struct fb_create_info create_info;
 int fb_core_init(struct fb_create_info *create, struct display_channel_state *out_state);
 int fb_core_exit(struct fb_create_info *create);
 
-static int fb_config_init(struct drm_device *drm, struct fb_create_info *info)
+static int fb_config_init(struct drm_device *drm, struct fb_create_info *info, int de_id)
 {
 	struct sunxi_logo_info logo;
 	unsigned int w, h;
 
-	sunxi_drm_get_logo_info(drm, &logo, &w, &h);
+	sunxi_drm_get_logo_info(drm, &logo, &w, &h, de_id);
 	if (logo.phy_addr) {
 		info->format = logo.bpp == 32 ?
 				  ARGB8888 : RGB888;
@@ -56,18 +56,18 @@ static int fb_config_init(struct drm_device *drm, struct fb_create_info *info)
 	info->scn_width = w;
 	info->scn_height = h;
 	info->drm = drm;
-	info->map.hw_display = 0;
+	info->map.hw_display = de_id;
 	info->map.hw_channel = 0;
 	info->mode = FULL_STRETCH;
 	info->fb_output_cnt = 1;
 	return 0;
 }
 
-int sunxi_fbdev_init(struct drm_device *drm, struct display_channel_state *out_state)
+int sunxi_fbdev_init(struct drm_device *drm, struct display_channel_state *out_state, int de_id)
 {
 	int ret;
 
-	ret = fb_config_init(drm, &create_info);
+	ret = fb_config_init(drm, &create_info, de_id);
 	if (ret)
 		goto OUT;
 	ret = fb_core_init(&create_info, out_state);

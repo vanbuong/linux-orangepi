@@ -30,10 +30,11 @@
 MODULE_AUTHOR("lwj");
 MODULE_DESCRIPTION("A low-level driver for IMX278 sensors");
 MODULE_LICENSE("GPL");
-MODULE_VERSION("1.0.0");
+MODULE_VERSION("1.0.1");
 
 #define MCLK              (24*1000*1000)
 #define V4L2_IDENT_SENSOR 0x0386
+#define V4L2_IDENT_SENSOR_2 0x0286
 
 /*
  * Our nominal (default) frame rate.
@@ -1480,14 +1481,14 @@ static int sensor_detect(struct v4l2_subdev *sd)
 	data_type rdval = 0;
 	sensor_read(sd, 0x0016, &rdval);
 	sensor_dbg("sensor_read 0x0016: 0x%x\n", rdval);
-	if (rdval != V4L2_IDENT_SENSOR >> 8) {
+	if ((rdval != V4L2_IDENT_SENSOR >> 8) && (rdval != V4L2_IDENT_SENSOR_2 >> 8)) {
 		sensor_err(" read 0x0016 return 0x%x\n", rdval);
 		return -ENODEV;
 	}
 
 	sensor_read(sd, 0x0017, &rdval);
 	sensor_dbg("sensor_read 0x0017: 0x%x\n", rdval);
-	if (rdval != (V4L2_IDENT_SENSOR & 0xff)) {
+	if ((rdval != (V4L2_IDENT_SENSOR & 0xff)) && (rdval != (V4L2_IDENT_SENSOR_2 & 0xff))) {
 		sensor_err(" read 0x0017 return 0x%x\n", rdval);
 		return -ENODEV;
 	}

@@ -235,6 +235,9 @@ struct cedar_dev {
 	wait_queue_head_t wait_ve;
 	struct regulator *regu;
 	ve_dbgfs_t *dbgfs;
+
+	int master_id;
+	int rpmsp_enable;
 };
 
 struct ve_info { /* each object will bind a new file handler */
@@ -285,6 +288,7 @@ int resource_iomap_init(struct device_node *node, struct iomap_para *iomap_addrs
 void ve_irq_work(struct cedar_dev *cedar_devp);
 int ve_dvfs_get_attr(struct cedar_dev *cedar_devp);
 int ioctl_flush_cache_range(unsigned long arg, uint8_t user, struct cedar_dev *cedar_devp);
+int ioctl_invalid_cache_range(unsigned long arg, uint8_t user, struct cedar_dev *cedar_devp);
 int ioctl_get_csi_online_related_info(unsigned long arg, uint8_t from_kernel, struct cedar_dev *cedar_devp);
 
 /* debug */
@@ -297,4 +301,6 @@ int ioctl_copy_proc_info(ve_dbgfs_t *dbgfs, unsigned long arg, struct ve_info *v
 int ioctl_stop_proc_info(ve_dbgfs_t *dbgfs, unsigned long arg, struct ve_info *vi);
 /*** pltform code new struct definition end    ***/
 
+/* rv rpmsg return iommu ctrl */
+extern void sunxi_enable_device_iommu(unsigned int master_id, bool flag);
 #endif

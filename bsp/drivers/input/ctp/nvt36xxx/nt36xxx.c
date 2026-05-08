@@ -24,6 +24,7 @@
 #include <linux/input/mt.h>
 #include <linux/of_gpio.h>
 #include <linux/of_irq.h>
+#include <linux/version.h>
 #include "nt36xxx.h"
 #include <linux/version.h>
 
@@ -164,7 +165,9 @@ return:
 static void nvt_irq_enable(bool enable)
 {
 	struct irq_desc *desc;
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0)
+	struct irq_data *irq_data;
+#endif
 	if (enable) {
 		if (!ts->irq_enabled) {
 			enable_irq(ts->client->irq);
@@ -177,7 +180,26 @@ static void nvt_irq_enable(bool enable)
 		}
 	}
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0)
+	irq_data = irq_get_irq_data(ts->client->irq);
+	if (!irq_data) {
+		pr_err("%s: Failed to get IRQ data for IRQ %u\n", __func__, ts->client->irq);
+		return;
+	}
+
+	desc = __irq_resolve_mapping(irq_data->domain, irq_data->hwirq, NULL);
+	if (!desc) {
+		pr_err("%s: Failed to resolve IRQ descriptor for IRQ %u\n", __func__, ts->client->irq);
+		return;
+	}
+#else
 	desc = irq_to_desc(ts->client->irq);
+	if (!desc) {
+		pr_err("%s: Failed to get IRQ descriptor for IRQ %u\n", __func__, ts->client->irq);
+		return;
+	}
+#endif
+
 	NVT_LOG("enable=%d, desc->depth=%d\n", enable, desc->depth);
 }
 

@@ -254,16 +254,7 @@ struct sw_uart_port {
 #endif
 
 #ifndef SUNXI_UART_NUM
-#define SUNXI_UART_NUM			1
-#endif
-
-/*
- * In 50/39 FPGA, two UART is available, but they share one IRQ.
- * So we define the number of UART port as 1.
- */
-#if !IS_ENABLED(CONFIG_AW_IC_BOARD)
-#undef SUNXI_UART_NUM
-#define SUNXI_UART_NUM			1
+#define SUNXI_UART_NUM   CONFIG_AW_SERIAL_NR_UARTS
 #endif
 
 #define SUNXI_UART_FIFO_SIZE		64

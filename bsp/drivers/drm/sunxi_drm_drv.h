@@ -76,6 +76,17 @@ struct sunxi_drm_private {
 	struct drm_property *prop_frame_rate_change;
 	struct drm_property *prop_compressed_image_crop;
 	struct sunxi_drm_pri *priv;
+	struct sunxi_mode_monitor *mode_monitor;
+};
+
+struct sunxi_mode_monitor {
+	struct delayed_work work;
+	struct drm_connector *connector;
+	struct drm_crtc *crtc;
+	struct sunxi_drm_pri *priv;
+	int check_interval_ms;
+	bool is_monitoring;
+	/* char conn_type[16]; */
 };
 
 #define to_sunxi_drm_private(drm) container_of(drm, struct sunxi_drm_private, base)
@@ -86,7 +97,7 @@ bool sunxi_drm_check_device_boot_enabled(struct drm_device *dev,
 bool sunxi_drm_check_tcon_top_boot_enabled(struct drm_device *drm, unsigned int tcon_top_id);
 bool sunxi_drm_check_de_boot_enabled(struct drm_device *drm, unsigned int de_id);
 int sunxi_drm_get_logo_info(struct drm_device *dev, struct sunxi_logo_info *logo,
-			    unsigned int *scn_w, unsigned int *scn_h);
+			    unsigned int *scn_w, unsigned int *scn_h, int de_id);
 int sunxi_drm_get_device_max_fps(struct drm_device *drm);
 unsigned int sunxi_drm_get_de_max_freq(struct drm_device *drm);
 void sunxi_drm_signal_sw_enable_done(struct drm_crtc *crtc);

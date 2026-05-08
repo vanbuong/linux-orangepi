@@ -763,10 +763,10 @@
 			pd_ve_enc@SUN60IW2_PCK_VE_ENC {
 				reg = <SUN60IW2_PCK_VE_ENC>;
 			};
-			/*
 			pd_gpu_top@SUN60IW2_PCK_GPU_TOP {
 				reg = <SUN60IW2_PCK_GPU_TOP>;
 			};
+			/*
 			pd_gpu_core@SUN60IW2_PCK_GPU_CORE {
 				reg = <SUN60IW2_PCK_GPU_CORE>;
 			};
@@ -2359,6 +2359,7 @@
 			reset-names = "npu_rst", "npu_axi_rst", "npu_ahb_rst";
 			power-domains = <&pd SUN60IW2_PCK_NPU>;
 			npu-vf = <1008>;
+			npu-vfgear = <0>;
 			status = "disable";
 		};
 
@@ -2435,9 +2436,9 @@
 			reg = <0x0 0x04100000 0x0 0x1000>, /* udc base */
 			      <0x0 0x00000000 0x0 0x100>;  /* sram base */
 			interrupts = <GIC_SPI 156 IRQ_TYPE_LEVEL_HIGH>;
-			clocks = <&ccu CLK_USB_REF>, <&ccu CLK_USB0_DEVICE>, <&ccu CLK_RES_DCAP_24M>,
+			clocks = <&ccu CLK_USB_REF>, <&ccu CLK_USB0_DEVICE>,
 				 <&ccu CLK_USB_SYS_AHB_GATE>, <&ccu CLK_MSI_LITE2>;
-			clock-names = "hosc", "bus_otg", "res_dcap", "usb_sys_ahb", "msi_lite";
+			clock-names = "hosc", "bus_otg", "usb_sys_ahb", "msi_lite";
 			resets = <&ccu RST_USB_0_DEVICE>, <&ccu RST_USB_0_PHY_RSTN>;
 			reset-names = "otg", "phy";
 			aw,dma_addr_extend;
@@ -2451,9 +2452,9 @@
 			      <0x0 0x00000000 0x0 0x100>,  /*sram base*/
 			      <0x0 0x04100000 0x0 0x1000>; /*otg base*/
 			interrupts = <GIC_SPI 157 IRQ_TYPE_LEVEL_HIGH>;
-			clocks = <&ccu CLK_USB_REF>, <&ccu CLK_USB0_EHCI>, <&ccu CLK_RES_DCAP_24M>,
+			clocks = <&ccu CLK_USB_REF>, <&ccu CLK_USB0_EHCI>,
 				 <&ccu CLK_USB_SYS_AHB_GATE>, <&ccu CLK_MSI_LITE2>;
-			clock-names = "hosc", "bus_hci", "res_dcap", "usb_sys_ahb", "msi_lite";
+			clock-names = "hosc", "bus_hci", "usb_sys_ahb", "msi_lite";
 			resets = <&ccu RST_USB_0_EHCI>, <&ccu RST_USB_0_PHY_RSTN>;
 			reset-names = "hci", "phy";
 			hci_ctrl_no = <0>;
@@ -2466,9 +2467,9 @@
 			      <0x0 0x00000000 0x0 0x100>,  /*sram base*/
 			      <0x0 0x04100000 0x0 0x1000>; /*otg base*/
 			interrupts = <GIC_SPI 158 IRQ_TYPE_LEVEL_HIGH>;
-			clocks = <&ccu CLK_USB_REF>, <&ccu CLK_USB0_OHCI>, <&ccu CLK_USB>, <&ccu CLK_RES_DCAP_24M>,
+			clocks = <&ccu CLK_USB_REF>, <&ccu CLK_USB0_OHCI>, <&ccu CLK_USB>,
 				 <&ccu CLK_USB_SYS_AHB_GATE>, <&ccu CLK_MSI_LITE2>;
-			clock-names = "hosc", "bus_hci", "ohci", "res_dcap", "usb_sys_ahb", "msi_lite";
+			clock-names = "hosc", "bus_hci", "ohci", "usb_sys_ahb", "msi_lite";
 			resets = <&ccu RST_USB_0_OHCI>, <&ccu RST_USB_0_PHY_RSTN>;
 			reset-names = "hci", "phy";
 			hci_ctrl_no = <0>;
@@ -2489,9 +2490,9 @@
 			      <0x0 0x00000000 0x0 0x100>,  /*sram base*/
 			      <0x0 0x04100000 0x0 0x1000>; /*otg base*/
 			interrupts = <GIC_SPI 159 IRQ_TYPE_LEVEL_HIGH>;
-			clocks = <&ccu CLK_USB_REF>, <&ccu CLK_USB1_EHCI>, <&ccu CLK_RES_DCAP_24M>,
+			clocks = <&ccu CLK_USB_REF>, <&ccu CLK_USB1_EHCI>,
 				 <&ccu CLK_USB_SYS_AHB_GATE>, <&ccu CLK_MSI_LITE2>;
-			clock-names = "hosc", "bus_hci", "res_dcap", "usb_sys_ahb", "msi_lite";
+			clock-names = "hosc", "bus_hci", "usb_sys_ahb", "msi_lite";
 			resets = <&ccu RST_USB_1_EHCI>, <&ccu RST_USB_1_PHY_RSTN>;
 			reset-names = "hci", "phy";
 			hci_ctrl_no = <1>;
@@ -2504,9 +2505,9 @@
 			      <0x0 0x00000000 0x0 0x100>,  /*sram base*/
 			      <0x0 0x04100000 0x0 0x1000>; /*otg base*/
 			interrupts = <GIC_SPI 160 IRQ_TYPE_LEVEL_HIGH>;
-			clocks = <&ccu CLK_USB_REF>, <&ccu CLK_USB1_OHCI>, <&ccu CLK_USB1>, <&ccu CLK_RES_DCAP_24M>,
+			clocks = <&ccu CLK_USB_REF>, <&ccu CLK_USB1_OHCI>, <&ccu CLK_USB1>,
 				 <&ccu CLK_USB_SYS_AHB_GATE>, <&ccu CLK_MSI_LITE2>;
-			clock-names = "hosc", "bus_hci", "ohci", "res_dcap", "usb_sys_ahb", "msi_lite";
+			clock-names = "hosc", "bus_hci", "ohci", "usb_sys_ahb", "msi_lite";
 			resets = <&ccu RST_USB_1_OHCI>, <&ccu RST_USB_1_PHY_RSTN>;
 			reset-names = "hci", "phy";
 			hci_ctrl_no = <1>;
@@ -2550,12 +2551,8 @@
 
 		u2phy: phy@6b00000 {
 			compatible = "allwinner,sunxi-plat-phy";
-			reg = <0x0 0x06b00000 0x0 0x800>, /* Application Registers */
-			      <0x0 0x03000000 0x0 0x300>; /* SYSCFG Registers */
-			reg-names = "u2_base", "res_base";
-			clocks = <&ccu CLK_RES_DCAP_24M>;
-			clock-names = "res_dcap";
-			aw,rext_mode = <2>;
+			reg = <0x0 0x06b00000 0x0 0x800>; /* Application Registers */
+			reg-names = "u2_base";
 			aw,phy_tune_param = <0x143338D6>;
 			#phy-cells = <0>;
 			status = "disabled";
@@ -3416,13 +3413,13 @@
 			power-domains = <&pd SUN60IW2_PCK_GPU_TOP>;
 			status = "okay";
 		};
-
+		/*
 		pd_gpu_core_test: pd_gpu_core_test@0 {
 			compatible = "allwinner,sunxi-power-domain-test";
 			power-domains = <&pd SUN60IW2_PCK_GPU_CORE>;
 			status = "okay";
 		};
-
+		*/
 		pd_pcie_test: pd_pcie_test@0 {
 			compatible = "allwinner,sunxi-power-domain-test";
 			power-domains = <&pd SUN60IW2_PCK_PCIE>;
@@ -4613,7 +4610,7 @@
 				"clk_300", "clk_200";
 			resets = <&ccu RST_BUS_GPU0>;
 			reset-names = "reset_bus";
-			/*power-domains = <&pd SUN60IW2_PCK_GPU_TOP>;*/
+			power-domains = <&pd SUN60IW2_PCK_GPU_TOP>;
 			operating-points-v2 = <&gpu_opp_table>;
 			#cooling-cells = <2>;
 		};
@@ -4627,17 +4624,23 @@
 				opp-microvolt-vfdefault = <800000>;
 				opp-microvolt-vf0000 = <800000>;
 				opp-microvolt-vf0100 = <800000>;
+				opp-microvolt-vf0101 = <800000>;
 				opp-microvolt-vf0200 = <800000>;
 				opp-microvolt-vf0201 = <800000>;
 				opp-microvolt-vf0202 = <800000>;
 				opp-microvolt-vf0302 = <800000>;
 				opp-microvolt-vf0402 = <800000>;
-				opp-microvolt-vf0502 = <800000>;
 				opp-microvolt-vf0602 = <800000>;
 				opp-microvolt-vf0300 = <800000>;
 				opp-microvolt-vf0400 = <800000>;
+				opp-microvolt-vf0401 = <800000>;
 				opp-microvolt-vf0500 = <800000>;
+				opp-microvolt-vf0501 = <800000>;
+				opp-microvolt-vf0502 = <800000>;
+				opp-microvolt-vf0503 = <800000>;
 				opp-microvolt-vf0600 = <800000>;
+				opp-microvolt-vf0700 = <800000>;
+				opp-microvolt-vf0800 = <800000>;
 				opp-microvolt-vf1400 = <800000>;
 				opp-microvolt-vf1500 = <800000>;
 			};*/
@@ -4654,12 +4657,17 @@
 				opp-microvolt-vf0202 = <800000>;
 				opp-microvolt-vf0302 = <800000>;
 				opp-microvolt-vf0402 = <800000>;
-				opp-microvolt-vf0502 = <800000>;
 				opp-microvolt-vf0602 = <800000>;
 				opp-microvolt-vf0300 = <800000>;
 				opp-microvolt-vf0400 = <800000>;
+				opp-microvolt-vf0401 = <800000>;
 				opp-microvolt-vf0500 = <800000>;
+				opp-microvolt-vf0501 = <800000>;
+				opp-microvolt-vf0502 = <800000>;
+				opp-microvolt-vf0503 = <800000>;
 				opp-microvolt-vf0600 = <800000>;
+				opp-microvolt-vf0700 = <800000>;
+				opp-microvolt-vf0800 = <800000>;
 				opp-microvolt-vf1400 = <800000>;
 				opp-microvolt-vf1500 = <800000>;
 			};
@@ -4675,13 +4683,18 @@
 				opp-microvolt-vf0201 = <800000>;
 				opp-microvolt-vf0202 = <800000>;
 				opp-microvolt-vf0302 = <800000>;
+				opp-microvolt-vf0401 = <800000>;
 				opp-microvolt-vf0402 = <800000>;
+				opp-microvolt-vf0501 = <800000>;
 				opp-microvolt-vf0502 = <800000>;
+				opp-microvolt-vf0503 = <800000>;
 				opp-microvolt-vf0602 = <800000>;
 				opp-microvolt-vf0300 = <800000>;
 				opp-microvolt-vf0400 = <800000>;
 				opp-microvolt-vf0500 = <800000>;
 				opp-microvolt-vf0600 = <800000>;
+				opp-microvolt-vf0800 = <800000>;
+				opp-microvolt-vf0700 = <800000>;
 				opp-microvolt-vf1400 = <800000>;
 				opp-microvolt-vf1500 = <800000>;
 			};
@@ -4702,8 +4715,13 @@
 				opp-microvolt-vf0602 = <800000>;
 				opp-microvolt-vf0300 = <820000>;
 				opp-microvolt-vf0400 = <800000>;
+				opp-microvolt-vf0401 = <800000>;
 				opp-microvolt-vf0500 = <800000>;
+				opp-microvolt-vf0501 = <800000>;
+				opp-microvolt-vf0503 = <800000>;
 				opp-microvolt-vf0600 = <800000>;
+				opp-microvolt-vf0700 = <800000>;
+				opp-microvolt-vf0800 = <820000>;
 				opp-microvolt-vf1400 = <800000>;
 				opp-microvolt-vf1500 = <800000>;
 			};
@@ -4720,12 +4738,17 @@
 				opp-microvolt-vf0202 = <920000>;
 				opp-microvolt-vf0302 = <920000>;
 				opp-microvolt-vf0402 = <900000>;
-				opp-microvolt-vf0502 = <880000>;
+				opp-microvolt-vf0502 = <860000>;
 				opp-microvolt-vf0602 = <860000>;
 				opp-microvolt-vf0300 = <940000>;
 				opp-microvolt-vf0400 = <900000>;
+				opp-microvolt-vf0401 = <880000>;
 				opp-microvolt-vf0500 = <880000>;
+				opp-microvolt-vf0501 = <860000>;
+				opp-microvolt-vf0503 = <860000>;
 				opp-microvolt-vf0600 = <920000>;
+				opp-microvolt-vf0700 = <880000>;
+				opp-microvolt-vf0800 = <940000>;
 				opp-microvolt-vf1400 = <880000>;
 				opp-microvolt-vf1500 = <860000>;
 			};
@@ -5016,17 +5039,26 @@
 		pcie_rc: pcie@6000000 {
 			#address-cells = <3>;
 			#size-cells = <2>;
-			compatible = "allwinner,sunxi-pcie-v300-rc";
-			bus-range = <0x0 0xff>;
-			reg = <0 0x06000000 0 0x480000>;
-			reg-names = "dbi";
+			compatible = "allwinner,sun60iw2-pcie", "snps,dw-pcie";
 			device_type = "pci";
-			ranges = <0x00000800 0 0x20000000 0x0 0x20000000 0 0x01000000
-				  0x81000000 0 0x21000000 0x0 0x21000000 0 0x01000000
-				  0x82000000 0 0x22000000 0x0 0x22000000 0 0x06000000>;
-			num-lanes = <1>;
-			phys = <&combo1_pcie>;
-			phy-names = "pcie-phy";
+			reg = <0x0 0x06000000 0x0 0x00100000>,
+			      <0x0 0x06100000 0x0 0x00040000>,
+			      <0x0 0x06300000 0x0 0x00080000>,
+			      <0x0 0x06380000 0x0 0x00080000>,
+			      <0x0 0x06400000 0x0 0x00080000>,
+			      <0x0 0x20000000 0x0 0x01000000>;
+			reg-names = "dbi", "dbi2", "atu", "dma", "app", "config";
+			ranges = <0x01000000 0x0 0x21000000 0x0 0x21000000 0x0 0x01000000>, /* downstream I/O (16 MB) */
+				 <0x02000000 0x0 0x22000000 0x0 0x22000000 0x0 0x06000000>, /* non-prefetchable memory (96 MB) */
+				 <0x43000000 0x4 0x40000000 0x4 0x40000000 0x1 0x00000000>; /* prefetchable memory (4 GB) */
+			clocks =  <&ccu CLK_PCIE0_AUX>, <&ccu CLK_PCIE0_AXI_SLV>, <&ccu CLK_ITS_PCIE0_A>;
+			clock-names = "aux", "axi_slv", "its";
+			assigned-clocks = <&ccu CLK_PCIE0_AXI_SLV>;
+			assigned-clocks-parents = <&ccu CLK_PLL_PERI0_400M>;
+			assigned-clock-rates = <400000000>;
+			resets = <&ccu RST_BUS_PCIE0>, <&ccu RST_BUS_PCIE0_PWRUP>, <&ccu RST_BUS_ITS_PCIE0>;
+			reset-names = "rst", "pwrup_rst", "its";
+			power-domains = <&pd SUN60IW2_PCK_PCIE>;
 			interrupts = <GIC_SPI 152 IRQ_TYPE_LEVEL_HIGH>,
 				     <GIC_SPI 153 IRQ_TYPE_LEVEL_HIGH>,
 				     <GIC_SPI 136 IRQ_TYPE_LEVEL_HIGH>,
@@ -5037,31 +5069,29 @@
 				     <GIC_SPI 141 IRQ_TYPE_LEVEL_HIGH>,
 				     <GIC_SPI 142 IRQ_TYPE_LEVEL_HIGH>,
 				     <GIC_SPI 143 IRQ_TYPE_LEVEL_HIGH>;
-			interrupt-names = "sii", "msi", "edma-w0", "edma-w1", "edma-w2", "edma-w3",
-					  "edma-r0", "edma-r1", "edma-r2", "edma-r3";
+			interrupt-names = "sii", "msi",
+					  "dma0", "dma1", "dma2", "dma3", /* edma-w */
+					  "dma4", "dma5", "dma6", "dma7"; /* edma-r */
 			#interrupt-cells = <1>;
 			interrupt-map-mask = <0 0 0 7>;
 			interrupt-map = <0 0 0 1 &pcie_intc 0>,
-							<0 0 0 2 &pcie_intc 1>,
-							<0 0 0 3 &pcie_intc 2>,
-							<0 0 0 4 &pcie_intc 3>;
-			num-edma = <4>;
-			max-link-speed = <3>;
-			num-ib-windows = <16>;
-			num-ob-windows = <16>;
+					<0 0 0 2 &pcie_intc 1>,
+					<0 0 0 3 &pcie_intc 2>,
+					<0 0 0 4 &pcie_intc 3>;
+			bus-range = <0x0 0xff>;
 			linux,pci-domain = <0>;
-			power-domains = <&pd SUN60IW2_PCK_PCIE>;
-			clocks =  <&ccu CLK_PCIE0_AUX>, <&ccu CLK_PCIE0_AXI_SLV>, <&ccu CLK_ITS_PCIE0_A>;
-			clock-names = "pclk_aux", "pclk_slv", "its";
-			resets = <&ccu RST_BUS_PCIE0>, <&ccu RST_BUS_PCIE0_PWRUP>, <&ccu RST_BUS_ITS_PCIE0>;
-			reset-names = "pclk_rst", "pwrup_rst", "its";
-			busno = <0>;
+			max-link-speed = <3>;
+			num-lanes = <1>;
+			phys = <&combo1_pcie>;
+			phy-names = "pcie-phy";
 			status = "disabled";
 
 			pcie_intc: legacy-interrupt-controller {
 				interrupt-controller;
 				#address-cells = <0>;
 				#interrupt-cells = <1>;
+				interrupt-parent = <&gic>;
+				interrupts = <GIC_SPI 152 IRQ_TYPE_EDGE_RISING>;
 			};
 		};
 	};

@@ -760,6 +760,10 @@ typedef struct _PVRSRV_RGXDEV_INFO_
 	                                    IMG_HANDLE hGpuUtilUser,
 	                                    RGXFWIF_GPU_UTIL_STATS *psReturnStats);
 
+	IMG_UINT32 ui32GetGpuUtilStatsFailedCounts[3];
+	unsigned long busy_time;
+	unsigned long total_time;
+
 	/* Pointer to function that checks if the physical GPU IRQ
 	 * line has been asserted and clears it if so */
 	IMG_BOOL (*pfnRGXAckIrq) (struct _PVRSRV_RGXDEV_INFO_ *psDevInfo);

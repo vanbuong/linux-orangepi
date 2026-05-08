@@ -192,8 +192,8 @@ void sunxi_jack_typec_mode_set(struct sunxi_jack_typec_cfg *jack_typec_cfg,
 	struct sunxi_jack_pins *jack_pins = jack_typec_cfg->jack_pins;
 	struct sunxi_jack_modes_map *modes_map = jack_typec_cfg->modes_map;
 
-	if (!modes_map || !jack_pins) {
-		SND_LOG_ERR("modes map or jack pins is NULL\n");
+	if (!modes_map || !jack_pins || !(modes_map[mode].map_value)) {
+		SND_LOG_ERR("modes map or jack pins or map_value is NULL\n");
 		return;
 	}
 

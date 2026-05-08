@@ -169,6 +169,7 @@ config AW_SUN20IW5_APP_CCU
 config AW_SUN65IW1_CCU
 	tristate "SUN65IW1 CCU"
 	default ARCH_SUN65IW1
+	select AW_STANDARD_CCU
 	depends on AW_CCU
 	help
 	  This enables support clock about module on Allwinner SoCs
@@ -176,6 +177,7 @@ config AW_SUN65IW1_CCU
 config AW_SUN65IW1_R_CCU
 	tristate "SUN65IW1 PRCM CCU"
 	default ARCH_SUN65IW1
+	select AW_STANDARD_CCU
 	depends on AW_CCU
 
 config AW_RTC_CCU

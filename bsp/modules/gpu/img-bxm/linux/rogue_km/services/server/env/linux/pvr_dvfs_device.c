@@ -252,12 +252,40 @@ static int devfreq_get_dev_status(struct device *dev, struct devfreq_dev_status 
 
 	if (eError != PVRSRV_OK)
 	{
-		kfree(psGpuUtilStats);
-		return -EAGAIN;
+		//dev_err(dev, "GetGpuUtilStats error =%d\n", eError);
+		//kfree(psGpuUtilStats);
+		//return -EAGAIN;
+		switch (eError) {
+		case PVRSRV_ERROR_INVALID_PARAMS:
+			++psDevInfo->ui32GetGpuUtilStatsFailedCounts[0];
+			break;
+		case PVRSRV_ERROR_TIMEOUT:
+			++psDevInfo->ui32GetGpuUtilStatsFailedCounts[1];
+			break;
+		case PVRSRV_ERROR_RESOURCE_UNAVAILABLE:
+			++psDevInfo->ui32GetGpuUtilStatsFailedCounts[2];
+			break;
+		default:
+			dev_err(dev, "Unknown GetGpuUtilStats error =%d\n", eError);
+			break;
+		}
+
+		psGpuUtilStats->ui64GpuStatActive = 10000;
+		psGpuUtilStats->ui64GpuStatCumulative = 10000;
+	} else {
+		if ((psDevInfo->busy_time == 10000 && psDevInfo->total_time == 10000)
+			&& (psGpuUtilStats->ui64GpuStatActive == 0)
+			&& (psGpuUtilStats->ui64GpuStatCumulative < 20000)) { // hw util info is invalid
+			psGpuUtilStats->ui64GpuStatActive = 10000;
+			psGpuUtilStats->ui64GpuStatCumulative = 10000;
+		}
+
 	}
 
 	stat->busy_time = psGpuUtilStats->ui64GpuStatActive;
 	stat->total_time = psGpuUtilStats->ui64GpuStatCumulative;
+	psDevInfo->busy_time = stat->busy_time;
+	psDevInfo->total_time = stat->total_time;
 
 	kfree(psGpuUtilStats);
 
@@ -1133,12 +1161,16 @@ PVRSRV_ERROR RegisterDVFSDevice(PPVRSRV_DEVICE_NODE psDeviceNode)
 	psRGXTimingInfo = ((RGX_DATA *)psDeviceNode->psDevConfig->hDevData)->psRGXTimingInfo;
 	psDeviceNode->psDevConfig->sDVFS.sDVFSDevice.eState = PVR_DVFS_STATE_READY;
 
-	err = GetOPPValues(psDev, &min_freq, &min_volt, &max_freq, &pvr_freq_table);
-	if (err)
-	{
-		PVR_DPF((PVR_DBG_ERROR, "Failed to read OPP points, %d", err));
-		eError = TO_IMG_ERR(err);
-		goto err_exit;
+	if (!psDVFSDeviceCfg->ui32OPPTableSize) {
+		err = GetOPPValues(psDev, &min_freq, &min_volt, &max_freq, &pvr_freq_table);
+		if (err) {
+			PVR_DPF((PVR_DBG_ERROR, "Failed to read OPP points, %d", err));
+			eError = TO_IMG_ERR(err);
+			goto err_exit;
+		}
+	} else {
+		GetOPPValuesFromDeviceCFG(psDev, psDVFSDeviceCfg,
+				&min_freq, &min_volt, &max_freq, &pvr_freq_table);
 	}
 
 	img_devfreq_dev_profile.freq_table = pvr_freq_table.freq_table;

@@ -1,0 +1,22 @@
+// SPDX-License-Identifer: GPL-2.0
+/*
+ * Copyright(c) 2025 Houmo AI Inc.
+ * Author: hongxing.ma<hongxing.ma@houmo.ai>
+ */
+
+#ifndef _XH2A_EFUSE_MACRO_H_
+#define _XH2A_EFUSE_MACRO_H_
+
+#define XH2A_EFUSE_SUBTYPE_DDR_0_ROW	142
+#define XH2A_EFUSE_SUBTYPE_DDR_0_BIT	0
+#define XH2A_EFUSE_SUBTYPE_DDR_0_LENGTH 8
+
+#define XH2A_EFUSE_SUBTYPE_DDR_1_ROW	144
+#define XH2A_EFUSE_SUBTYPE_DDR_1_BIT	16
+#define XH2A_EFUSE_SUBTYPE_DDR_1_LENGTH 8
+
+#define XH2A_EFUSE_SUBTYPE_IPU_0_ROW	156
+#define XH2A_EFUSE_SUBTYPE_IPU_0_BIT	24
+#define XH2A_EFUSE_SUBTYPE_IPU_0_LENGTH 8
+
+#endif

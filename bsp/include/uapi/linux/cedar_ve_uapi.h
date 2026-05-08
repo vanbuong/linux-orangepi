@@ -70,6 +70,7 @@ enum IOCTL_CMD {
 
 	/* for fush cache range since kernel 5.4 */
 	IOCTL_FLUSH_CACHE_RANGE,
+	IOCTL_INVALID_CACHE_RANGE,
 
 	/* for debug */
 	IOCTL_SET_PROC_INFO,
@@ -99,6 +100,9 @@ enum IOCTL_CMD {
 	IOCTL_CLEAR_EN_INT_FLAG,
 	IOCTL_GET_VE_TOP_REG_OFFSET,
 	IOCTL_WAIT_VCU_DEC,
+
+	/*for check rv ve finish*/
+	IOCTL_RV_STOP = 0x900,
 };
 
 struct cedarv_env_infomation {

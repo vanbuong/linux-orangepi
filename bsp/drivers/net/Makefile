@@ -4,3 +4,4 @@
 #
 
 obj-$(CONFIG_WLAN) += wireless/
+obj-y += phy/

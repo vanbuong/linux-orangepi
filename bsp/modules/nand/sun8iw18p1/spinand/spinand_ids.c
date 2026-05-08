@@ -79,7 +79,7 @@ struct __NandPhyInfoPar_t ext_spinand_idts[] = {
 		.MultiPlaneBlockOffset = 1,
 		.MaxEraseTimes  = 50000,
 		.ecc_status_shift = ECC_STATUS_SHIFT_2,
-		.EccType	= BIT4_LIMIT5_TO_7_ERR8_LIMIT_12,
+		.EccType	= BIT4_LIMIT6_TO_7_ERR8_LIMIT_12,
 		.EccProtectedType = SIZE16_OFF8_LEN16,
 	},
 	{
@@ -98,7 +98,7 @@ struct __NandPhyInfoPar_t ext_spinand_idts[] = {
 		.MultiPlaneBlockOffset = 1,
 		.MaxEraseTimes  = 50000,
 		.ecc_status_shift = ECC_STATUS_SHIFT_2,
-		.EccType	= BIT4_LIMIT5_TO_7_ERR8_LIMIT_12,
+		.EccType	= BIT4_LIMIT6_TO_7_ERR8_LIMIT_12,
 		.EccProtectedType = SIZE16_OFF8_LEN16,
 	},
 

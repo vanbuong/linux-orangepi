@@ -867,9 +867,9 @@ static INLINE PVRSRV_ERROR RGXDoStart(PVRSRV_DEVICE_NODE *psDeviceNode)
 	PVRSRV_ERROR eError;
 	PVRSRV_RGXDEV_INFO *psDevInfo = psDeviceNode->pvDevice;
 
-#if defined(SUPPORT_TRUSTED_DEVICE) && !defined(NO_HARDWARE) && !defined(SUPPORT_SECURITY_VALIDATION)
 	PVRSRV_DEVICE_CONFIG *psDevConfig = psDeviceNode->psDevConfig;
 
+#if defined(SUPPORT_TRUSTED_DEVICE) && !defined(NO_HARDWARE) && !defined(SUPPORT_SECURITY_VALIDATION)
 	if (psDevConfig->pfnTDRGXStart == NULL)
 	{
 		PVR_DPF((PVR_DBG_ERROR, "RGXPostPowerState: TDRGXStart not implemented!"));
@@ -883,6 +883,7 @@ static INLINE PVRSRV_ERROR RGXDoStart(PVRSRV_DEVICE_NODE *psDeviceNode)
 		psDevInfo->bRGXPowered = IMG_TRUE;
 	}
 #else
+	psDevConfig->pfnTDSystemSecureConfig(psDevConfig->hSysData);
 	eError = RGXStart(&psDevInfo->sLayerParams);
 #endif
 

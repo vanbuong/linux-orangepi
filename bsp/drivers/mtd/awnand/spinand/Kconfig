@@ -105,4 +105,11 @@ config BIMAGE_SIZE
 	default 20
 	help
 		unit is MiByte, it serves as the size of the boot partition
+
+config SUNXI_BOOT_PARAM
+	bool "support boot_param"
+	depends on AW_MTD_SPINAND
+	default n
+	help
+		save same params in the boot_param part
 endif

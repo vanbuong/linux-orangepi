@@ -175,11 +175,15 @@ static void combo_phy_mode_set(struct sunxi_combphy *combphy, bool enable)
 	if (enable) {
 		tmp |= PHY_RSTN;
 		val |= tmp;
+		writel(0x18, combphy->phy_clk + 0x0c94);
 	} else {
 		tmp &= ~PHY_RSTN;
 		val &= ~tmp;
+		writel(0x00, combphy->phy_clk + 0x0c94);
 	}
+	mdelay(5);
 	writel(val, COMBO_REG_PHYCTRL(combphy->phy_ctl));
+	mdelay(5);
 }
 
 static u32 combo_sysver_get(struct sunxi_combphy *combphy)
@@ -497,6 +501,7 @@ static void sunxi_combphy_usb3_phy_set(struct sunxi_combphy *combphy, bool enabl
 		writel(val, combphy->phy_clk + 0x0804);
 	}
 
+#ifdef SUNXI_INNO_COMBOPHY_SSC
 	/* SSC configure */
 	val = readl(combphy->phy_clk + 0x107c);
 	tmp = 0x3f << 12;
@@ -517,12 +522,13 @@ static void sunxi_combphy_usb3_phy_set(struct sunxi_combphy *combphy, bool enabl
 	writel(val, combphy->phy_clk + 0x1034);
 
 	val = readl(combphy->phy_clk + 0x101c);
-	val = 0x1c2aaaab; /* from inno: better compatibility */
+	val |= BIT(27);                          /* choose downspread */
 	if (enable)
-		val |= BIT(28);
+		val &= ~BIT(28); /* enable ssc = 0 */
 	else
-		val &= ~BIT(28);
+		val |= BIT(28); /* disable ssc = 1 */
 	writel(val, combphy->phy_clk + 0x101c);
+#endif
 
 #ifdef SUNXI_INNO_COMMBOPHY_DEBUG
 	/* TX Eye configure bypass_en */
@@ -1148,5 +1154,5 @@ module_platform_driver(sunxi_combphy_driver);
 
 MODULE_DESCRIPTION("Allwinner INNO COMBOPHY driver");
 MODULE_AUTHOR("songjundong@allwinnertech.com");
-MODULE_VERSION("0.0.21");
+MODULE_VERSION("0.0.23");
 MODULE_LICENSE("GPL v2");

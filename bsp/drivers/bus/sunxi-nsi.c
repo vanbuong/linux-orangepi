@@ -2165,4 +2165,4 @@ module_exit(nsi_pmu_exit);
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("SUNXI NSI support");
 MODULE_AUTHOR("huangshuosheng");
-MODULE_VERSION("1.1.0");
+MODULE_VERSION("1.1.1");

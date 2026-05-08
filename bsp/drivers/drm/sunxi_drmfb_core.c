@@ -48,13 +48,13 @@ struct drm_fb_info *drm_framebuffer_alloc(size_t size, struct device *dev)
 #undef BYTES_PER_LONG
 }
 
-static int drm_fb_config(struct drm_device *drm, struct fb_create_info *info)
+static int drm_fb_config(struct drm_device *drm, struct fb_create_info *info, int de_id)
 {
 	struct sunxi_logo_info logo;
 	unsigned int w, h;
 	int ret;
 
-	ret = sunxi_drm_get_logo_info(drm, &logo, &w, &h);
+	ret = sunxi_drm_get_logo_info(drm, &logo, &w, &h, de_id);
 	if (ret < 0) {
 		DRM_ERROR("get logo info err:%d\n", ret);
 		return -1;
@@ -77,7 +77,7 @@ static int drm_fb_config(struct drm_device *drm, struct fb_create_info *info)
 	info->scn_width = w;
 	info->scn_height = h;
 	info->drm = drm;
-	info->map.hw_display = 0;
+	info->map.hw_display = de_id;
 	info->map.hw_channel = 0;
 	info->mode = FULL_STRETCH;
 	info->fb_output_cnt = 1;
@@ -138,11 +138,11 @@ static int drm_fb_exit(struct fb_create_info *create)
 	return 0;
 }
 
-int sunxi_fbdev_init(struct drm_device *drm, struct display_channel_state *out_state)
+int sunxi_fbdev_init(struct drm_device *drm, struct display_channel_state *out_state, int de_id)
 {
 	int ret;
 
-	ret = drm_fb_config(drm, &create_info);
+	ret = drm_fb_config(drm, &create_info, de_id);
 	if (ret)
 		goto OUT;
 	ret = drm_fb_init(&create_info, out_state);

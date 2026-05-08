@@ -71,6 +71,21 @@ config AW_UART_DYNAMIC_DEBUG
 	help
 	  Enable uart dynamic debug
 
+config AW_SERIAL_NR_UARTS
+	int "Maximum number of AW serial ports"
+	depends on AW_UART || AW_UART_NG
+	range 0 16
+	default 10	if	ARCH_SUN65IW1
+	default 9	if	ARCH_SUN60IW2
+	default 5	if	ARCH_SUN55IW7
+	default 17	if	ARCH_SUN55IW6
+	default 10	if	ARCH_SUN55IW3
+	default 6	if	ARCH_SUN20IW1
+	default 1	if	AW_FPGA_BOARD
+	default 1
+	help
+	  Set this to the number of serial ports you want the driver to support.
+
 source "bsp/drivers/uart/sunxi-soft-uart/Kconfig"
 
 endmenu

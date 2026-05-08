@@ -3246,20 +3246,6 @@ static int sunxi_get_udc_clock(struct platform_device *pdev,
 	}
 #endif
 
-#if IS_ENABLED(CONFIG_ARCH_SUN60IW2)
-	sunxi_udc_io->clk_res = devm_clk_get(&pdev->dev, "res_dcap");
-	if (IS_ERR(sunxi_udc_io->clk_res)) {
-		dev_err(&pdev->dev, "Could not get res dcap clock\n");
-		return PTR_ERR(sunxi_udc_io->clk_res);
-	}
-
-	sunxi_udc_io->clk_msi_lite = devm_clk_get(&pdev->dev, "msi_lite");
-	if (IS_ERR(sunxi_udc_io->clk_msi_lite)) {
-		dev_err(&pdev->dev, "Could not get msi-lite clock\n");
-		return PTR_ERR(sunxi_udc_io->clk_msi_lite);
-	}
-#endif
-
 #if IS_ENABLED(CONFIG_ARCH_SUN60IW2) || IS_ENABLED(CONFIG_ARCH_SUN65IW1)
 	sunxi_udc_io->clk_usb_sys_ahb = devm_clk_get(&pdev->dev, "usb_sys_ahb");
 	if (IS_ERR(sunxi_udc_io->clk_usb_sys_ahb)) {
@@ -4020,8 +4006,6 @@ static int sunxi_get_udc_resource(struct platform_device *pdev,
 	sunxi_udc_io->dma_addr_ext_enable = device_property_read_bool(&pdev->dev, "aw,dma_addr_extend");
 	dev_info(&pdev->dev, " UDC Inner DMA Feature - wordaddr: %d, extend: %s\n",
 		 sunxi_udc_io->dma_wordaddr_bypass, sunxi_udc_io->dma_addr_ext_enable ? "enabled" : "disabled");
-
-	sunxi_udc_io->rext_cal_bypass = device_property_read_bool(&pdev->dev, "aw,rext_cal_bypass");
 
 #if IS_ENABLED(CONFIG_ARCH_SUN65IW1)
 	sunxi_udc_io->usb2_generic_phy = devm_phy_get(&pdev->dev, "usb2-phy");

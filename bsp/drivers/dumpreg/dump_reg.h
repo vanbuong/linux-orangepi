@@ -23,7 +23,7 @@
 #if IS_ENABLED(CONFIG_ARCH_RV32I)
 #define SUNXI_IO_PHYS_END		(0x7fffffffUL)
 #else
-#define SUNXI_IO_PHYS_END		(0x09020FFFUL)
+#define SUNXI_IO_PHYS_END		(0x0fffffffUL)
 #endif
 
 /* DRAM space (Only map the first 1GB) */

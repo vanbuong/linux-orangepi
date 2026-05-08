@@ -121,6 +121,11 @@ config AW_PINCTRL_SUN65IW1
 	depends on AW_PINCTRL
 	default ARCH_SUN65IW1
 
+config AW_PINCTRL_SUN65IW1_R
+        tristate "SUN65IW1 R_PIO"
+        depends on AW_PINCTRL
+        default ARCH_SUN65IW1
+
 config AW_PINCTRL_AXP22X
 	tristate "X-Powers AXP221s/223 PMIC pinctrl and GPIO Support"
 	depends on AW_PINCTRL

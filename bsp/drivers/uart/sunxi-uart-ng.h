@@ -32,8 +32,19 @@
 
 #define UART_TO_SPORT(port)	((struct sunxi_uart_port *)port)
 
-#define SOFTWARE_CTRL          BIT(0)
-#define HARDWARE_CTRL          BIT(1)
+/* 485 config */
+enum rs485_ctrl_type {
+	RS485_CTRL_SOFTWARE	= 1,
+	RS485_CTRL_HARDWARE	= 2,
+	RS485_CTRL_NON		= 3,
+	RS485_CTRL_MAX		= 4
+};
+
+enum rs485_rcv_mode {
+	RS485_RCV_9BITM		= 1,
+	RS485_RCV_AAD		= 2,
+	RS485_RCV_MAX		= 3
+};
 
 #define SERIAL_CIRC_CNT_TO_END(xmit) \
 	CIRC_CNT_TO_END(xmit->head, xmit->tail, UART_XMIT_SIZE)
@@ -63,7 +74,8 @@ struct sunxi_uart_pdata {
 };
 
 struct sunxi_uart_data {
-	unsigned int uart_485_mode;
+	bool support_uart_485_hardware_ctrl;
+	bool support_uart_485_9bit;
 };
 
 struct sunxi_uart_register {
@@ -140,8 +152,10 @@ struct sunxi_uart_port {
 	bool throttled;
 	bool loopback;
 	struct gpio_desc *rs485oe_gpio;
+	bool rs485_9bit;
 	unsigned int rs485_fl;
 	unsigned int rs485_pin_auto;
+	unsigned int rs485_receive_mode;
 	unsigned int irq_priority_val;
 #ifdef CONFIG_AW_AMP_SYS_RSC_MANAGER
 	sunxi_amp_rsc_t amp_rsc;
@@ -243,6 +257,8 @@ struct sunxi_uart_port {
 #define SUNXI_UART_MSR_DCTS       (BIT(0))
 #define SUNXI_UART_MSR_ANY_DELTA  0x0F
 #define MSR_SAVE_FLAGS SUNXI_UART_MSR_ANY_DELTA
+/* Uart Scrach Register */
+#define SUNXI_UART_RS485_AUTO_RST_EN	(BIT(0))
 /* Status Register */
 #define SUNXI_UART_USR_RFF        (BIT(4))
 #define SUNXI_UART_USR_RFNE       (BIT(3))
@@ -258,46 +274,15 @@ struct sunxi_uart_port {
 #define SUNXI_UART_RS485_DUPLEX   (BIT(4))
 #define SUNXI_UART_RS485_RXBFA    (BIT(3))
 #define SUNXI_UART_RS485_RXAFA    (BIT(2))
+#define SUNXI_UART_RS485_RCV_MODE (BIT(0))
 
 /* The global infor of UART channel. */
-
-#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN50IW10) || IS_ENABLED(CONFIG_ARCH_SUN8IW11) || IS_ENABLED(CONFIG_ARCH_SUN60IW2)
-#define SUNXI_UART_NUM			10
-
-#define SUNXI_UART_PE_ERRATA
-#endif
-
-#if IS_ENABLED(CONFIG_ARCH_SUN8IW15)
-#define SUNXI_UART_NUM			5
-#endif
-
-#if IS_ENABLED(CONFIG_ARCH_SUN8IW18)
-#define SUNXI_UART_NUM			4
-#endif
-
-#if IS_ENABLED(CONFIG_ARCH_SUN8IW20) || IS_ENABLED(CONFIG_ARCH_SUN20IW1) || IS_ENABLED(CONFIG_ARCH_SUN50IW9)
-#define SUNXI_UART_NUM			6
-#if IS_ENABLED(CONFIG_ARCH_SUN50IW9)
-#define SUNXI_UART_PE_ERRATA
-#endif
-#endif
-
-#ifndef SUNXI_UART_NUM
-#define SUNXI_UART_NUM			1
-#endif
-
-/*
- * In 50/39 FPGA, two UART is available, but they share one IRQ.
- * So we define the number of UART port as 1.
- */
-#if !IS_ENABLED(CONFIG_AW_IC_BOARD)
-#undef SUNXI_UART_NUM
-#define SUNXI_UART_NUM			1
-#endif
+#define SUNXI_UART_NUM   CONFIG_AW_SERIAL_NR_UARTS
 
 #define SUNXI_UART_FIFO_SIZE		64
 
 #define SUNXI_UART_DEV_NAME		"uart-ng"
+#define	UART_STATE_CARD_PRINT	"uart-card-print"
 
 #define TX_DMA          1
 #define RX_DMA          2

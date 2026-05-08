@@ -79,4 +79,6 @@ obj-$(CONFIG_AW_SUN20IW5_AON_CCU)	+= ccu-sun20iw5-aon.o
 
 obj-$(CONFIG_AW_SUN65IW1_CCU)		+= ccu-sun65iw1.o
 obj-$(CONFIG_AW_SUN65IW1_CCU)		+= ccu-sun65iw1-rtc.o
+obj-$(CONFIG_AW_SUN65IW1_CCU)		+= ccu-sun65iw1-cpupll.o
+obj-$(CONFIG_AW_SUN65IW1_CCU)		+= ccu-sun65iw1-ddrpll.o
 obj-$(CONFIG_AW_SUN65IW1_R_CCU)		+= ccu-sun65iw1-r.o

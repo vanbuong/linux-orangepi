@@ -71,27 +71,20 @@ typedef struct __usbc_otg {
 #define SUNXI_SYS_CFG_BASE		0x03000000
 /* Resister Calibration Control Register */
 #define RESCAL_CTRL_REG		0x0160
-#define   USBPHY2_RES200_SEL		BIT(6) /* Note: AW1903 Not use */
+#define   USBPHY2_RES200_SEL		BIT(6)
 #define   USBPHY1_RES200_SEL		BIT(5)
 #define   USBPHY0_RES200_SEL		BIT(4)
 #define   PHY_o_RES200_SEL(n)		(BIT(4) << n)
 #define   RESCAL_MODE			BIT(2)
 #define   CAL_ANA_EN			BIT(1)
 #define   CAL_EN			BIT(0)
-/* Resister 200ohms Manual Control Register */
+/* 200ohms Resister Manual Control Register */
 #define RES200_CTRL_REG		0x0164
 #define   USBPHY2_RES200_CTRL		GENMASK(21, 16)
 #define   USBPHY1_RES200_CTRL		GENMASK(13, 8)
 #define   USBPHY0_RES200_CTRL		GENMASK(5, 0)
 #define   PHY_o_RES200_CTRL(n)		(GENMASK(5, 0) << (8 * n))
 #define   PHY_o_RES200_CTRL_DEFAULT(n)		(0x33 << (8 * n))
-
-/* Resister RES0 ohms Manual Control Register */
-#define RES0_CTRL_REG		0x0164
-#define   USBPHY1_RES200_TRIM		GENMASK(15, 8)
-#define   USBPHY0_RES200_TRIM		GENMASK(7, 0)
-#define   PHY_o_RES200_TRIM(n)		(GENMASK(7, 0) << (8 * n))
-#define   PHY_o_RES200_TRIM_DEFAULT(n)		(0xC8 << (8 * n))
 
 #define syscfg_reg(offset)		(SUNXI_SYS_CFG_BASE + (offset))
 

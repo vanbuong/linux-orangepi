@@ -567,7 +567,7 @@ int sunxi_sid_sram_read32(const char *key, u32 *data)
 	return 0;
 
 fail:
-	sunxi_err(NULL, "Fail to read '%s' in dts\n", prop);
+	sunxi_warn(NULL, "Fail to read '%s' in dts\n", prop);
 	return err;
 }
 EXPORT_SYMBOL_GPL(sunxi_sid_sram_read32);
@@ -656,7 +656,7 @@ int sunxi_get_soc_dvfs(u32 *dvfs)
 		return 0;
 	}
 
-	sunxi_debug(NULL, "get dvfs sid falied: 0x%x\n", *dvfs);
+	sunxi_err(NULL, "get dvfs sid falied: 0x%x\n", *dvfs);
 	return -EINVAL;
 }
 EXPORT_SYMBOL_GPL(sunxi_get_soc_dvfs);
@@ -1192,4 +1192,4 @@ module_exit(sunxi_sid_exit);
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("weidonghui <weidonghui@allwinnertech.com>");
 MODULE_DESCRIPTION("sunxi sid driver");
-MODULE_VERSION("1.3.6");
+MODULE_VERSION("1.3.7");

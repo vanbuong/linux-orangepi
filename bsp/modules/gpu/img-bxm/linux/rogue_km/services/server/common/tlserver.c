@@ -284,11 +284,13 @@ TLServerCloseStreamKM(PTL_STREAM_DESC psSD)
 	}
 
 	/* Check stream still valid */
+	OSLockAcquire(psGD->hTLGDLock);
 	psNode = TLFindStreamNodeByDesc(psSD);
 	if ((psNode == NULL) || (psNode != psSD->psNode))
 	{
 		PVR_DPF_RETURN_RC(PVRSRV_ERROR_HANDLE_NOT_FOUND);
 	}
+	OSLockRelease(psGD->hTLGDLock);
 
 	/* Since the descriptor is valid, the stream should not have been made NULL */
 	PVR_ASSERT (psNode->psStream);
@@ -544,11 +546,13 @@ TLServerAcquireDataKM(PTL_STREAM_DESC psSD,
 	}
 
 	/* Check stream still valid */
+	OSLockAcquire(psGD->hTLGDLock);
 	psNode = TLFindStreamNodeByDesc(psSD);
 	if ((psNode == NULL) || (psNode != psSD->psNode))
 	{
 		PVR_DPF_RETURN_RC(PVRSRV_ERROR_HANDLE_NOT_FOUND);
 	}
+	OSLockRelease(psGD->hTLGDLock);
 
 	/* If we are here, the stream will never be made NULL until this context itself
 	 * calls TLRemoveDescAndTryFreeStreamNode(). This is because the producer will

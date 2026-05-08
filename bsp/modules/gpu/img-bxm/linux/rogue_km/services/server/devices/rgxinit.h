@@ -59,6 +59,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #define OS_FW_VERIFY_FUNCTION NULL
 #endif
 
+void StartIrqHander(void);
+void StopIrqHander(void);
+
 /*!
 *******************************************************************************
 

@@ -62,12 +62,8 @@
 /* SYSCFG Registers */
 /* Resister Calibration Control Register */
 #define RESCAL_CTRL_REG				0x0160
-#define   PCIE_USB_RES1000_0_TRIM_SEL		BIT(10)
-#define   PCIE_USB_RES200_TRIM_SEL		BIT(10)
 #define   USBPHY2_RES200_SEL			BIT(6)
-#define   USBPHY1_RES200_TRIM_SEL		BIT(5)
 #define   USBPHY1_RES200_SEL			BIT(5)
-#define   USBPHY0_RES200_TRIM_SEL		BIT(4)
 #define   USBPHY0_RES200_SEL			BIT(4)
 #define   PHY_o_RES200_SEL(n)			(BIT(4) << n)
 #define   RESCAL_MODE				BIT(2)
@@ -80,10 +76,6 @@
 #define   USBPHY0_RES200_CTRL			GENMASK(5, 0)
 #define   PHY_o_RES200_CTRL(n)			(GENMASK(5, 0) << (8 * n))
 #define   PHY_o_RES200_CTRL_DEFAULT(n)		(0x33 << (8 * n))
-/* Resister RES1 ohms Manual Control Register */
-#define RES1_CTRL_REG				0x0168
-#define   PCIE_USB_RES200_TRIM			GENMASK(15, 8)
-#define   PCIE_USB_RES200_TRIM_DEFAULT		(0xC8 << 8)
 
 /* Registers */
 #define  PHY_REG_U2_ISCR(u2phy_base_addr)		((u2phy_base_addr) \
@@ -96,8 +88,6 @@
 								+ RESCAL_CTRL_REG)
 #define  CFG_REG_RES200_CTRL(syscfg_base_addr)		((syscfg_base_addr) \
 								+ RES200_CTRL_REG)
-#define  CFG_REG_RES1_CTRL(syscfg_base_addr)		((syscfg_base_addr) \
-								+ RES1_CTRL_REG)
 
 struct sunxi_phy_of_data {
 	bool has_vbusvldext;
@@ -121,13 +111,11 @@ struct sunxi_phy {
 enum phy_rext_mode_e {
 	PHY_REXT_MODE_UNKNOWN = 0,
 	PHY_REXT_MODE_V1,
-	PHY_REXT_MODE_V2,
 };
 
 static const char * const phy_mode_name[] = {
 	[PHY_REXT_MODE_UNKNOWN]		= "UNKNOW",
 	[PHY_REXT_MODE_V1]		= "V1",
-	[PHY_REXT_MODE_V2]		= "V2",
 };
 
 static void phy_rescal_set_v1(struct sunxi_phy *phy, bool enable)
@@ -156,32 +144,6 @@ static void phy_rescal_set_v1(struct sunxi_phy *phy, bool enable)
 	writel(val, CFG_REG_RES200_CTRL(phy->res));
 }
 
-static void phy_rescal_set_v2(struct sunxi_phy *phy, bool enable)
-{
-	__u32 val = 0;
-	__u32 port = 0, tmp; /* port companion enable ? */
-
-	tmp = GENMASK(5, 4);
-	val = readl(CFG_REG_RESCAL_CTRL(phy->res));
-	port = val & tmp;
-	if (enable) {
-		val &= ~CAL_EN;
-		val |= PCIE_USB_RES200_TRIM_SEL;
-	} else {
-		if (port == 0)
-			val |= CAL_EN;
-		val &= ~PCIE_USB_RES200_TRIM_SEL;
-	}
-	writel(val, CFG_REG_RESCAL_CTRL(phy->res));
-
-	val = readl(CFG_REG_RES1_CTRL(phy->res));
-	if (enable)
-		val &= ~PCIE_USB_RES200_TRIM;
-	else
-		val |= PCIE_USB_RES200_TRIM_DEFAULT;
-	writel(val, CFG_REG_RES1_CTRL(phy->res));
-}
-
 static void phy_res_set(struct sunxi_phy *phy, bool enable)
 {
 	if (!phy->res)
@@ -192,8 +154,6 @@ static void phy_res_set(struct sunxi_phy *phy, bool enable)
 
 	if (phy->mode == PHY_REXT_MODE_V1)
 		phy_rescal_set_v1(phy, enable);
-	else if (phy->mode == PHY_REXT_MODE_V2)
-		phy_rescal_set_v2(phy, enable);
 	else
 		sunxi_info(phy->dev, "unknown phy rext mode\n");
 }
@@ -327,8 +287,6 @@ static int phy_sunxi_plat_probe(struct platform_device *pdev)
 		if (!phy->res)
 			return -ENOMEM;
 
-		phy->res_supported = !device_property_read_bool(&pdev->dev, "aw,rext_cal_bypass");
-
 		/* get aw,rext_mode parameters from device-tree */
 		ret = device_property_read_u32(&pdev->dev, "aw,rext_mode", &mode);
 		if (ret) {
@@ -394,4 +352,4 @@ MODULE_ALIAS("platform:sunxi-plat-phy");
 MODULE_DESCRIPTION("Allwinner Platform USB 3.0 PHY driver");
 MODULE_AUTHOR("kanghoupeng<kanghoupeng@allwinnertech.com>");
 MODULE_LICENSE("GPL v2");
-MODULE_VERSION("1.0.3");
+MODULE_VERSION("1.0.4");

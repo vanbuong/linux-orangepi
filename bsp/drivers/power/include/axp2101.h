@@ -1275,6 +1275,14 @@ extern int axp_debug_mask;
 #define AXP515_EXT_PARA5           (0xF5)
 #define AXP515_ADDR_EXTENSION      (0xFF)
 
+/* AXP515 Extended Register Address (via regmap range) */
+#define AXP515_PAGE_SEL_SHIFT      (0x0)
+#define AXP515_ADDR0_EXTENSION     (0x130)
+#define AXP515_ADDR1_EXTENSION     (0x131)
+#define AXP515_ADDR2_EXTENSION     (0x132)
+#define AXP515_ADDR3_EXTENSION     (0x136)
+#define AXP515_ADDR4_EXTENSION     (0x137)
+
 /* For axp517 */
 #define AXP517_STATUS0				(0x00)
 #define AXP517_STATUS1				(0x01)
@@ -2324,5 +2332,11 @@ int axp20x_device_probe(struct sunxi_power_dev *axp20x);
  */
 int axp20x_device_remove(struct sunxi_power_dev *axp20x);
 int axp20x_device_shutdown(struct sunxi_power_dev *axp20x);
+
+/*------------------------------
+ * PMIC Regmap Lock Interface
+ *------------------------------*/
+void sunxi_pmic_lock(struct sunxi_power_dev *axp20x);
+void sunxi_pmic_unlock(struct sunxi_power_dev *axp20x);
 
 #endif /* __LINUX_MFD_AXP20X_H */

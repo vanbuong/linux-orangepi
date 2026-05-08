@@ -77,6 +77,13 @@ int GetOPPValues(struct device *dev,
                  struct pvr_opp_freq_table *pvr_freq_table);
 #endif
 
+int GetOPPValuesFromDeviceCFG(struct device          *dev,
+				IMG_DVFS_DEVICE_CFG    *psDVFSDeviceCfg,
+				unsigned long *min_freq,
+				unsigned long *min_volt,
+				unsigned long *max_freq,
+				struct pvr_opp_freq_table *pvr_freq_table);
+
 /*************************************************************************/ /*!
 @Function       DVFSCopyOPPTable
 

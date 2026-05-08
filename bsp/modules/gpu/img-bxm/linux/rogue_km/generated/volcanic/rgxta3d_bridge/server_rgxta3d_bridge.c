@@ -1889,7 +1889,8 @@ RGXCreateHWRTDataSet_exit:
 					else if (psKmHwRTDataSetInt[idx])
 					{
 						/* Free/Destroy/Release the resource */
-						RGXDestroyHWRTDataSet(psKmHwRTDataSetInt[idx]);
+						if (psKmHwRTDataSetInt[idx])
+							RGXDestroyHWRTDataSet(psKmHwRTDataSetInt[idx]);
 					}
 				}
 			}

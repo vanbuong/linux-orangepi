@@ -283,11 +283,13 @@ static const struct regmap_access_table axp8191_volatile_table = {
 };
 
 static const struct regmap_range axp515_writeable_ranges[] = {
-	regmap_reg_range(AXP515_STATUS0,  AXP515_ADDR_EXTENSION)
+	regmap_reg_range(AXP515_STATUS0,  AXP515_ADDR_EXTENSION),
+	regmap_reg_range(AXP515_ADDR0_EXTENSION, AXP515_ADDR4_EXTENSION),
 };
 
 static const struct regmap_range axp515_volatile_ranges[] = {
-	regmap_reg_range(AXP515_STATUS0, AXP515_ADDR_EXTENSION),
+	regmap_reg_range(AXP515_STATUS0, AXP515_EXT_PARA5),
+	regmap_reg_range(AXP515_ADDR0_EXTENSION, AXP515_ADDR4_EXTENSION),
 };
 
 static const struct regmap_access_table axp515_writeable_table = {
@@ -576,6 +578,20 @@ static const struct regmap_config axp2202_regmap_config = {
 	.cache_type	= REGCACHE_RBTREE,
 };
 
+/* AXP515 Regmap Range Configuration */
+static const struct regmap_range_cfg axp515_range_config[] = {
+	/* range1: 0x100~0x1ff */
+	{
+		.range_min = 0x000,
+		.range_max = 0x1ff,
+		.selector_reg = 0xff,
+		.selector_mask = 1 << AXP515_PAGE_SEL_SHIFT,
+		.selector_shift = 0,
+		.window_start = 0x00,
+		.window_len = 0x100,
+	},
+};
+
 static const struct regmap_config axp8191_regmap_config = {
 	.reg_bits	= 8,
 	.val_bits	= 8,
@@ -591,7 +607,9 @@ static const struct regmap_config axp515_regmap_config = {
 	.val_bits	= 8,
 	.wr_table	= &axp515_writeable_table,
 	.volatile_table	= &axp515_volatile_table,
-	.max_register	= AXP515_ADDR_EXTENSION,
+	.max_register	= 0x1ff,
+	.ranges		= axp515_range_config,
+	.num_ranges	= ARRAY_SIZE(axp515_range_config),
 	.use_single_read = true,
 	.use_single_write = true,
 	.cache_type	= REGCACHE_RBTREE,
@@ -4415,6 +4433,9 @@ int axp20x_device_probe(struct sunxi_power_dev *axp20x)
 {
 	int ret;
 
+	/* Initialize regmap access mutex lock */
+	mutex_init(&axp20x->regmap_lock);
+
 	/*
 	 * on some board ex. qaqc test board, there's no interrupt for axp20x
 	 */
@@ -4498,6 +4519,33 @@ int axp20x_device_shutdown(struct sunxi_power_dev *axp20x)
 	return 0;
 }
 EXPORT_SYMBOL(axp20x_device_shutdown);
+
+/**
+ * sunxi_pmic_lock - Acquire PMIC regmap access lock
+ * @axp20x: sunxi_power_dev instance pointer
+ *
+ * Used in cross-module scenarios (e.g. battery/regulator) to protect
+ * continuous regmap access operations. Must be called from non-interrupt context.
+ */
+void sunxi_pmic_lock(struct sunxi_power_dev *axp20x)
+{
+	if (WARN_ON(!axp20x))
+		return;
+	mutex_lock(&axp20x->regmap_lock);
+}
+EXPORT_SYMBOL_GPL(sunxi_pmic_lock);
+
+/**
+ * sunxi_pmic_unlock - Release PMIC regmap access lock
+ * @axp20x: sunxi_power_dev instance pointer
+ */
+void sunxi_pmic_unlock(struct sunxi_power_dev *axp20x)
+{
+	if (WARN_ON(!axp20x))
+		return;
+	mutex_unlock(&axp20x->regmap_lock);
+}
+EXPORT_SYMBOL_GPL(sunxi_pmic_unlock);
 
 MODULE_DESCRIPTION("PMIC MFD core driver for AXP20X");
 MODULE_AUTHOR("Carlo Caione <carlo@caione.org>");

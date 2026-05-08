@@ -17,6 +17,7 @@
 
 #define SUNXI_MODNAME	"VE"
 #include "cedar_ve.h"
+#include "rpmsg_ve.h"
 #include <asm/dma.h>
 #include <asm/siginfo.h>
 #include <asm/signal.h>
@@ -114,6 +115,14 @@ struct dma_buf_info {
 	struct sg_table *sgt;
 	int p_id;
 	struct cedar_dev *cedar_devp;
+};
+
+struct work_struct rv_stop_work;
+static int ve_rv_start(void);
+static int ve_rv_stop(void);
+static struct ve_amp_ctrl amp_ops = {
+	.rv_start = ve_rv_start,
+	.rv_stop = ve_rv_stop,
 };
 
 static struct cedar_ve_quirks cedar_ve_quirk;
@@ -1161,6 +1170,13 @@ static long _compat_cedardev_ioctl(struct ve_info *info, unsigned int cmd, unsig
 		}
 		break;
 	}
+	case IOCTL_INVALID_CACHE_RANGE: {
+		if (ioctl_invalid_cache_range(arg, 1, cedar_devp)) {
+			VE_LOGE("ioctl_invalid_cache_range failed\n");
+			return -EFAULT;
+		}
+		break;
+	}
 	case IOCTL_POWER_SETUP: {
 		VE_LOGW("IOCTL_POWER_SETUP nused, please check\n");
 		break;
@@ -1216,6 +1232,21 @@ static long _compat_cedardev_ioctl(struct ve_info *info, unsigned int cmd, unsig
 		spin_unlock_irqrestore(&cedar_devp->lock, flags);
 		break;
 	}
+
+	case IOCTL_RV_STOP: {
+		if (cedar_devp->rpmsp_enable) {
+			if (false == amp_ops.rv_irq_state) {
+				ret = 0;
+			} else {
+				VE_LOGE("control by atos");
+				ret = -1;
+			}
+		} else {
+			ret = 0;
+		}
+		break;
+	}
+
 	default:
 		VE_LOGW("not support the ioctl cmd = 0x%x\n", cmd);
 		return -1;
@@ -1934,6 +1965,7 @@ static int cedardev_init(struct platform_device *pdev)
 {
 	struct cedar_dev *cedar_devp = dev_get_drvdata(&pdev->dev);
 	int ret = 0;
+	u32 data[3] = {0};
 
 	if (!cedar_devp) {
 		VE_LOGE("cedar_devp invalid\n");
@@ -1967,39 +1999,48 @@ static int cedardev_init(struct platform_device *pdev)
 
 	AW_MEM_INIT_LIST_HEAD(&cedar_devp->list);
 
-	cedar_devp->regulator = regulator_get(cedar_devp->plat_dev, "ve");
-	if (!IS_ERR(cedar_devp->regulator)) {
-		cedar_devp->voltage = regulator_get_voltage(cedar_devp->regulator)/1000;
-		VE_LOGD("ve vol = %d mv\n", cedar_devp->voltage);
-	} else {
-		VE_LOGW("get ve regulator error\n");
-		cedar_devp->regulator = NULL;
-	};
+	if (of_property_read_variable_u32_array(pdev->dev.of_node,
+		"rp-ve", data, 0, ARRAY_SIZE(data)) < 0)
+		cedar_devp->rpmsp_enable = 0;
+	else
+		cedar_devp->rpmsp_enable = data[0];
 
-	/* 3.config some register */
-	if (deal_with_resouce(pdev)) {
-		ret = -EINVAL;
-		goto err;
-	}
+	if (!cedar_devp->rpmsp_enable) {
+		cedar_devp->regulator = regulator_get(cedar_devp->plat_dev, "ve");
+		if (!IS_ERR(cedar_devp->regulator)) {
+			cedar_devp->voltage = regulator_get_voltage(cedar_devp->regulator)/1000;
+			VE_LOGD("ve vol = %d mv\n", cedar_devp->voltage);
+		} else {
+			VE_LOGW("get ve regulator error\n");
+			cedar_devp->regulator = NULL;
+		};
 
-	/* 4.create sysfs file on new device */
-	if (sysfs_create_group(&cedar_devp->dev->kobj, &ve_attribute_group)) {
-		VE_LOGW("sysfs create group failed, maybe ok!\n");
-	}
-
-	/* 5.create debugfs file */
-#if IS_ENABLED(CONFIG_DEBUG_FS)
-	cedar_devp->dbgfs = ve_debug_register_driver(cedar_devp);
-	if (!cedar_devp->dbgfs) {
-		VE_LOGW("ve_debug_register_driver failed\n");
-	}
-	if (cedar_devp->dvfs_attr.dvfs_array_num) {
-		ret = vedvfs_init(cedar_devp);
-		if (ret) {
-			VE_LOGW("sunxi ve dvfsinit debugfs fail\n");
+		/* 3.config some register */
+		if (deal_with_resouce(pdev)) {
+			ret = -EINVAL;
+			goto err;
 		}
-	}
+
+		/* 4.create sysfs file on new device */
+		if (sysfs_create_group(&cedar_devp->dev->kobj, &ve_attribute_group)) {
+			VE_LOGW("sysfs create group failed, maybe ok!\n");
+		}
+
+		/* 5.create debugfs file */
+#if IS_ENABLED(CONFIG_DEBUG_FS)
+		cedar_devp->dbgfs = ve_debug_register_driver(cedar_devp);
+		if (!cedar_devp->dbgfs) {
+			VE_LOGW("ve_debug_register_driver failed\n");
+		}
+		if (cedar_devp->dvfs_attr.dvfs_array_num) {
+			ret = vedvfs_init(cedar_devp);
+			if (ret) {
+				VE_LOGW("sunxi ve dvfsinit debugfs fail\n");
+			}
+		}
 #endif
+	}
+
 	/* 6.runtime pm, maybe problem */
 	pm_runtime_enable(&pdev->dev);
 
@@ -2060,6 +2101,67 @@ static void cedardev_exit(struct platform_device *pdev)
 	VE_LOGD("cedar-ve exit\n");
 }
 
+static void ve_rv_stop_work(struct work_struct *work)
+{
+	struct cedar_dev *cedar_devp = dev_get_drvdata(&amp_ops.pdev->dev);
+	int ret;
+
+	if (amp_ops.rv_irq_state) {
+		cedar_devp->regulator = regulator_get(cedar_devp->plat_dev, "ve");
+		if (!IS_ERR(cedar_devp->regulator)) {
+			cedar_devp->voltage = regulator_get_voltage(cedar_devp->regulator)/1000;
+			VE_LOGD("ve vol = %d mv\n", cedar_devp->voltage);
+		} else {
+			VE_LOGW("get ve regulator error\n");
+			cedar_devp->regulator = NULL;
+		};
+
+		VE_LOGD("config some register");
+		if (deal_with_resouce(amp_ops.pdev))
+			goto free_devp;
+
+		VE_LOGD("create sysfs file on new device");
+		if (sysfs_create_group(&cedar_devp->dev->kobj, &ve_attribute_group)) {
+			VE_LOGW("sysfs create group failed, maybe ok!");
+			goto free_devp;
+		}
+
+#if IS_ENABLED(CONFIG_DEBUG_FS)
+		cedar_devp->dbgfs = ve_debug_register_driver(cedar_devp);
+		if (!cedar_devp->dbgfs) {
+				VE_LOGW("ve_debug_register_driver failed\n");
+		}
+		if (cedar_devp->dvfs_attr.dvfs_array_num) {
+				ret = vedvfs_init(cedar_devp);
+				if (ret)
+					VE_LOGW("sunxi ve dvfsinit debugfs fail\n");
+		}
+#endif
+		amp_ops.rv_irq_state = false;
+	}
+
+	if (!amp_ops.iommu_need) {
+		VE_LOGD("enable ve iommu");
+		sunxi_enable_device_iommu(cedar_devp->master_id, 1);
+		amp_ops.iommu_need = true;
+	}
+	return;
+free_devp:
+	kfree(cedar_devp);
+}
+
+static int ve_rv_start(void)
+{
+	//todo:
+	return 0;
+}
+
+static int ve_rv_stop(void)
+{
+	schedule_work(&rv_stop_work);
+	return 0;
+}
+
 static int sunxi_cedar_remove(struct platform_device *pdev)
 {
 	struct cedar_dev *cedar_devp = dev_get_drvdata(&pdev->dev);
@@ -2099,6 +2201,10 @@ static int sunxi_cedar_remove(struct platform_device *pdev)
 #if IS_ENABLED(CONFIG_ARCH_SUN8IW20)
 	pm_runtime_disable(&pdev->dev);
 #endif
+	if (cedar_devp->rpmsp_enable) {
+		cancel_work_sync(&rv_stop_work);
+		amp_ve_exit();
+	}
 	cedardev_exit(pdev);
 	kfree(cedar_devp);
 	return 0;
@@ -2107,6 +2213,7 @@ static int sunxi_cedar_remove(struct platform_device *pdev)
 static int sunxi_cedar_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
+	u32 data[3] = {0};
 	struct cedar_dev *cedar_devp = NULL;
 	struct cedar_ve_quirks *quirks = NULL;
 	struct device_node *np = pdev->dev.of_node;
@@ -2156,6 +2263,20 @@ static int sunxi_cedar_probe(struct platform_device *pdev)
 	if (cedardev_init(pdev)) {
 		VE_LOGE("cedardev_init failed\n");
 		return -1;
+	}
+
+	if (cedar_devp->rpmsp_enable) {
+		amp_ops.rv_irq_state = true;
+		amp_ops.iommu_need = false;
+		amp_ops.pdev = pdev;
+		if (of_property_read_variable_u32_array(np, "iommus",
+			data, 0, ARRAY_SIZE(data)) < 0)
+			cedar_devp->master_id = -1;
+		else
+			cedar_devp->master_id = data[1];
+
+		INIT_WORK(&rv_stop_work, ve_rv_stop_work);
+		amp_ve_init(&amp_ops);
 	}
 
 	return 0;

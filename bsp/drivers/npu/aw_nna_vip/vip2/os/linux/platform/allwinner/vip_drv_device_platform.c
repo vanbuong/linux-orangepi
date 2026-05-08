@@ -97,6 +97,7 @@ aw_driver_t aw_driver = {
 	.vf_index = 0,
 	.dcxo_clk_src = DCXO_CLK_24M,
 	.set_vol = 0,
+	.set_vf = 0,
 	.freqs = {0},
 	.enable_pm = false,
 #if vpmdENABLE_AW_DEVFREQ
@@ -117,6 +118,11 @@ aw_driver_t aw_driver = {
 #define NPU_LEVEL_3	0b000101
 #define NPU_LEVEL_4	0b010000
 #define NPU_LEVEL_5	0b010001
+
+#define NPU_VF_0	0
+#define NPU_VF_1	1
+#define NPU_VF_2	2
+#define NPU_VF_3	3
 
 #if !IS_ENABLED(CONFIG_ARCH_SUN8IW21)
 /*
@@ -651,10 +657,28 @@ void check_smc_set_freq(void)
 
 	u32 key = 0;
 	char tmpbuf[129] = {0};
-
-	aw_driver.max_freq = M2HZ(1200);
-	aw_driver.default_freq = M2HZ(1200);
-		
+	switch (aw_driver.set_vf) {
+	case NPU_VF_0:
+		aw_driver.max_freq = M2HZ(1008);
+		aw_driver.default_freq = M2HZ(1008);
+		break;
+	case NPU_VF_1:
+		aw_driver.max_freq = M2HZ(1044);
+		aw_driver.default_freq = M2HZ(1044);
+		break;
+	case NPU_VF_2:
+		aw_driver.max_freq = M2HZ(1116);
+		aw_driver.default_freq = M2HZ(1116);
+		break;
+	case NPU_VF_3:
+		aw_driver.max_freq = M2HZ(1188);
+		aw_driver.default_freq = M2HZ(1188);
+		break;
+	default:
+		aw_driver.max_freq = M2HZ(1008);
+		aw_driver.default_freq = M2HZ(1008);
+		break;
+	}
 // out:
 	aw_driver.clk_freq = aw_driver.default_freq;
 	PRINTK("EXTRA: 0x%s, SID: 0x%x, max_freq: %u, default_freq: %u\n",
@@ -687,9 +711,9 @@ void check_freq_available(void)
 	}
 
 	for (i = (MAX_FREQ_POINTS - 1); i >= 0; i--) {
-		if (aw_driver.freqs[i] == 0
-				|| aw_driver.freqs[i] > aw_driver.clk_freq)
+		if (aw_driver.freqs[i] == 0 || aw_driver.freqs[i] > aw_driver.clk_freq) {
 			continue;
+		}
 
 		rate = clk_round_rate(aw_driver.mclk, aw_driver.freqs[i]);
 		if (rate == aw_driver.freqs[i]) {
@@ -1144,7 +1168,6 @@ vip_int32_t vipdrv_drv_adjust_param(
 {
 	struct platform_device *pdev = kdriver->pdev;
 	struct device *dev = &(kdriver->pdev->dev);
-	int ret;
 	struct resource *res;
 	__maybe_unused int count;
 	__maybe_unused int err, vol;
@@ -1183,7 +1206,6 @@ vip_int32_t vipdrv_drv_adjust_param(
 	res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
 	if (!res) {
 		PRINTK("no resource for registers\n");
-		ret = -ENOENT;
 		return -1;
 	}
 
@@ -1265,6 +1287,11 @@ vip_int32_t vipdrv_drv_adjust_param(
 		return -EBUSY;
 	}
 
+	err = of_property_read_u32_index(pdev->dev.of_node, "npu-vfgear", 0, &aw_driver.set_vf);
+	PRINTK("-------- npu set_vf: %x\n", aw_driver.set_vf);
+	if (err != 0) {
+		PRINTK("Get NPU VF GEAR FAIL!\n");
+	}
 
 	check_smc_set_freq();
 	get_vf_index();

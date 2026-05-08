@@ -11,5 +11,6 @@
 #include <dt-bindings/reset/sun65iw1-ccu.h>
 
 #define CLK_NUMBER	(CLK_MAX_NO)
+#define RES_DCAP_24M_GATE 0x1A00
 
 #endif /* _CCU_SUN65IW1_H_ */

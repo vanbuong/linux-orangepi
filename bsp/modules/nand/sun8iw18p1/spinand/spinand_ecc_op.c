@@ -81,11 +81,11 @@ static __s32 check_ecc_bit3_limit5_err2(__u8 ecc)
 	}
 }
 
-static __s32 check_ecc_bit4_limit5_7_err8_limit12(__u8 ecc)
+static __s32 check_ecc_bit4_limit6_7_err8_limit12(__u8 ecc)
 {
 	if (ecc <= 4) {
 		return NAND_OP_TRUE;
-	} else if (((ecc >= 5) && (ecc <= 7)) || (ecc >= 12)) {
+	} else if (((ecc >= 6) && (ecc <= 7)) || (ecc >= 12)) {
 		debug("ecc limit 0x%x\n", ecc);
 		return ECC_LIMIT;
 	} else {
@@ -171,9 +171,9 @@ __s32 spinand_check_ecc(enum ecc_type type, __u8 status)
 	case BIT3_LIMIT5_ERR2:
 		ecc = status & 0x07;
 		return check_ecc_bit3_limit5_err2(ecc);
-	case BIT4_LIMIT5_TO_7_ERR8_LIMIT_12:
+	case BIT4_LIMIT6_TO_7_ERR8_LIMIT_12:
 		ecc = status & 0x0f;
-		return check_ecc_bit4_limit5_7_err8_limit12(ecc);
+		return check_ecc_bit4_limit6_7_err8_limit12(ecc);
 	case BIT4_LIMIT5_TO_7_ERR8:
 		ecc = status & 0x0f;
 		return check_ecc_bit4_limit5_7_err8(ecc);

@@ -19,10 +19,19 @@
 #ifndef __LINUX_SUNXI_NSI_H
 #define __LINUX_SUNXI_NSI_H
 
+#include "../drivers/bus/sunxi-nsi.h"
+
 #if IS_ENABLED(CONFIG_AW_NSI_DISTRIBUTE)
 void sunxi_nsi_master_ready(struct device *dev);
 #else
 static inline void sunxi_nsi_master_ready(struct device *dev) { ; }
 #endif
+int notrace nsi_port_setmode(enum nsi_pmu port, unsigned int mode);
+int notrace nsi_port_set_abs_bwlen(enum nsi_pmu port, bool en);
+int notrace nsi_set_cpu_rw_bwl(unsigned int cpu_port, unsigned int bwl);
+int notrace nsi_port_set_abs_bwl(enum nsi_pmu port, unsigned int bwl);
+int notrace nsi_port_setio(enum nsi_pmu port, bool io);
+int notrace nsi_port_setqos(enum nsi_pmu port, unsigned int qos);
+int notrace nsi_port_setpri(enum nsi_pmu port, unsigned int pri);
 
 #endif

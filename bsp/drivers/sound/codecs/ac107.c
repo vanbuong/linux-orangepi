@@ -704,7 +704,7 @@ static int ac107_probe(struct snd_soc_component *component)
 	int ret = -1;
 	unsigned int i, reg_val;
 	unsigned int try_num = 5;
-
+	msleep(20);
 	for (i = 0; (i < try_num) && (ret < 0); i++) {
 		ret = regmap_read(regmap, CHIP_AUDIO_RST, &reg_val);
 	}
@@ -798,7 +798,7 @@ static int ac107_resume(struct snd_soc_component *component)
 	ret = snd_sunxi_regulator_enable(ac107->rglt);
 	if (ret)
 		return ret;
-
+	msleep(100);
 	ac107_probe(component);
 
 	return 0;

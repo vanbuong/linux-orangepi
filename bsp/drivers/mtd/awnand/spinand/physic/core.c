@@ -95,24 +95,26 @@ static void aw_spinand_chip_clean(struct aw_spinand_chip *chip)
 int aw_spinand_fill_phy_info(struct aw_spinand_chip *chip, void *data)
 {
 	struct aw_spinand *spinand = get_aw_spinand();
+	struct spi_device *spi = chip->spi;
 	struct aw_spinand_info *info = chip->info;
 	struct aw_spinand_phy_info *pinfo = info->phy_info;
-	struct device_node *node = chip->spi->dev.of_node;
+	struct device_node *spinand_node = chip->spi->dev.of_node;
+	struct device_node *spi0_node = chip->spi->dev.parent->of_node;
 	boot_spinand_para_t *boot_info = data;
 	int ret;
 	unsigned int max_hz;
 
-	ret = of_property_read_u32(node, "spi-max-frequency", &max_hz);
+	ret = of_property_read_u32(spinand_node, "spi-max-frequency", &max_hz);
 	if (ret < 0)
 		sunxi_err(NULL, "get spi-max-frequency from node of spi-nand failed\n");
 
-	ret = of_property_read_u32(node, "sample_mode",
+	ret = of_property_read_u32(spi0_node, "sample_mode",
 				&spinand->right_sample_mode);
 	if (ret) {
 		sunxi_err(NULL, "Failed to get sample mode\n");
 		spinand->right_sample_mode = AW_SAMP_MODE_DL_DEFAULT;
 	}
-	ret = of_property_read_u32(node, "sample_delay",
+	ret = of_property_read_u32(spi0_node, "sample_delay",
 				&spinand->right_sample_delay);
 	if (ret) {
 		sunxi_err(NULL, "Failed to get sample delay\n");
@@ -139,9 +141,21 @@ int aw_spinand_fill_phy_info(struct aw_spinand_chip *chip, void *data)
 	/* there is no metter what max ecc bits is */
 	boot_info->MaxEccBits = 4;
 	boot_info->EccLimitBits = 4;
+	if (chip->rx_bit != 4)
+		boot_info->OperationOpt &= ~SPINAND_QUAD_READ;
 
-	boot_info->sample_mode = spinand->right_sample_mode;
-	boot_info->sample_delay = spinand->right_sample_delay;
+	if (spinand->right_sample_delay == AW_SAMP_MODE_DL_DEFAULT ||
+					spinand->right_sample_mode == AW_SAMP_MODE_DL_DEFAULT) {
+		boot_info->sample_mode = sunxi_spi_calibrate_get_sample_mode(spi);
+		boot_info->sample_delay = sunxi_spi_calibrate_get_sample_delay(spi);
+	} else {
+		boot_info->sample_mode = spinand->right_sample_mode;
+		boot_info->sample_delay = spinand->right_sample_delay;
+	}
+	boot_info->EccFlag = pinfo->EccFlag;
+	boot_info->EccType = pinfo->EccType;
+
+	boot_info->boot_param_offset = get_mtd_part_offset("boot_param");
 
 	return 0;
 }
@@ -438,4 +452,4 @@ EXPORT_SYMBOL(aw_spinand_chip_exit);
 
 MODULE_AUTHOR("liaoweixiong <liaoweixiong@allwinnertech.com>");
 MODULE_DESCRIPTION("Commond physic layer for Allwinner's spinand driver");
-MODULE_VERSION("1.0.0");
+MODULE_VERSION("1.0.1");

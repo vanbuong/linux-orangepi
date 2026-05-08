@@ -24,7 +24,7 @@
 #include <virt-dma.h>
 #include "sunxi-dma.h"
 
-#define SUNXI_DMA_MODULE_VERSION	"1.2.6"
+#define SUNXI_DMA_MODULE_VERSION	"1.2.8"
 /*
  * Common registers
  */
@@ -519,10 +519,16 @@ static size_t sun6i_get_chan_size(struct sun6i_pchan *pchan)
 	struct sun6i_desc *txd = pchan->desc;
 	struct sun6i_dma_lli *lli;
 	size_t bytes;
-	dma_addr_t pos;
+	dma_addr_t pos, pos_last;
 
-	pos = readl(pchan->base + DMA_CHAN_LLI_ADDR);
+	pos_last = readl(pchan->base + DMA_CHAN_LLI_ADDR);
+retry:
 	bytes = readl(pchan->base + DMA_CHAN_CUR_CNT);
+	pos = readl(pchan->base + DMA_CHAN_LLI_ADDR);
+	if (pos_last != pos) {
+		pos_last = pos;
+		goto retry;
+	}
 
 	if (pos == LLI_LAST_ITEM)
 		return bytes;
@@ -1895,6 +1901,32 @@ static __maybe_unused struct sun6i_dma_config sunxi_dma_v109 = {
 	.has_rst = true,
 };
 
+static struct sun6i_dma_config sunxi_dma_v111 = {
+	.clock_autogate_enable = sun6i_enable_clock_autogate_h3,
+	.set_burst_length = sun6i_set_burst_length_h3,
+	.set_drq          = sun6i_set_drq_h6,
+	.set_mode         = sun6i_set_mode_h6,
+	.irq_enable       = sunxi_irq_enable_v102,
+	.get_irq_status   = sunxi_get_irq_status_v102,
+	.read_irq_enable  = sunxi_read_irq_enable_v102,
+	.clear_irq_status  = sunxi_clear_irq_status_v102,
+	.src_burst_lengths = BIT(1) | BIT(4) | BIT(8) | BIT(16),
+	.dst_burst_lengths = BIT(1) | BIT(4) | BIT(8) | BIT(16),
+	.src_addr_widths   = BIT(DMA_SLAVE_BUSWIDTH_1_BYTE) |
+			     BIT(DMA_SLAVE_BUSWIDTH_2_BYTES) |
+			     BIT(DMA_SLAVE_BUSWIDTH_4_BYTES),
+	.dst_addr_widths   = BIT(DMA_SLAVE_BUSWIDTH_1_BYTE) |
+			     BIT(DMA_SLAVE_BUSWIDTH_2_BYTES) |
+			     BIT(DMA_SLAVE_BUSWIDTH_4_BYTES),
+	.has_mbus_clk = true,
+	.has_mbus_en_clk = true,
+	.channum_per_reg  = DMA_IRQ_CHAN_NR_V102,
+	.has_io_speedup = true,
+	.has_timeout = true,
+	.has_support_32G = true,
+	.has_rst = true,
+};
+
 /*
  * The dma IP V3.0, like sun8iw17 etc., uses the number of dma channels from the
  * device tree node.
@@ -1935,6 +1967,7 @@ static const struct of_device_id sun6i_dma_match[] = {
 	{ .compatible = "allwinner,dma-v108", .data = &sunxi_dma_v108 },
 	{ .compatible = "allwinner,dma-v109", .data = &sunxi_dma_v109 },
 	{ .compatible = "allwinner,dma-v110", .data = &sunxi_dma_v110 },
+	{ .compatible = "allwinner,dma-v111", .data = &sunxi_dma_v111 },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, sun6i_dma_match);

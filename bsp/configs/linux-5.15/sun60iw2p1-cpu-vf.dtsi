@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 /{
 	vf_mapping_table: vf_mapping_table {
-		vf-version = "V0.91";
+		vf-version = "V0.93";
 		table = <
 			0x00 0x0000
 			0x01 0x0100
@@ -2397,6 +2397,11 @@
 			opp-microvolt-vf0205 = <800000>;
 			opp-microvolt-vf0206 = <800000>;
 			opp-microvolt-vf0300 = <800000>;
+			opp-microvolt-vf0400 = <800000>;
+			opp-microvolt-vf0401 = <800000>;
+			opp-microvolt-vf0500 = <800000>;
+			opp-microvolt-vf0501 = <800000>;
+			opp-microvolt-vf0503 = <800000>;
 			opp-microvolt-26m-vf0000 = <800000>;
 			opp-microvolt-26m-vf0200 = <800000>;
 			opp-microvolt-26m-vf0201 = <800000>;
@@ -2406,6 +2411,11 @@
 			opp-microvolt-26m-vf0205 = <800000>;
 			opp-microvolt-26m-vf0206 = <800000>;
 			opp-microvolt-26m-vf0300 = <800000>;
+			opp-microvolt-26m-vf0400 = <800000>;
+			opp-microvolt-26m-vf0401 = <800000>;
+			opp-microvolt-26m-vf0500 = <800000>;
+			opp-microvolt-26m-vf0501 = <800000>;
+			opp-microvolt-26m-vf0503 = <800000>;
 		};
 
 		npu_opp_table_852: opp-852 {
@@ -2416,40 +2426,72 @@
 			opp-microvolt-vf0202 = <880000>;
 			opp-microvolt-vf0203 = <880000>;
 			opp-microvolt-vf0204 = <880000>;
+			opp-microvolt-vf0400 = <800000>;
+			opp-microvolt-vf0401 = <820000>;
+			opp-microvolt-vf0500 = <800000>;
+			opp-microvolt-vf0501 = <800000>;
+			opp-microvolt-vf0503 = <800000>;
 			opp-microvolt-26m-vf0000 = <800000>;
 			opp-microvolt-26m-vf0200 = <800000>;
 			opp-microvolt-26m-vf0201 = <800000>;
 			opp-microvolt-26m-vf0202 = <880000>;
 			opp-microvolt-26m-vf0203 = <880000>;
 			opp-microvolt-26m-vf0204 = <800000>;
+			opp-microvolt-26m-vf0400 = <800000>;
+			opp-microvolt-26m-vf0401 = <820000>;
+			opp-microvolt-26m-vf0500 = <800000>;
+			opp-microvolt-26m-vf0501 = <800000>;
+			opp-microvolt-26m-vf0503 = <800000>;
 		};
 
 		npu_opp_table_1008: opp-1008 {
 			opp-hz = /bits/ 64 <1008000000>;
 			opp-microvolt-vf0000 = <960000>;
+			opp-microvolt-vf0200 = <960000>;
 			opp-microvolt-vf0202 = <1030000>;
 			opp-microvolt-vf0203 = <1030000>;
 			opp-microvolt-vf0204 = <1000000>;
 			opp-microvolt-vf0205 = <960000>;
 			opp-microvolt-vf0206 = <900000>;
 			opp-microvolt-vf0300 = <900000>;
+			opp-microvolt-vf0401 = <960000>;
+			opp-microvolt-vf0501 = <900000>;
+			opp-microvolt-vf0503 = <900000>;
 			opp-microvolt-26m-vf0000 = <960000>;
+			opp-microvolt-26m-vf0200 = <960000>;
 			opp-microvolt-26m-vf0202 = <1030000>;
 			opp-microvolt-26m-vf0203 = <1030000>;
 			opp-microvolt-26m-vf0204 = <1000000>;
 			opp-microvolt-26m-vf0205 = <960000>;
 			opp-microvolt-26m-vf0206 = <900000>;
 			opp-microvolt-26m-vf0300 = <900000>;
+			opp-microvolt-26m-vf0401 = <960000>;
+			opp-microvolt-26m-vf0501 = <900000>;
+			opp-microvolt-26m-vf0503 = <900000>;
 		};
 
-		npu_opp_table_1120: opp-1120 {
-			opp-hz = /bits/ 64 <1120000000>;
-			opp-microvolt-vf0205 = <1080000>;
-			opp-microvolt-vf0206 = <1040000>;
-			opp-microvolt-vf0300 = <1040000>;
-			opp-microvolt-26m-vf0205 = <1080000>;
-			opp-microvolt-26m-vf0206 = <1040000>;
-			opp-microvolt-26m-vf0300 = <1040000>;
+		npu_opp_table_1044: opp-1044 {
+			opp-hz = /bits/ 64 <1044000000>;
+			opp-microvolt-vf0401 = <1000000>;
+			opp-microvolt-vf0501 = <960000>;
+			opp-microvolt-26m-vf0401 = <1000000>;
+			opp-microvolt-26m-vf0501 = <960000>;
+		};
+
+		npu_opp_table_1116: opp-1116 {
+			opp-hz = /bits/ 64 <1116000000>;
+			opp-microvolt-vf0401 = <1080000>;
+			opp-microvolt-vf0501 = <1040000>;
+			opp-microvolt-26m-vf0401 = <1080000>;
+			opp-microvolt-26m-vf0501 = <1040000>;
+		};
+
+		npu_opp_table_1188: opp-1188 {
+			opp-hz = /bits/ 64 <1188000000>;
+			opp-microvolt-vf0401 = <1140000>;
+			opp-microvolt-vf0501 = <1110000>;
+			opp-microvolt-26m-vf0401 = <1140000>;
+			opp-microvolt-26m-vf0501 = <1110000>;
 		};
 	};
 
@@ -2505,6 +2547,10 @@
 			opp-microvolt-0 = <800000>;
 		};
 		opp-vf0501 {
+			opp-hz-0 = /bits/ 64 <624000000>;
+			opp-microvolt-0 = <800000>;
+		};
+		opp-vf0503 {
 			opp-hz-0 = /bits/ 64 <624000000>;
 			opp-microvolt-0 = <800000>;
 		};

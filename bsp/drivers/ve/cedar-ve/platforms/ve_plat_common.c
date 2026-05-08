@@ -688,6 +688,17 @@ int ioctl_flush_cache_range(unsigned long arg, uint8_t user, struct cedar_dev *c
 	return 0;
 }
 
+int ioctl_invalid_cache_range(unsigned long arg, uint8_t user, struct cedar_dev *cedar_devp)
+{
+	(void)arg;
+	(void)user;
+	(void)cedar_devp;
+
+	VE_LOGW("unsupport api\n");
+
+	return 0;
+}
+
 int ioctl_get_csi_online_related_info(unsigned long arg, uint8_t from_kernel, struct cedar_dev *cedar_devp)
 {
 	(void)arg;

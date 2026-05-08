@@ -226,6 +226,9 @@ static int sunxi_jack_adv_init(void *data)
 	regmap_update_bits(regmap, HMIC_CTRL1, 0xf << HMIC_M,
 			   jack_adv_priv->key_debounce << HMIC_M);
 
+	regmap_update_bits(regmap, HMIC_CTRL1, 0x1 << DATA_IRQ_MOD, 0x1 << DATA_IRQ_MOD);
+	regmap_update_bits(regmap, ADC_APC_CTRL, 0x1 << HBIASMOD, 0x1 << HBIASMOD);
+	regmap_update_bits(regmap, HMIC_CTRL2, 0x3 << SAMPLE_SEL, 0x1 << SAMPLE_SEL);
 	if (of_property_read_bool(jack_adv_priv->dev->of_node, "extcon")) {
 		jack_adv_priv->typec = true;
 	}
@@ -430,7 +433,7 @@ headset:
 	regmap_update_bits(regmap, HMIC_CTRL1,
 			   0x1 << KEYDOWN_IRQ_EN, 0x1 << KEYDOWN_IRQ_EN);
 	regmap_update_bits(regmap, HMIC_CTRL1,
-			   0x1 << DATA_IRQ_EN, 0x0 << DATA_IRQ_EN);
+			   0x1 << DATA_IRQ_EN, 0x1<< DATA_IRQ_EN);
 	regmap_update_bits(regmap, HMIC_CTRL1,
 			   0x1 << KEYUP_IRQ_EN, 0x0 << KEYUP_IRQ_EN);
 	return;
@@ -443,8 +446,9 @@ static void sunxi_jack_adv_det_irq_work(void *data, enum snd_jack_types *jack_ty
 	int codec_irq = gpiod_to_irq(jack_adv_priv->irq_desc);
 	int det_irq = gpiod_to_irq(jack_adv_priv->det_desc);
 	unsigned int reg_val, irqen_val, reg_val_tmp;
+	unsigned int hmic_data;
 	unsigned int gpio_level;
-
+	bool key_up, key_down, key_hook;
 	if (jack_adv_priv->det_gpio) {
 		gpio_level = gpio_get_value(jack_adv_priv->det_gpio);
 		if (gpio_level == jack_adv_priv->det_gpio_level) {
@@ -464,18 +468,25 @@ static void sunxi_jack_adv_det_irq_work(void *data, enum snd_jack_types *jack_ty
 	if (jack_adv_priv->irq == codec_irq) {
 		regmap_read(regmap, HMIC_CTRL1, &irqen_val);
 		regmap_read(regmap, HMIC_STS, &reg_val);
-		if ((reg_val & (1 << KEYDOWN_PEND)) && (irqen_val & (1 << KEYDOWN_IRQ_EN))) {
-			regmap_update_bits(regmap, HMIC_CTRL1,
-					0x1 << KEYDOWN_IRQ_EN, 0x0 << KEYDOWN_IRQ_EN);
+		if ((reg_val & (1 << DATA_PEND)) && (irqen_val & (1 << DATA_IRQ_EN))) {
+			regmap_update_bits(regmap, HMIC_CTRL1, 0x1 << DATA_IRQ_EN, 0x0 << DATA_IRQ_EN);
 			regmap_read(regmap, HMIC_STS, &reg_val_tmp);
-			reg_val_tmp |= 0x1 << KEYDOWN_PEND;
-			reg_val_tmp |= 0x1 << PLUGIN_PEND;
 			reg_val_tmp |= 0x1 << KEYUP_PEND;
+			reg_val_tmp |= 0x1 << PLUGIN_PEND;
 			reg_val_tmp |= 0x1 << PLUGOUT_PEND;
 			reg_val_tmp |= 0x1 << DATA_PEND;
 			regmap_write(regmap, HMIC_STS, reg_val_tmp);
 			jack_adv_priv->irq_sta = JACK_IRQ_KEYDOWN;
+			if (reg_val & (0x1 << KEYDOWN_PEND)) {
+				reg_val |= 0x1 << KEYDOWN_PEND;
+				regmap_write(regmap, HMIC_STS, reg_val);
+				jack_adv_priv->key_data = 0;
+				jack_adv_priv->key_first_press = true;
+			}
 		} else {
+			SND_LOG_DEBUG("err irq\n");
+			regmap_update_bits(regmap, HMIC_STS, 0x1f << DATA_PEND, 0x1f << DATA_PEND);
+			regmap_update_bits(regmap, HMIC_CTRL1, 0x1 << DATA_IRQ_EN, 0x1 << DATA_IRQ_EN);
 			return;
 		}
 	} else if (jack_adv_priv->irq == det_irq) {
@@ -491,8 +502,6 @@ static void sunxi_jack_adv_det_irq_work(void *data, enum snd_jack_types *jack_ty
 
 			jack_adv_priv->irq_sta = JACK_IRQ_OUT;
 		} else {
-			regmap_update_bits(regmap, ADC_APC_CTRL,
-					0x1 << HBIASMOD, 0x1 << HBIASMOD);
 			regmap_update_bits(regmap, ADC_APC_CTRL,
 					0x1 << HBIAS_EN, 0x1 << HBIAS_EN);
 			regmap_update_bits(regmap, ADC_APC_CTRL,
@@ -523,8 +532,6 @@ jack_irq_sts:
 				   0x1 << KEYDOWN_IRQ_EN, 0x0 << KEYDOWN_IRQ_EN);
 
 		regmap_update_bits(regmap, ADC_APC_CTRL,
-				0x1 << HBIASMOD, 0x0 << HBIASMOD);
-		regmap_update_bits(regmap, ADC_APC_CTRL,
 				0x1 << HBIAS_EN, 0x0 << HBIAS_EN);
 		regmap_update_bits(regmap, ADC_APC_CTRL,
 				0x1 << HBIAS_ADC_EN, 0x0 << HBIAS_ADC_EN);
@@ -540,21 +547,39 @@ jack_irq_sts:
 	break;
 	case JACK_IRQ_KEYDOWN:
 		regmap_read(regmap, HMIC_STS, &reg_val);
-		reg_val = (reg_val >> HMIC_DATA) & 0x1f;
-		if (reg_val < jack_adv_priv->key_threshold) {
-			regmap_update_bits(regmap, HMIC_CTRL1,
-					   0x1 << KEYDOWN_IRQ_EN, 0x1 << KEYDOWN_IRQ_EN);
+		hmic_data = (reg_val >> HMIC_DATA) & 0x1f;
+		if (hmic_data < jack_adv_priv->key_threshold) {
+			goto irq_enable;
+			return;
+		}
+		SND_LOG_INFO("jack button\n");
+
+		key_hook = (hmic_data >= jack_adv_priv->key_det_vol[0][0] &&
+			    hmic_data <= jack_adv_priv->key_det_vol[0][1])
+			    && (jack_adv_priv->key_data >= jack_adv_priv->key_det_vol[0][0] &&
+			    jack_adv_priv->key_data <= jack_adv_priv->key_det_vol[0][1]);
+
+		key_up = (hmic_data >= jack_adv_priv->key_det_vol[1][0] &&
+			    hmic_data <= jack_adv_priv->key_det_vol[1][1])
+			    && (jack_adv_priv->key_data >= jack_adv_priv->key_det_vol[1][0] &&
+			    jack_adv_priv->key_data <= jack_adv_priv->key_det_vol[1][1]);
+
+		key_down = (hmic_data >= jack_adv_priv->key_det_vol[2][0] &&
+			    hmic_data <= jack_adv_priv->key_det_vol[2][1])
+			    && (jack_adv_priv->key_data >= jack_adv_priv->key_det_vol[2][0] &&
+			    jack_adv_priv->key_data <= jack_adv_priv->key_det_vol[2][1]);
+
+		if ((!key_hook) && (!key_up) && (!key_down)) {
+			SND_LOG_INFO("old_data :%d, new_data: %d\n", jack_adv_priv->key_data, hmic_data);
+			jack_adv_priv->key_data = hmic_data;
+			goto irq_enable;
 			return;
 		}
 
-		SND_LOG_INFO("jack button\n");
-
-		regmap_read(regmap, HMIC_STS, &reg_val);
-		reg_val = (reg_val >> HMIC_DATA) & 0x1f;
-		SND_LOG_INFO("\033[31m HMIC_DATA:%u, vol+:[%d, %d], vol-:[%d %d], hook:[%d %d]\033[0m \n",
-			     reg_val,
-			     jack_adv_priv->key_det_vol[1][0], jack_adv_priv->key_det_vol[1][1],
+		SND_LOG_INFO("\033[31m HMIC_DATA:%u, vol-:[%d, %d], vol+:[%d %d], hook:[%d %d]\033[0m \n",
+			     hmic_data,
 			     jack_adv_priv->key_det_vol[2][0], jack_adv_priv->key_det_vol[2][1],
+			     jack_adv_priv->key_det_vol[1][0], jack_adv_priv->key_det_vol[1][1],
 			     jack_adv_priv->key_det_vol[0][0], jack_adv_priv->key_det_vol[0][1]);
 
 		/* SND_JACK_BTN_0 - key-hook
@@ -562,21 +587,20 @@ jack_irq_sts:
 		 * SND_JACK_BTN_2 - key-down
 		 * SND_JACK_BTN_3 - key-voice
 		 */
-		if (reg_val >= jack_adv_priv->key_det_vol[0][0] &&
-		    reg_val <= jack_adv_priv->key_det_vol[0][1]) {
+		if (key_hook && jack_adv_priv->key_first_press) {
 			*jack_type |= SND_JACK_BTN_0;
-		} else if (reg_val >= jack_adv_priv->key_det_vol[1][0] &&
-			   reg_val <= jack_adv_priv->key_det_vol[1][1]) {
+			jack_adv_priv->key_first_press = false;
+		} else if (key_up && jack_adv_priv->key_first_press) {
 			*jack_type |= SND_JACK_BTN_1;
-		} else if (reg_val >= jack_adv_priv->key_det_vol[2][0] &&
-			   reg_val <= jack_adv_priv->key_det_vol[2][1]) {
+			jack_adv_priv->key_first_press = false;
+		} else if (key_down && jack_adv_priv->key_first_press) {
 			*jack_type |= SND_JACK_BTN_2;
+			jack_adv_priv->key_first_press = false;
 		} else {
 			SND_LOG_DEBUG("unsupport jack button\n");
 		}
+		jack_adv_priv->key_data = hmic_data;
 
-		regmap_update_bits(regmap, HMIC_CTRL1,
-				   0x1 << KEYDOWN_IRQ_EN, 0x1 << KEYDOWN_IRQ_EN);
 	break;
 	default:
 		SND_LOG_DEBUG("irq status is invaild\n");
@@ -585,6 +609,8 @@ jack_irq_sts:
 
 	jack_adv_priv->jack_type = *jack_type;
 
+irq_enable:
+	regmap_update_bits(regmap, HMIC_CTRL1, 0x1 << DATA_IRQ_EN, 0x1 << DATA_IRQ_EN);
 	return;
 }
 
@@ -609,8 +635,6 @@ static void sunxi_jack_adv_det_pre_scan_work(void *data, enum snd_jack_types *ja
 			regmap_update_bits(regmap, HMIC_CTRL1,
 					0x1 << DATA_IRQ_EN, 0x0 << DATA_IRQ_EN);
 
-			regmap_update_bits(regmap, ADC_APC_CTRL,
-						0x1 << HBIASMOD, 0x0 << HBIASMOD);
 			regmap_update_bits(regmap, ADC_APC_CTRL,
 						0x1 << HBIAS_EN, 0x0 << HBIAS_EN);
 			regmap_update_bits(regmap, ADC_APC_CTRL,
@@ -648,8 +672,6 @@ static void sunxi_jack_adv_det_scan_work(void *data, enum snd_jack_types *jack_t
 			goto out;
 		}
 
-		regmap_update_bits(regmap, ADC_APC_CTRL,
-				0x1 << HBIASMOD, 0x1 << HBIASMOD);
 		regmap_update_bits(regmap, ADC_APC_CTRL,
 				0x1 << HBIAS_EN, 0x1 << HBIAS_EN);
 		regmap_update_bits(regmap, ADC_APC_CTRL,
@@ -718,8 +740,6 @@ static void sunxi_jack_adv_det_scan_work(void *data, enum snd_jack_types *jack_t
 			jack_adv_priv->jack_type = *jack_type;
 		} else {
 			regmap_update_bits(regmap, ADC_APC_CTRL,
-					   0x1 << HBIASMOD, 0x1 << HBIASMOD);
-			regmap_update_bits(regmap, ADC_APC_CTRL,
 					   0x1 << HBIAS_EN, 0x1 << HBIAS_EN);
 			regmap_update_bits(regmap, ADC_APC_CTRL,
 					   0x1 << HBIAS_ADC_EN, 0x1 << HBIAS_ADC_EN);
@@ -747,7 +767,7 @@ headset:
 		regmap_update_bits(regmap, HMIC_CTRL1,
 				0x1 << KEYDOWN_IRQ_EN, 0x1 << KEYDOWN_IRQ_EN);
 		regmap_update_bits(regmap, HMIC_CTRL1,
-				0x1 << DATA_IRQ_EN, 0x0 << DATA_IRQ_EN);
+				0x1 << DATA_IRQ_EN, 0x1 << DATA_IRQ_EN);
 		regmap_update_bits(regmap, HMIC_CTRL1,
 				0x1 << KEYUP_IRQ_EN, 0x0 << KEYUP_IRQ_EN);
 	}
@@ -761,8 +781,6 @@ out:
 		regmap_update_bits(regmap, HMIC_CTRL1,
 				   0x1 << DATA_IRQ_EN, 0x0 << DATA_IRQ_EN);
 
-		regmap_update_bits(regmap, ADC_APC_CTRL,
-					0x1 << HBIASMOD, 0x0 << HBIASMOD);
 		regmap_update_bits(regmap, ADC_APC_CTRL,
 					0x1 << HBIAS_EN, 0x0 << HBIAS_EN);
 		regmap_update_bits(regmap, ADC_APC_CTRL,
@@ -785,8 +803,6 @@ static void sunxi_jack_sdbp_scan_work(void *data, enum snd_jack_types *jack_type
 		return;
 
 	regmap_update_bits(regmap, ADC_APC_CTRL,
-			   0x1 << HBIASMOD, 0x1 << HBIASMOD);
-	regmap_update_bits(regmap, ADC_APC_CTRL,
 			   0x1 << HBIAS_EN, 0x1 << HBIAS_EN);
 	regmap_update_bits(regmap, ADC_APC_CTRL,
 			   0x1 << HBIAS_ADC_EN, 0x1 << HBIAS_ADC_EN);
@@ -794,8 +810,6 @@ static void sunxi_jack_sdbp_scan_work(void *data, enum snd_jack_types *jack_type
 	sunxi_adv_headset_heasphone_det(jack_adv_priv, jack_type);
 
 	if (*jack_type != SND_JACK_HEADSET) {
-		regmap_update_bits(regmap, ADC_APC_CTRL,
-				   0x1 << HBIASMOD, 0x0 << HBIASMOD);
 		regmap_update_bits(regmap, ADC_APC_CTRL,
 				   0x1 << HBIAS_EN, 0x0 << HBIAS_EN);
 		regmap_update_bits(regmap, ADC_APC_CTRL,
@@ -2897,4 +2911,4 @@ module_i2c_driver(ac101_i2c_driver);
 MODULE_DESCRIPTION("ASoC AC101 driver");
 MODULE_AUTHOR("lijingpsw@allwinnertech.com");
 MODULE_LICENSE("GPL");
-MODULE_VERSION("1.0.5");
+MODULE_VERSION("1.0.6");

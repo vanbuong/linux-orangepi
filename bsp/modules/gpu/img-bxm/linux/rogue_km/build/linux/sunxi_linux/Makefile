@@ -71,6 +71,7 @@ SUPPORT_DMA_FENCE := 1
 
 BUILD := $(GPU_BUILD_TYPE)
 
+PVRSRV_DEVICE_INIT_MODE := PVRSRV_LINUX_DEV_INIT_ON_OPEN
 include ../config/preconfig.mk
 include ../config/window_system.mk
 

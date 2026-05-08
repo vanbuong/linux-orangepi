@@ -48,6 +48,7 @@
 #define NCAT
 #endif
 
+
 struct bdev_info part;
 
 #define SUNXI_TEST_SIZE	(512*4)
@@ -80,11 +81,14 @@ struct bdev_info part;
 #define SDXC_DAT_STARV_ERR	SDXC_VOLTAGE_CHANGE_DONE
 
 
-#ifdef NCAT
-#define SUNXI_MMC_GATR		(0xd2c)
-#define SUNXI_MMC_MODR		(0xd20)
-#define SUNXI_MMC_RST		(0xd2c)
-#elif OCAT
+#if defined(NCAT)
+#define SUNXI_MMC_GATR (0xd2c)
+#define SUNXI_MMC_MODR (0xd20)
+#define SUNXI_MMC_RST (0xd2c)
+#define SUNXI_MMC_GATR_SDC3 (0xd3c)
+#define SUNXI_MMC_MODR_SDC3 (0xd30)
+#define SUNXI_MMC_RST_SDC3 (0xd3c)
+#elif defined(OCAT)
 #define SUNXI_MMC_GATR         (0x60)
 #define SUNXI_MMC_MODR         (0x90)
 #define SUNXI_MMC_RST          (0x2C0)
@@ -130,30 +134,42 @@ static char *gccmu_base_reg;
 static char *ghost_base_reg;
 static bool need_dis_cmdq;
 
+/* The variable indicates which specific sdc is being used */
+/* The default is sdc2. When the value is 3, it indicates that sdc3 is being used */
+static int g_current_sdc_index = -1;
 
-#ifdef NCAT
+#if defined(NCAT)
 static void sunxi_mmc_mbusrst_host(char *host)
 {
 	char *ccmu_reg = gccmu_base_reg;
-
 	u32 rval = 0;
-	rval = readl(ccmu_reg + SUNXI_MMC_GATR);
+	u32 gatr_reg, modr_reg;
+
+	if (g_current_sdc_index == 3) {
+		gatr_reg = SUNXI_MMC_GATR_SDC3;
+		modr_reg = SUNXI_MMC_MODR_SDC3;
+	} else {
+		gatr_reg = SUNXI_MMC_GATR;
+		modr_reg = SUNXI_MMC_MODR;
+	}
+
+	rval = readl(ccmu_reg + gatr_reg);
 	rval &= ~((1u<<0)|(1u<<16));
-	writel(rval, ccmu_reg + SUNXI_MMC_GATR);
+	writel(rval, ccmu_reg + gatr_reg);
 
-	rval = readl(ccmu_reg + SUNXI_MMC_MODR);
+	rval = readl(ccmu_reg + modr_reg);
 	rval &= ~((1<<31));
-	writel(rval, ccmu_reg + SUNXI_MMC_MODR);
+	writel(rval, ccmu_reg + modr_reg);
 
-	rval = readl(ccmu_reg + SUNXI_MMC_MODR);
+	rval = readl(ccmu_reg + modr_reg);
 	rval |= (1<<31);
-	writel(rval, ccmu_reg + SUNXI_MMC_MODR);
+	writel(rval, ccmu_reg + modr_reg);
 
-	rval = readl(ccmu_reg + SUNXI_MMC_GATR);
+	rval = readl(ccmu_reg + gatr_reg);
 	rval |= ((1u<<0)|(1u<<16));
-	writel(rval, ccmu_reg + SUNXI_MMC_GATR);
+	writel(rval, ccmu_reg + gatr_reg);
 }
-#elif OCAT
+#elif defined(OCAT)
 static void sunxi_mmc_mbusrst_host(char *host)
 {
 	char *ccmu_reg = gccmu_base_reg;
@@ -707,13 +723,51 @@ int sunxi_mmc_panic_write_do(u32 sec_addr, u32 sec_cnt, const char *inbuf)
 static int sunxi_mmc_panic_resource_init(void)
 {
 	struct device_node *dn;
+	struct device_node *aliases;
 	struct resource res;
+	const char *mmc2_path;
+	const char *device_type = NULL;
+	int ret;
 
 	need_dis_cmdq = true;
-	dn = of_find_node_by_type(NULL, "sdc2");
+
+	/* Dynamically search for the corresponding sdc node through the alias sunxi-mmc2 */
+	aliases = of_find_node_by_path("/aliases");
+	if (!aliases) {
+		mmcerr("Failed to find /aliases node\n");
+		return MWR_RFAIL;
+	}
+
+	ret = of_property_read_string(aliases, "sunxi-mmc2", &mmc2_path);
+	if (ret) {
+		mmcerr("Failed to read sunxi-mmc2 alias, ret=%d\n", ret);
+		return MWR_RFAIL;
+	}
+
+	mmcdbg("sunxi-mmc2 alias points to: %s\n", mmc2_path);
+
+	/* Search for the device_type attribute in the corresponding device node based on the obtained alias path to confirm which sdc it is */
+	dn = of_find_node_by_path(mmc2_path);
 	if (dn) {
+		if (of_property_read_string(dn, "device_type", &device_type) == 0 && device_type) {
+			if (strcmp(device_type, "sdc2") == 0) {
+				g_current_sdc_index = 2;
+				mmcdbg("Detected SDC2 via device_type, setting g_current_sdc_index = 2\n");
+			} else if (strcmp(device_type, "sdc3") == 0) {
+				g_current_sdc_index = 3;
+				mmcdbg("Detected SDC3 via device_type, setting g_current_sdc_index = 3\n");
+			} else {
+				g_current_sdc_index = 2;
+				mmcerr("Unknown SDC type:  defaulting to SDC2 (g_current_sdc_index = 2)\n");
+			}
+		} else {
+			g_current_sdc_index = 2;
+			mmcerr("Device node name is null, defaulting to SDC2 (g_current_sdc_index = 2)\n");
+		}
+
 		if (of_address_to_resource(dn, 0, &res)) {
-			mmcerr("*get sdc2 host base address fail*\n");
+			mmcerr("*get %s host base address fail*\n",
+				dn->name ? dn->name : "sdc");
 			return MWR_RFAIL;
 		}
 

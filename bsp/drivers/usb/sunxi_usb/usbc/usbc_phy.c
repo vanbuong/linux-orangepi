@@ -563,25 +563,15 @@ void usbc_new_phy_res_cal(void __iomem *regs)
 
 #endif
 
-#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN60IW2)
-void usbc_phyx_res_cal(__u32 usbc_no, bool enable, bool bypass)
+#if IS_ENABLED(CONFIG_ARCH_SUN55IW3)
+void usbc_phyx_res_cal(__u32 usbc_no, bool enable)
 {
 	__u32 reg_val = 0;
 	void __iomem *rescal, *res200;
 	__u32 port = 0, tmp; /* port companion enable ? */
 
-	if (bypass) {
-		pr_info(" External Resistance Calibration already Bypass, not %s it\n",
-			enable ? "enable" : "disable");
-		return;
-	}
-
 	rescal = ioremap(syscfg_reg(RESCAL_CTRL_REG), 4);
-#if IS_ENABLED(CONFIG_ARCH_SUN60IW2)
-	res200 = ioremap(syscfg_reg(RES0_CTRL_REG), 4);
-#else	/* CONFIG_ARCH_SUN55IW3 */
 	res200 = ioremap(syscfg_reg(RES200_CTRL_REG), 4);
-#endif
 
 	tmp = GENMASK(6, 4) & (~PHY_o_RES200_SEL(usbc_no));
 	reg_val = readl(rescal);
@@ -598,17 +588,9 @@ void usbc_phyx_res_cal(__u32 usbc_no, bool enable, bool bypass)
 
 	reg_val = readl(res200);
 	if (enable)
-#if IS_ENABLED(CONFIG_ARCH_SUN60IW2)
-		reg_val &= ~PHY_o_RES200_TRIM(usbc_no);
-#else	/* CONFIG_ARCH_SUN55IW3 */
 		reg_val &= ~PHY_o_RES200_CTRL(usbc_no);
-#endif
 	else
-#if IS_ENABLED(CONFIG_ARCH_SUN60IW2)
-		reg_val |= PHY_o_RES200_TRIM_DEFAULT(usbc_no);
-#else	/* CONFIG_ARCH_SUN55IW3 */
 		reg_val |= PHY_o_RES200_CTRL_DEFAULT(usbc_no);
-#endif
 	writel(reg_val, res200);
 
 	iounmap(rescal);

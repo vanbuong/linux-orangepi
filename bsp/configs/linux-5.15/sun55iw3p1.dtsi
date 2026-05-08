@@ -4977,7 +4977,7 @@
 
 		gpu_opp_table: gpu-opp-table {
 			compatible = "allwinner, mali-valhall-operating-points";
-			opp@150000000 {
+			/*opp@150000000 {
 				opp-hz = /bits/ 64 <150000000>;
 				opp-microvolt = <900000>;
 			};
@@ -4990,7 +4990,7 @@
 			opp@300000000 {
 				opp-hz = /bits/ 64 <300000000>;
 				opp-microvolt = <900000>;
-			};
+			};*/
 
 			opp@400000000 {
 				opp-hz = /bits/ 64 <400000000>;

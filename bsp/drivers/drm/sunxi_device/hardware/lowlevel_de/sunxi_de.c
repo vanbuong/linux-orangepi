@@ -1086,7 +1086,7 @@ static int sunxi_de_parse_dts(struct device *dev,
 	}
 
 	if (of_property_read_u32(node, "offline_mode", &engine->offline_mode.enable)) {
-		DRM_INFO("[SUNXI-DE] chn_cfg_mode not found, used def val\n");
+		DRM_INFO("[SUNXI-DE] offline_mode not found, used def val\n");
 	}
 
 	return 0;

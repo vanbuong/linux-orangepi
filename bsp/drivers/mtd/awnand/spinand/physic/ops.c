@@ -232,7 +232,7 @@ int addr_to_req(struct aw_spinand_chip *chip,
 	 * while the other physical partitions do not.
 	 * Added judgment to enable MTD devices to access the entire Flash
 	 */
-	if (addrtmp >= get_sys_part_offset()) {
+	if (addrtmp >= get_mtd_part_offset("sys")) {
 		block_size = info->block_size(chip);
 		page_size = info->page_size(chip);
 	} else {

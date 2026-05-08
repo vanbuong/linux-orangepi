@@ -245,7 +245,6 @@ int sunxi_dvfs_ctrl_init(struct device *dev,
 
 	dvfs_reg = (struct gpu_glb_reg *)ioremap(para->reg_base, 0x110);
 
-#if defined(SUNXI_DVFS_CTRL_ENABLE)
 /*parse OPP and set opp_table*/
 	prop = of_find_property(dev->of_node, "operating-points", NULL);
 	if (!prop) {
@@ -295,7 +294,7 @@ int sunxi_dvfs_ctrl_init(struct device *dev,
 	}
 	dev_info(dev, "sunxi_dvfs_ctrl_set_level\n");
 /*end of parsing OPP*/
-#endif
+
 	ret  = request_irq(para->irq_no, sunxi_ctrl_irq_handler,
 			IRQF_TRIGGER_HIGH, "gpu-dvfs", NULL);
 

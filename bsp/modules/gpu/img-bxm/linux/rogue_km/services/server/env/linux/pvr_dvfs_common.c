@@ -173,6 +173,47 @@ exit:
 }
 #endif
 
+int GetOPPValuesFromDeviceCFG(struct device          *dev,
+			      IMG_DVFS_DEVICE_CFG    *psDVFSDeviceCfg,
+			      unsigned long *min_freq,
+			      unsigned long *min_volt,
+			      unsigned long *max_freq,
+			      struct pvr_opp_freq_table *pvr_freq_table)
+{
+	const IMG_OPP *max_opp, *min_opp;
+	unsigned int i;
+	unsigned long *freq_table;
+	unsigned int count;
+
+	count = psDVFSDeviceCfg->ui32OPPTableSize;
+	if (psDVFSDeviceCfg->pasOPPTable[count - 1].ui32Freq > psDVFSDeviceCfg->pasOPPTable[0].ui32Freq) {
+		max_opp = &psDVFSDeviceCfg->pasOPPTable[count - 1];
+		min_opp = &psDVFSDeviceCfg->pasOPPTable[0];
+	} else {
+		min_opp = &psDVFSDeviceCfg->pasOPPTable[count - 1];
+		max_opp = &psDVFSDeviceCfg->pasOPPTable[0];
+
+	}
+
+	*min_freq = min_opp->ui32Freq;
+	*min_volt = min_opp->ui32Volt;
+
+	*max_freq = max_opp->ui32Freq;
+
+	freq_table = devm_kcalloc(dev, count, sizeof(*freq_table), GFP_ATOMIC);
+	if (!freq_table) {
+		return -ENOMEM;
+	}
+
+	pvr_freq_table->freq_table = freq_table;
+	pvr_freq_table->num_levels = count;
+	for (i = 0; i < count; i++) {
+		freq_table[i] = psDVFSDeviceCfg->pasOPPTable[i].ui32Freq;
+	}
+
+	return 0;
+}
+
 /*************************************************************************/ /*!
 @Function       DVFSCopyOPPTable
 

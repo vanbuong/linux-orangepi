@@ -620,7 +620,7 @@ PVRSRVConnectKM(CONNECTION_DATA *psConnection,
 	/*
 	 * Validate the build options
 	 */
-	ui32ServerBuildOptions = (RGX_BUILD_OPTIONS_KM);
+	ui32ServerBuildOptions = (RGX_BUILD_OPTIONS_KM & RGX_BUILD_OPTIONS_MASK_KM);
 	if (ui32ServerBuildOptions != ui32ClientBuildOptions)
 	{
 		IMG_UINT32			ui32ServerBuildOptionsMismatch = ui32ServerBuildOptions ^ ui32ClientBuildOptions;

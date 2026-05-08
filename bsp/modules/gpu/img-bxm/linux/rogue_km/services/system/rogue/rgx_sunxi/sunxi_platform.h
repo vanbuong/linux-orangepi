@@ -25,11 +25,24 @@
 #include "servicesext.h"
 #include <linux/version.h>
 
-#if defined(SUPPORT_PDVFS) || defined (SUPPORT_LINUX_DVFS)
+#if defined(SUPPORT_PDVFS) || defined(SUPPORT_LINUX_DVFS)
 #include "pvr_dvfs.h"
 #endif
 
 #define OPP_MAX_NUM 20
+
+enum sunxi_gpu_power_runtime_status {
+	GPU_POWER_NONE = -1,
+	GPU_POWER_RUNTIME_OFF = 0,
+	GPU_POWER_RUNTIME_ON,
+};
+
+enum sunxi_gpu_power_suspend_resume_status {
+	GPU_POWER_SUSPEND_RESUME_NONE = -1,
+	GPU_POWER_SUSPEND = 0,
+	GPU_POWER_RESUME,
+};
+
 struct sunxi_platform {
 	/*Linux devices driver related informations*/
 	struct device *dev;
@@ -43,15 +56,17 @@ struct sunxi_platform {
 
 	/*interruption related*/
 	u32 irq_num;
-#if defined(SUPPORT_PDVFS) || defined (SUPPORT_LINUX_DVFS)
+#if defined(SUPPORT_PDVFS) || defined(SUPPORT_LINUX_DVFS)
 	u32 dvfs_irq_num;
 
 	IMG_OPP asOPPTable[OPP_MAX_NUM];
 	u32     ui32OPPTableSize;
 #endif
+	struct mutex power_lock;
 	/*power related*/
 	struct regulator *regula;
-	u32 power_on;
+	enum sunxi_gpu_power_runtime_status runtime_power_status;
+	enum sunxi_gpu_power_suspend_resume_status suspend_resume_power_status;
 
 	/*voltage related*/
 	u32 volt;
@@ -70,6 +85,11 @@ struct sunxi_platform {
 	struct reset_control *rst_bus;
 	struct reset_control *rst_bus_smmu_gpu0;
 	struct reset_control *rst_bus_smmu_gpu1;
+
+	struct thermal_zone_device *tz;
+
+	DI_GROUP *psGroup;
+	DI_ENTRY *psOpp;
 };
 
 IMG_UINT32 sunxi_get_device_clk_rate(IMG_HANDLE hSysData);
@@ -79,12 +99,22 @@ void sunxi_platform_term(void);
 void sunxiSetFrequency(IMG_UINT32 ui32Frequency);
 void sunxiSetVoltage(IMG_UINT32 ui32Volt);
 PVRSRV_ERROR sunxiPrePowerState(IMG_HANDLE hSysData,
-					 PVRSRV_DEV_POWER_STATE eNewPowerState,
-					 PVRSRV_DEV_POWER_STATE eCurrentPowerState,
+					 PVRSRV_SYS_POWER_STATE eNewPowerState,
+					 PVRSRV_SYS_POWER_STATE eCurrentPowerState,
 					 PVRSRV_POWER_FLAGS ePwrFlags);
 PVRSRV_ERROR sunxiPostPowerState(IMG_HANDLE hSysData,
-					  PVRSRV_DEV_POWER_STATE eNewPowerState,
-					  PVRSRV_DEV_POWER_STATE eCurrentPowerState,
+					  PVRSRV_SYS_POWER_STATE eNewPowerState,
+					  PVRSRV_SYS_POWER_STATE eCurrentPowerState,
 					  PVRSRV_POWER_FLAGS ePwrFlags);
+
+#if defined(SUPPORT_PDVFS) || defined(SUPPORT_LINUX_DVFS)
+#if defined(CONFIG_DEVFREQ_THERMAL)
+unsigned long sunxi_get_static_power(unsigned long voltage);
+
+unsigned long sunxi_get_dynamic_power(unsigned long freq,
+					       unsigned long voltage);
+#endif //~CONFIG_DEVFREQ_THERMAL
+#endif //~DVFS
+PVRSRV_ERROR sunxi_secure_config(IMG_HANDLE hSysData);
 
 #endif /* _PLATFORM_H_ */

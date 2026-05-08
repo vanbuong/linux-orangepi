@@ -10,6 +10,7 @@ source "bsp/drivers/timer/Kconfig"
 
 # Basic System
 source "bsp/drivers/dma/Kconfig"
+source "bsp/drivers/dma-buf/Kconfig"
 source "bsp/drivers/rtc/Kconfig"
 source "bsp/drivers/bus/Kconfig"
 source "bsp/drivers/dumpreg/Kconfig"
@@ -51,7 +52,7 @@ source "bsp/drivers/secure_storage/Kconfig"
 source "bsp/drivers/drm_heap/Kconfig"
 
 # I/O Connectivity
-source "bsp/drivers/pcie/Kconfig"
+source "bsp/drivers/pci/Kconfig"
 source "bsp/drivers/phy/Kconfig"
 source "bsp/drivers/emac/Kconfig"
 source "bsp/drivers/gmac/Kconfig"

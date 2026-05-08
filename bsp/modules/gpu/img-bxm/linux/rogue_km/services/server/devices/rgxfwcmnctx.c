@@ -310,8 +310,8 @@ PVRSRV_ERROR FWCommonContextAllocate(CONNECTION_DATA *psConnection,
 		sFWCommonContext.psRFCmd.ui32Addr = 0;
 	}
 
-	eError = _CheckPriority(psDevInfo, i32Priority, eRGXCCBRequestor);
-	PVR_LOG_GOTO_IF_ERROR(eError, "_CheckPriority", fail_checkpriority);
+	//eError = _CheckPriority(psDevInfo, i32Priority, eRGXCCBRequestor);
+	//PVR_LOG_GOTO_IF_ERROR(eError, "_CheckPriority", fail_checkpriority);
 
 	psServerCommonContext->i32Priority = i32Priority;
 	psServerCommonContext->eRequestor = eRGXCCBRequestor;
@@ -416,7 +416,7 @@ fail_fwcommonctxfwaddr:
 		RGXUnsetFirmwareAddress(psContextStateMemDesc);
 	}
 fail_ctxstatefwaddr:
-fail_checkpriority:
+//fail_checkpriority:
 	if (psInfo->psFWFrameworkMemDesc != NULL)
 	{
 		RGXUnsetFirmwareAddress(psInfo->psFWFrameworkMemDesc);

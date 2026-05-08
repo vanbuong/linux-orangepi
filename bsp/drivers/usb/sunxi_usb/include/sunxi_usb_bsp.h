@@ -970,7 +970,7 @@ void usbc_new_phy_pll_set(void __iomem *regs, int val);
 void usbc_new_phy_reassign(void __iomem *regs, int val);
 void usbc_new_phyx_write(void __iomem *regs, u32 data);
 u32 usbc_new_phyx_read(void __iomem *regs);
-void usbc_phyx_res_cal(__u32 usbc_no, bool enable, bool bypass);
+void usbc_phyx_res_cal(__u32 usbc_no, bool enable);
 void usbc_phy_reassign(void __iomem *regs, __hdle hUSB, int val);
 void usbc_phy_bandwidth_tuning(void __iomem *regs, __hdle hUSB, int val);
 

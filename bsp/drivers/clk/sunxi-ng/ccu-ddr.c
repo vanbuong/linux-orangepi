@@ -252,8 +252,6 @@ static int ddr_clock_probe(struct platform_device *pdev)
 		}
 	}
 
-	sunxi_err(NULL, "dram_clk:%d\n", ddrclk->dram_clk);
-
 	ret = of_property_read_u32(dram_np, "dram_para[24]", &ddrclk->dram_div);
 	if (ret) {
 		ret = of_property_read_u32(dram_np, "dram_para24", &ddrclk->dram_div);
@@ -262,8 +260,6 @@ static int ddr_clock_probe(struct platform_device *pdev)
 			return -ENODEV;
 		}
 	}
-
-	sunxi_err(NULL, "dram_div:0x%x\n", ddrclk->dram_div);
 
 	ddrclk->ccmu_base = of_iomap(np, 0);
 	if (!ddrclk->ccmu_base) {
@@ -330,4 +326,4 @@ MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("Allwinner DDR Clock driver");
 MODULE_ALIAS("platform:" DRIVER_NAME);
 MODULE_AUTHOR("fanqinghua <fanqinghua@allwinnertech.com>");
-MODULE_VERSION("1.0.2");
+MODULE_VERSION("1.0.3");

@@ -35,30 +35,6 @@
 
 #define res_size(_r) (((_r)->end - (_r)->start) + 1)
 
-static int __maybe_unused usbc_rescal_clock_set(sunxi_udc_io_t *sunxi_udc_io, bool enable)
-{
-	int ret = 0;
-
-	if (sunxi_udc_io->rext_cal_bypass) {
-		DMSG_INFO_UDC("external resistance calibration bypass, skip set clk_res\n");
-		return 0;
-	}
-
-	if (enable) {
-		if (sunxi_udc_io->clk_res) {
-			ret = clk_prepare_enable(sunxi_udc_io->clk_res);
-			if (ret) {
-				DMSG_ERR("[udc]: enable clk_res err, return %d\n", ret);
-				return ret;
-			}
-		}
-	} else {
-		if (sunxi_udc_io->clk_res)
-			clk_disable_unprepare(sunxi_udc_io->clk_res);
-	}
-	return 0;
-}
-
 u32  open_usb_clock(sunxi_udc_io_t *sunxi_udc_io)
 {
 	int ret;
@@ -73,9 +49,8 @@ u32  open_usb_clock(sunxi_udc_io_t *sunxi_udc_io)
 #endif
 
 	if (!sunxi_udc_io->clk_is_open) {
-#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN60IW2)
-		usbc_rescal_clock_set(sunxi_udc_io, true);
-		usbc_phyx_res_cal(0, true, sunxi_udc_io->rext_cal_bypass);
+#if IS_ENABLED(CONFIG_ARCH_SUN55IW3)
+		usbc_phyx_res_cal(0, true);
 #endif
 		if (sunxi_udc_io->ahb_otg) {
 			ret = clk_prepare_enable(sunxi_udc_io->ahb_otg);
@@ -379,9 +354,8 @@ u32 close_usb_clock(sunxi_udc_io_t *sunxi_udc_io)
 			clk_disable_unprepare(sunxi_udc_io->clk_msi_lite);
 
 		udelay(10);
-#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN60IW2)
-		usbc_phyx_res_cal(0, false, sunxi_udc_io->rext_cal_bypass);
-		usbc_rescal_clock_set(sunxi_udc_io, false);
+#if IS_ENABLED(CONFIG_ARCH_SUN55IW3)
+		usbc_phyx_res_cal(0, false);
 #endif
 	}
 

@@ -4,6 +4,8 @@
 //#define pr_fmt(fmt) "sunxi-spinand: " fmt
 #define SUNXI_MODNAME "sunxi-spinand"
 #include <sunxi-log.h>
+
+#include <linux/memblock.h>
 #include <linux/kernel.h>
 #include <linux/module.h>
 #include <linux/of.h>
@@ -13,6 +15,8 @@
 #include <linux/uaccess.h>
 #include <sunxi-sid.h>
 #include "sunxi-spinand.h"
+
+#define SUNXI_SPINAND_MODULE_VERSION	"1.0.4"
 
 struct aw_spinand *g_spinand;
 struct class *spinand_class;
@@ -38,7 +42,271 @@ struct burn_param_t {
 	void *buffer;
 };
 
-#if IS_ENABLED(CONFIG_MTD_CMDLINE_PARTS)
+void aw_spinand_uboot_blknum(struct aw_spinand *spinand, unsigned int *start, unsigned int *end);
+int aw_spinand_mtd_get_flash_info(struct aw_spinand *spinand, void *data, unsigned int len);
+
+static int sunxi_try_sample_param(struct spi_device *spi, struct mtd_info *mtd)
+{
+	struct aw_spinand *spinand = mtd_to_spinand(mtd);
+	struct aw_spinand_chip *chip = spinand_to_chip(spinand);
+	struct aw_spinand_info *info = chip->info;
+	size_t len = info->phy_page_size(chip);
+	unsigned int phy_blk_size = info->phy_block_size(chip);
+	unsigned int start_backup = 0, end_backup = 0, len_backup = 0;
+	unsigned int startry_mode = SUNXI_SPI_SAMP_DELAY_CYCLE_0_0, endtry_mode = SUNXI_SPI_SAMP_DELAY_CYCLE_3_0;
+	unsigned int mode = 0, start_ok = 0, end_ok = 0, len_ok = 0, mode_ok = 0, block = 0, sample_delay = 0;
+	unsigned int final_sample_delay = 0, auto_sample_mode = 0, auto_sample_delay = 0;
+	unsigned int uboot_start = 8;
+	boot0_file_head_t *boot0_head;
+	int ret;
+	struct mtd_oob_ops ops = {0};
+
+	boot0_head = devm_kzalloc(&spi->dev, len, GFP_KERNEL);
+	if (IS_ERR_OR_NULL(boot0_head)) {
+		sunxi_err(NULL, "failed alloc boot0_head\n");
+		ret = -ENOMEM;
+		goto err0;
+	}
+
+	for (mode = startry_mode; mode <= endtry_mode; mode++) {
+		for (sample_delay = SUNXI_SPI_SAMPLE_DELAY_CHAIN_MIN;
+				sample_delay <= SUNXI_SPI_SAMPLE_DELAY_CHAIN_MAX; sample_delay++) {
+			ret = sunxi_spi_calibrate_set_sample_param(spi, SUNXI_SPI_SAMP_MODE_MANUAL, mode, sample_delay);
+			if (ret)
+				goto err0;
+			memset(boot0_head, 0, len);
+			if (block >= uboot_start)
+				block = 0;
+
+			ops.len = len;
+			ops.datbuf = (uint8_t *)boot0_head;
+			ops.oobbuf = NULL;
+			ops.ooblen = ops.ooboffs = ops.oobretlen = 0;
+			ret = mtd->_read_oob(mtd, (block % uboot_start) * phy_blk_size, &ops);
+			if (ret && ret != ECC_LIMIT)
+				goto err0;
+			++block;
+			if (strncmp((char *)boot0_head->boot_head.magic,
+				(char *)BOOT0_MAGIC,
+				sizeof(boot0_head->boot_head.magic)) == 0) {
+				sunxi_debug(NULL, "mode:%d delay:%d [OK]\n",
+						mode, sample_delay);
+				if (!len_backup) {
+					start_backup = sample_delay;
+					end_backup = sample_delay;
+				} else
+					end_backup = sample_delay;
+				len_backup++;
+			} else {
+				sunxi_debug(NULL, "mode:%d delay:%d [ERROR]\n",
+						mode, sample_delay);
+				if (!start_backup)
+					continue;
+				else {
+					if (len_backup > len_ok) {
+						len_ok = len_backup;
+						start_ok = start_backup;
+						end_ok = end_backup;
+						mode_ok = mode;
+					}
+
+					len_backup = 0;
+					start_backup = 0;
+					end_backup = 0;
+				}
+			}
+		}
+		if (len_backup > len_ok) {
+			len_ok = len_backup;
+			start_ok = start_backup;
+			end_ok = end_backup;
+			mode_ok = mode;
+		}
+		len_backup = 0;
+		start_backup = 0;
+		end_backup = 0;
+	}
+
+	if (!len_ok) {
+		sunxi_spi_calibrate_set_sample_param(spi, SUNXI_SPI_SAMP_MODE_AUTO, auto_sample_mode, auto_sample_delay);
+		sunxi_err(NULL, "spi nand update delay param error, use auto mode\n");
+	} else {
+		final_sample_delay = (start_ok + end_ok) / 2;
+		sunxi_spi_calibrate_set_sample_param(spi, SUNXI_SPI_SAMP_MODE_MANUAL, mode_ok, final_sample_delay);
+		sunxi_info(NULL, "Try sample param is sample mode:%d right_delay:%d\n",
+						mode_ok, final_sample_delay);
+	}
+	return 0;
+
+err0:
+	return ret;
+}
+
+#if IS_ENABLED(CONFIG_SUNXI_BOOT_PARAM)
+static uint32_t sunxi_generate_checksum(void *buffer, uint32_t length, uint32_t div, uint32_t src_sum)
+{
+	uint32_t *buf;
+	int count;
+	uint32_t sum;
+
+	count = length >> 2;
+	sum   = 0;
+	buf   = (__u32 *)buffer;
+	do {
+		sum += *buf++;
+		sum += *buf++;
+		sum += *buf++;
+		sum += *buf++;
+	} while ((count -= (4*div)) > (4 - 1));
+
+	while (count-- > 0)
+		sum += *buf++;
+
+	sum = sum - src_sum + STAMP_VALUE;
+
+	return sum;
+}
+
+static int spinand_download_boot_param(struct spi_device *spi, struct mtd_info *mtd)
+{
+	struct aw_spinand *spinand = mtd_to_spinand(mtd);
+	loff_t boot_param_entry;
+	struct sunxi_boot_param_region *boot_param = NULL;
+	boot_spinand_para_t *boot_info = NULL;
+	struct erase_info instr;
+	int ret;
+	struct mtd_oob_ops ops = {0};
+
+	boot_param = devm_kzalloc(&spi->dev, BOOT_PARAM_SIZE, GFP_KERNEL);
+	if (IS_ERR_OR_NULL(boot_param)) {
+		sunxi_err(NULL, "failed alloc boot_param\n");
+		ret = -ENOMEM;
+		goto err0;
+	}
+	memset(boot_param, 0, BOOT_PARAM_SIZE);
+	boot_info = (boot_spinand_para_t *)boot_param->spiflash_info;
+
+	strncpy((char *)boot_param->header.magic,
+			(const char *)BOOT_PARAM_MAGIC,
+			sizeof(boot_param->header.magic));
+
+	aw_spinand_mtd_get_flash_info(spinand, boot_info, BOOT_PARAM_SIZE);
+
+	boot_param->header.check_sum = sunxi_generate_checksum(
+		boot_param, sizeof(struct sunxi_boot_param_region), 1,
+		boot_param->header.check_sum);
+
+	boot_param_entry = get_mtd_part_offset("boot_param");
+	sunxi_debug(NULL, "write boot param offset:0x%llx \n", boot_param_entry);
+
+	instr.addr = boot_param_entry;
+	instr.len = get_mtd_part_size("boot_param");
+	ret = mtd->_erase(mtd, &instr);
+	if (ret)
+		goto err0;
+
+	ops.len = BOOT_PARAM_SIZE;
+	ops.datbuf = (uint8_t *)boot_param;
+	ops.oobbuf = NULL;
+	ops.ooblen = ops.ooboffs = ops.oobretlen = 0;
+	ret = mtd->_write_oob(mtd, boot_param_entry, &ops);
+	if (ret)
+		goto err0;
+	return 0;
+
+err0:
+	return ret;
+}
+#endif /* CONFIG_SUNXI_BOOT_PARAM */
+
+static int sunxi_spi_nand_update_sample_delay_para(struct mtd_info *mtd, struct spi_device *spi)
+{
+	struct aw_spinand *spinand = mtd_to_spinand(mtd);
+	struct aw_spinand_chip *chip = spinand_to_chip(spinand);
+	struct sunxi_boot_param_region *boot_param = NULL;
+	boot_spinand_para_t *spinand_info = NULL;
+	loff_t boot_param_entry;
+	unsigned int pre_rx_bit;
+	unsigned int pre_tx_bit;
+	int ret;
+	struct mtd_oob_ops ops = {0};
+
+	if (!spi_controller_get_devdata(spi->controller)) {
+		sunxi_err(NULL, "spi controller is not initialized\n");
+		ret = -ENOMEM;
+		goto err0;
+	}
+
+	boot_param = devm_kzalloc(&spi->dev, BOOT_PARAM_SIZE, GFP_KERNEL);
+	if (IS_ERR_OR_NULL(boot_param)) {
+		sunxi_err(NULL, "failed alloc boot_param\n");
+		ret = -ENOMEM;
+		goto err0;
+	}
+	memset(boot_param, 0, BOOT_PARAM_SIZE);
+
+	boot_param_entry = get_mtd_part_offset("boot_param");
+
+	/* Cannot find sample params in dts when spi-ng init */
+	if (sunxi_spi_calibrate_get_bus_sample_mode(spi) == SUNXI_SPI_SAMP_MODE_AUTO) {
+		pre_rx_bit = chip->rx_bit;
+		pre_tx_bit = chip->tx_bit;
+		//chang to x1
+		chip->tx_bit = SPI_NBITS_SINGLE;
+		chip->rx_bit = SPI_NBITS_SINGLE;
+
+		ops.len = BOOT_PARAM_SIZE;
+		ops.datbuf = (uint8_t *)boot_param;
+		ops.oobbuf = NULL;
+		ops.ooblen = ops.ooboffs = ops.oobretlen = 0;
+		ret = mtd->_read_oob(mtd, boot_param_entry, &ops);
+		if (ret && ret != ECC_LIMIT) {
+			chip->tx_bit = pre_tx_bit;
+			chip->rx_bit = pre_rx_bit;
+			goto err0;
+		}
+
+		spinand_info = (boot_spinand_para_t *)boot_param->spiflash_info;
+		chip->tx_bit = pre_tx_bit;
+		chip->rx_bit = pre_rx_bit;
+
+		/* verify boot_param magic value failed */
+		if (strncmp((const char *)boot_param->header.magic, (const char *)BOOT_PARAM_MAGIC, sizeof(boot_param->header.magic))) {
+			sunxi_info(NULL, "not find boot_param in flash\n");
+			ret = sunxi_try_sample_param(spi, mtd);
+			if (ret)
+				goto err0;
+#if IS_ENABLED(CONFIG_SUNXI_BOOT_PARAM)
+			ret = spinand_download_boot_param(spi, mtd);
+			if (ret)
+				goto err0;
+#endif
+			return 0;
+		}
+
+		if (spinand_info->sample_delay == SUNXI_SPI_SAMP_MODE_DL_DEFAULT) {
+			sunxi_info(NULL, "sample_delay is invalid\n");
+			ret = sunxi_try_sample_param(spi, mtd);
+			if (ret)
+				goto err0;
+#if IS_ENABLED(CONFIG_SUNXI_BOOT_PARAM)
+			ret = spinand_download_boot_param(spi, mtd);
+			if (ret)
+				goto err0;
+#endif
+		} else {
+			sunxi_spi_calibrate_set_sample_param(spi, SUNXI_SPI_SAMP_MODE_MANUAL, spinand_info->sample_mode, spinand_info->sample_delay);
+			sunxi_info(NULL, "spi manual set sample mode_%d, delay_%d from boot_param\n",
+									spinand_info->sample_mode, spinand_info->sample_delay);
+		}
+	}
+	return 0;
+
+err0:
+	return ret;
+}
+
+#ifdef CONFIG_MTD_CMDLINE_PARTS
 static int get_para_from_cmdline(const char *cmdline, const char *name)
 {
 	if (!cmdline || !name)
@@ -96,7 +364,7 @@ static int aw_spinand_erase(struct mtd_info *mtd, struct erase_info *einfo)
 	 * while the other physical partitions do not.
 	 * Added judgment to enable MTD devices to access the entire Flash
 	 */
-	if (einfo->addr >= get_sys_part_offset())
+	if (einfo->addr >= get_mtd_part_offset("sys"))
 		block_size = info->block_size(chip);
 	else
 		block_size = info->phy_block_size(chip);
@@ -104,7 +372,7 @@ static int aw_spinand_erase(struct mtd_info *mtd, struct erase_info *einfo)
 	while (len) {
 		mutex_lock(&spinand->lock);
 
-		if (einfo->addr >= get_sys_part_offset())
+		if (einfo->addr >= get_mtd_part_offset("sys"))
 			ret = ops->erase_block(chip, &req);
 		else
 			ret = ops->phy_erase_block(chip, &req);
@@ -173,7 +441,7 @@ static inline void aw_spinand_req_init(struct aw_spinand *spinand,
 	 * while the other physical partitions do not.
 	 * Added judgment to enable MTD devices to access the entire Flash
 	 */
-	if (offs >= get_sys_part_offset()) {
+	if (offs >= get_mtd_part_offset("sys")) {
 		req->pageoff = offs & (info->page_size(chip) - 1);
 		req->datalen = min(info->page_size(chip) - req->pageoff,
 				(unsigned int)(mtd_ops->len));
@@ -206,7 +474,7 @@ static inline void aw_spinand_req_next(struct aw_spinand *spinand,
 	 * while the other physical partitions do not.
 	 * Added judgment to enable MTD devices to access the entire Flash
 	 */
-	if (offs >= get_sys_part_offset())
+	if (offs >= get_mtd_part_offset("sys"))
 		pages_per_blk = info->block_size(chip) >>
 			spinand->page_shift;
 	else
@@ -235,7 +503,7 @@ static inline void aw_spinand_req_next(struct aw_spinand *spinand,
 	req->oobbuf += req->ooblen;
 	req->pageoff = 0;
 
-	if (offs >= get_sys_part_offset())
+	if (offs >= get_mtd_part_offset("sys"))
 		req->datalen = min(info->page_size(chip), req->dataleft);
 	else
 		req->datalen = min(info->phy_page_size(chip), req->dataleft);
@@ -296,7 +564,7 @@ static int aw_spinand_read_oob(struct mtd_info *mtd, loff_t from,
 	aw_spinand_for_each_req(spinand, from, ops, &req) {
 		aw_spinand_reqdump(pr_debug, "do super read", &req);
 
-		if (from >= get_sys_part_offset())
+		if (from >= get_mtd_part_offset("sys"))
 			ret = chip_ops->read_page(chip, &req);
 		else
 			ret = chip_ops->phy_read_page(chip, &req);
@@ -378,7 +646,7 @@ static int aw_spinand_write_oob(struct mtd_info *mtd, loff_t to,
 	aw_spinand_for_each_req(spinand, to, ops, &req) {
 		aw_spinand_reqdump(pr_debug, "do super write", &req);
 
-		if (to >= get_sys_part_offset())
+		if (to >= get_mtd_part_offset("sys"))
 			ret = chip_ops->write_page(chip, &req);
 		else
 			ret = chip_ops->phy_write_page(chip, &req);
@@ -433,7 +701,7 @@ static int aw_spinand_block_isbad(struct mtd_info *mtd, loff_t offs)
 
 	mutex_lock(&spinand->lock);
 
-	if (offs >= get_sys_part_offset())
+	if (offs >= get_mtd_part_offset("sys"))
 		ret = ops->is_bad(chip, &req);
 	else
 		ret = ops->phy_is_bad(chip, &req);
@@ -460,7 +728,7 @@ static int aw_spinand_block_markbad(struct mtd_info *mtd, loff_t offs)
 
 	mutex_lock(&spinand->lock);
 
-	if (offs >= get_sys_part_offset())
+	if (offs >= get_mtd_part_offset("sys"))
 		ret = ops->mark_bad(chip, &req);
 	else
 		ret = ops->phy_mark_bad(chip, &req);
@@ -648,6 +916,8 @@ int aw_spinand_mtd_get_flash_info(struct aw_spinand *spinand,
 		void *data, unsigned int len)
 {
 	struct aw_spinand_chip *chip = spinand_to_chip(spinand);
+	struct aw_spinand_info *info = chip->info;
+	unsigned int blksize = info->phy_block_size(chip);
 	boot_spinand_para_t *boot_info = data;
 	unsigned int uboot_start, uboot_end;
 
@@ -657,9 +927,9 @@ int aw_spinand_mtd_get_flash_info(struct aw_spinand *spinand,
 
 	boot_info->uboot_start_block = uboot_start;
 	boot_info->uboot_next_block = uboot_end;
-	boot_info->logic_start_block = uboot_end;
-	boot_info->nand_specialinfo_page = uboot_end;
-	boot_info->nand_specialinfo_offset = uboot_end;
+	boot_info->logic_start_block = get_mtd_part_offset("sys")/blksize;
+	boot_info->nand_specialinfo_page = 0;
+	boot_info->nand_specialinfo_offset = 0;
 	boot_info->physic_block_reserved = 0;
 
 	return 0;
@@ -1141,6 +1411,58 @@ int aw_spinand_mtd_download_uboot(struct mtd_info *mtd,
 	return 0;
 }
 
+#if IS_ENABLED(CONFIG_AW_MTD_SPINAND_FASTBOOT)
+int aw_spinand_mtd_download_kernel(struct mtd_info *mtd, unsigned int len, void *buf,
+		unsigned int start, unsigned int end)
+{
+	struct aw_spinand *spinand = mtd_to_spinand(mtd);
+	struct aw_spinand_chip *chip = spinand_to_chip(spinand);
+	struct aw_spinand_info *info = chip->info;
+	unsigned int phy_blk_size, blks_per_kernel, blks_written;
+
+	phy_blk_size = info->phy_block_size(chip);
+	blks_per_kernel = (len + phy_blk_size - 1) / phy_blk_size;
+
+	sunxi_info(NULL, "download kernel to block %d len %dK\n",
+				start, len / SZ_1K);
+
+	blks_written = download_boot(mtd, start, end, 0, buf, len);
+
+	if (blks_written < 0) {
+		sunxi_err_std(NULL, E_SPINAND_SW_SYS_WRITE,
+				"failed to download uboot from blk %u to blk %u \n",
+				start, end);
+		return blks_written;
+	} else if (blks_written < blks_per_kernel) {
+		sunxi_err_std(NULL, E_SPINAND_SW_SYS_WRITE,
+				"written %u blks but wanted %u blks\n",
+				blks_written, blks_per_kernel);
+		return -EINVAL;
+	}
+	return 0;
+}
+
+int aw_spinand_mtd_download_boot_and_backup(struct mtd_info *mtd, unsigned int len,
+						void *buf, int downloadflag)
+{
+	struct aw_spinand *spinand = mtd_to_spinand(mtd);
+	struct aw_spinand_chip *chip = spinand_to_chip(spinand);
+	struct aw_spinand_info *info = chip->info;
+	unsigned int start, end;
+	unsigned int phy_blk_size;
+	phy_blk_size = info->phy_block_size(chip);
+
+	if (downloadflag) {
+		start = (uint32_t)get_mtd_part_offset("boot") / phy_blk_size;
+		end = start + ((uint32_t)get_mtd_part_size("boot") / phy_blk_size);
+	} else {
+		start = (uint32_t)get_mtd_part_offset("boot_backup") / phy_blk_size;
+		end = start + ((uint32_t)get_mtd_part_size("boot_backup") / phy_blk_size);
+	}
+	return aw_spinand_mtd_download_kernel(mtd, len, buf, start, end);
+}
+#endif
+
 static struct mtd_partition aw_spinand_parts[] = {
 	/* .size is set by @aw_spinand_mtd_update_mtd_parts */
 	{ .name = "boot0", .offset = 0 },
@@ -1150,6 +1472,9 @@ static struct mtd_partition aw_spinand_parts[] = {
 	{ .name = "boot_backup", .offset = MTDPART_OFS_APPEND },
 #endif
 	{ .name = "secure_storage", .offset = MTDPART_OFS_APPEND },
+#if IS_ENABLED(CONFIG_SUNXI_BOOT_PARAM)
+	{ .name = "boot_param", .offset = MTDPART_OFS_APPEND },
+#endif
 #if IS_ENABLED(CONFIG_AW_SPINAND_PSTORE_MTD_PART)
 	{ .name = "pstore", .offset = MTDPART_OFS_APPEND },
 #endif
@@ -1184,7 +1509,10 @@ static void aw_spinand_mtd_update_mtd_parts(struct aw_spinand *spinand,
 #endif
 	/* secure storage */
 	mtdparts[index++].size = PHY_BLKS_FOR_SECURE_STORAGE * blk_bytes;
-
+#if IS_ENABLED(CONFIG_SUNXI_BOOT_PARAM)
+	/* boot_param */
+	mtdparts[index++].size = info->block_size(chip);
+#endif
 #if IS_ENABLED(CONFIG_AW_SPINAND_PSTORE_MTD_PART)
 	/* pstore */
 	mtdparts[index++].size = PSTORE_SIZE_KB * SZ_1K;
@@ -1209,16 +1537,36 @@ static void aw_spinand_mtd_update_mtd_parts(struct aw_spinand *spinand,
 #endif
 }
 
-uint64_t get_sys_part_offset(void)
+uint64_t get_mtd_part_offset(void *part_name)
 {
-	uint64_t offset = aw_spinand_parts[0].offset;
-	int count = sizeof(aw_spinand_parts) / sizeof(struct mtd_partition);
-	int index;
+	struct mtd_info *mtd;
+	uint64_t offset = 0;
+	static uint64_t sys_offset;
 
-	for (index = 0; index < count - 1; index++)
-		offset += aw_spinand_parts[index].size;
+	if (!strcmp(part_name, "sys") && (sys_offset || !g_spinand))
+		return sys_offset;
 
+	for (mtd = __mtd_next_device(0); (mtd) != NULL;
+			mtd = __mtd_next_device(mtd->index + 1)) {
+		if (!strcmp(mtd->name, part_name)) {
+			sys_offset = offset;
+			break;
+		}
+		offset += mtd->size;
+		sunxi_debug(NULL, "mtd%d: %8.8llx %8.8x \"%s\"\n",
+			   mtd->index, (unsigned long long)mtd->size,
+			   mtd->erasesize, mtd->name);
+	}
+
+	sunxi_debug(NULL, "sys offset:0x%llx  \n", offset);
 	return offset;
+}
+
+uint64_t get_mtd_part_size(void *part_name)
+{
+	struct mtd_info *mtd = get_mtd_device_nm(part_name);
+
+	return mtd->size;
 }
 
 static int aw_spinand_ota_open(struct inode *inode, struct file *file)
@@ -1411,6 +1759,10 @@ static int aw_spinand_probe(struct spi_device *spi)
 		goto err_spinand_cleanup;
 
 	g_spinand = spinand;
+
+	ret = sunxi_spi_nand_update_sample_delay_para(&spinand->mtd, spi);
+	if (ret)
+		goto err_spinand_cleanup;
 	aw_spinand_create_cdev();
 	return 0;
 

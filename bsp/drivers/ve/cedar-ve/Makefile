@@ -8,7 +8,7 @@ ccflags-$(CONFIG_AW_VIDEO_DYNAMIC_DEBUG) += -DDYNAMIC_DEBUG_MODULE
 ccflags-y += -I $(srctree)/bsp/drivers/ve/cedar-ve
 
 obj-$(CONFIG_AW_VIDEO_ENCODER_DECODER) += sunxi-ve.o
-sunxi-ve-objs := cedar_ve.o
+sunxi-ve-objs := cedar_ve.o rpmsg_ve.o
 ifneq (, $(filter y m, $(CONFIG_ARCH_SUN300IW1)))
 sunxi-ve-objs += platforms/ve_plat_sun300iw1.o
 else ifneq (, $(filter y m, $(CONFIG_ARCH_SUN55IW6)))

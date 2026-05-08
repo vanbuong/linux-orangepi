@@ -1637,6 +1637,28 @@ void DebugCommonDeInitDriver(void)
 	}
 }
 
+/*************************************************************************/ /*!
+ Dump Get GPU Util Stats Error COUNT DebugFS entry
+*/ /**************************************************************************/
+
+static int _DebugGetUtilStatsErrorDIShow(OSDI_IMPL_ENTRY *psEntry, void *pvData)
+{
+	PVRSRV_RGXDEV_INFO      *psDevInfo = NULL;
+	PVRSRV_DEVICE_NODE *psDeviceNode = DIGetPrivData(psEntry);
+
+	psDevInfo = psDeviceNode->pvDevice;
+
+	PVR_UNREFERENCED_PARAMETER(pvData);
+
+	DIPrintf(psEntry, "timeout:%u invalid_params:%u resource_unavailable:%u\n",
+			psDevInfo->ui32GetGpuUtilStatsFailedCounts[0],
+			psDevInfo->ui32GetGpuUtilStatsFailedCounts[1],
+			psDevInfo->ui32GetGpuUtilStatsFailedCounts[2]);
+	DIPrintf(psEntry, "busy_time:%lu total_time:%lu util:%lu%%\n", psDevInfo->busy_time, psDevInfo->total_time, psDevInfo->busy_time * 100 / psDevInfo->total_time);
+
+	return 0;
+}
+
 PVRSRV_ERROR DebugCommonInitDevice(PVRSRV_DEVICE_NODE *psDeviceNode)
 {
 	PVRSRV_DEVICE_DEBUG_INFO *psDebugInfo = &psDeviceNode->sDebugInfo;
@@ -1653,6 +1675,15 @@ PVRSRV_ERROR DebugCommonInitDevice(PVRSRV_DEVICE_NODE *psDeviceNode)
 	eError = SORgxGpuUtilStatsRegister(&psDebugInfo->hGpuUtilUserDebugFS);
 	PVR_GOTO_IF_ERROR(eError, return_error_);
 #endif
+
+	{
+		DI_ITERATOR_CB sIterator = {.pfnShow = _DebugGetUtilStatsErrorDIShow};
+		eError = DICreateEntry("get_util_stats_error", psDebugInfo->psGroup, &sIterator,
+					psDeviceNode, DI_ENTRY_TYPE_GENERIC,
+					&psDebugInfo->psGetUtilStatsErrorEntry);
+		PVR_GOTO_IF_ERROR(eError, return_error_);
+	}
+
 
 	{
 		DI_ITERATOR_CB sIterator = {.pfnShow = _DebugDumpDebugDIShow};

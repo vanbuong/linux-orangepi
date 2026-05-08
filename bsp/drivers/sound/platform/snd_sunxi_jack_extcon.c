@@ -448,16 +448,17 @@ int snd_sunxi_jack_extcon_init(void *jack_data)
 		SND_LOG_ERR("get extcon failed\n");
 		return -1;
 	}
-	jack_extcon->hp_nb.notifier_call = sunxi_jack_plugin_notifier;
-	ret = extcon_register_notifier(jack_extcon->extdev, EXTCON_JACK_HEADPHONE, &jack_extcon->hp_nb);
-	if (ret < 0) {
-		SND_LOG_ERR("register jack notifier failed\n");
-		return -1;
-	}
 
 	ret = sunxi_jack_typec_init(jack_extcon);
 	if (ret < 0) {
 		SND_LOG_ERR("typec jack init failed\n");
+		return -1;
+	}
+
+	jack_extcon->hp_nb.notifier_call = sunxi_jack_plugin_notifier;
+	ret = extcon_register_notifier(jack_extcon->extdev, EXTCON_JACK_HEADPHONE, &jack_extcon->hp_nb);
+	if (ret < 0) {
+		SND_LOG_ERR("register jack notifier failed\n");
 		return -1;
 	}
 

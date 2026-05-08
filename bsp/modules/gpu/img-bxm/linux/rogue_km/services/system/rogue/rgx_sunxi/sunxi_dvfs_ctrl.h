@@ -17,6 +17,7 @@
 
 #include <linux/device.h>
 #include <linux/clk.h>
+#include "pvr_dvfs.h"
 
 struct sunxi_dvfs_init_params {
 	unsigned long reg_base;

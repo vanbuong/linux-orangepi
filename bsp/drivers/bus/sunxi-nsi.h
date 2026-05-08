@@ -21,6 +21,7 @@
 
 #include <linux/types.h>
 #include <linux/cdev.h>
+#include <linux/platform_device.h>
 
 enum NSI_TOPOLOGY_TYPE_E {
 	NSI_TOPO_V0, /* legacy, all master to one RA and one TA and one DDR, e.g sun50iw10 */
@@ -360,7 +361,7 @@ extern struct nsi_pmu_data hw_nsi_pmu;
 #define IAG_SATURATION_LIMIT_MAX_BITS (10)
 #define IAG_SATURATION_LIMIT_MAX_VALUE ((1 << IAG_SATURATION_LIMIT_MAX_BITS) - 1)
 
-#if IS_ENABLED(CONFIG_ARCH_SUN55I) || IS_ENABLED(CONFIG_ARCH_SUN60I)
+#if IS_ENABLED(CONFIG_ARCH_SUN55I) || IS_ENABLED(CONFIG_ARCH_SUN60I) || IS_ENABLED(CONFIG_ARCH_SUN65I)
 #define IAG_QOS_CFG(n)		   (0x000C + (0x200 * (n)))
 #else
 #define IAG_QOS_CFG(n)		   (0x0094 + (0x200 * 23) + (0x4 * ((n) / 16)))

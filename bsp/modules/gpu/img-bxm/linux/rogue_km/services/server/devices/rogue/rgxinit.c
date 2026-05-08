@@ -156,6 +156,7 @@ static void RGXDeInitFwRawHeap(DEVMEM_HEAP_BLUEPRINT *psDevMemHeap);
 #define VAR(x) #x
 
 static void RGXDeInitHeaps(DEVICE_MEMORY_INFO *psDevMemoryInfo, PVRSRV_DEVICE_NODE *psDeviceNode);
+static bool sys_in_sleep = IMG_FALSE;
 
 #if !defined(NO_HARDWARE)
 /*************************************************************************/ /*!
@@ -520,6 +521,11 @@ static IMG_BOOL RGX_LISRHandler(void *pvData)
 	PVRSRV_DEVICE_NODE *psDeviceNode = pvData;
 	PVRSRV_RGXDEV_INFO *psDevInfo = psDeviceNode->pvDevice;
 	IMG_BOOL bIrqAcknowledged = IMG_FALSE;
+
+	if (sys_in_sleep == IMG_TRUE) {
+		bIrqAcknowledged = IMG_TRUE;
+		return bIrqAcknowledged;
+	}
 
 #if defined(PVRSRV_DEBUG_LISR_EXECUTION)
 	IMG_UINT32 ui32idx, ui32IrqCnt;
@@ -1588,6 +1594,16 @@ static PVRSRV_DEVICE_SNOOP_MODE RGXDevSnoopMode(PVRSRV_DEVICE_NODE *psDeviceNode
 	}
 
 	return PVRSRV_DEVICE_SNOOP_NONE;
+}
+
+void StartIrqHander(void)
+{
+	sys_in_sleep = IMG_FALSE;
+}
+
+void StopIrqHander(void)
+{
+	sys_in_sleep = IMG_TRUE;
 }
 
 /*

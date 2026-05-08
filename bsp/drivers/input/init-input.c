@@ -27,6 +27,7 @@
 #include <linux/of_platform.h>
 #include <linux/platform_device.h>
 #include <linux/slab.h>
+#include <linux/version.h>
 #include "init-input.h"
 
 /***************************CTP************************************/
@@ -975,6 +976,9 @@ int input_set_int_enable_force(enum input_sensor_type *input_type, u32 enable)
 	u32 irq_number = 0;
 	void *data = NULL;
 	struct irq_desc *desc = NULL;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0)
+	struct irq_data *irq_data = NULL;
+#endif
 
 	switch (*input_type) {
 	case CTP_TYPE:
@@ -996,7 +1000,26 @@ int input_set_int_enable_force(enum input_sensor_type *input_type, u32 enable)
 	if ((enable != 0) && (enable != 1))
 		return ret;
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 14, 0)
+	irq_data = irq_get_irq_data(irq_number);
+	if (!irq_data) {
+		pr_err("%s: Failed to get IRQ data for IRQ %u\n", __func__, irq_number);
+		return ret;
+	}
+
+	desc = __irq_resolve_mapping(irq_data->domain, irq_data->hwirq, NULL);
+	if (!desc) {
+		pr_err("%s: Failed to resolve IRQ descriptor for IRQ %u\n", __func__, irq_number);
+		return ret;
+	}
+#else
 	desc = irq_to_desc(irq_number);
+	if (!desc) {
+		pr_err("%s: Failed to get IRQ descriptor for IRQ %u\n", __func__, irq_number);
+		return ret;
+	}
+#endif
+
 	if (enable == 1) {
 		while (desc->depth >= 1)
 			enable_irq(irq_number);

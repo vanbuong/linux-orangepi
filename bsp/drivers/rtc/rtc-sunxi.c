@@ -473,7 +473,7 @@ static void errata__fix_alarm_day_reg_default_value(struct device *dev)
 	struct sunxi_rtc_dev *chip = dev_get_drvdata(dev);
 
 	if (rtc_reg_read(chip, ALARM0_DAY_REG) == 0) {
-		dev_info(dev, "%s(): ALARM0_DAY_REG=0, set it to 1\n", __func__);
+		dev_dbg(dev, "%s(): ALARM0_DAY_REG=0, set it to 1\n", __func__);
 		rtc_reg_write(chip, ALARM0_DAY_REG, 1);
 	}
 }
@@ -1191,7 +1191,7 @@ static int sunxi_rtc_reboot_flag_setup(struct sunxi_rtc_dev *chip)
 	err = of_property_read_u32(dev->of_node,
 					"gpr_bootcount_pos", &gpr_bootcount);
 	if (err) {
-		dev_err(dev, "Fail to read dts property 'gpr_bootcount_pos'\n");
+		dev_warn(dev, "Fail to read dts property 'gpr_bootcount_pos'\n");
 		boot_reasonbase = NULL;
 	} else {
 		boot_reasonbase = chip->gpr_base + chip->data->gpr_offset + gpr_bootcount * 0x4;
@@ -1535,4 +1535,4 @@ module_exit(sunxi_rtc_exit);
 MODULE_DESCRIPTION("sunxi RTC driver");
 MODULE_AUTHOR("Martin <wuyan@allwinnertech.com>");
 MODULE_LICENSE("GPL v2");
-MODULE_VERSION("1.2.1");
+MODULE_VERSION("1.2.2");

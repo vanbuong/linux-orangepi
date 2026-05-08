@@ -101,17 +101,40 @@ static inline int axp_vts_to_temp(u16 reg)
 	return ((int)(((reg >> 8) << 4) | (reg & 0x000F))) * 10625 / 10000 - 2677;
 }
 
-static inline int axp515_get_adc_temp(struct regmap *regmap)
+/**
+ * axp515_get_adc_temp - Read die temperature ADC value (with concurrency protection)
+ * @usb_power: axp515_usb_power instance pointer
+ *
+ * Return: Temperature value (unit: 0.1℃) on success, negative error code on failure
+ *
+ * [Code Source: drivers/power/supply/axp515_usb_power.c L104-L119 Original function Modified]
+ * [Design Basis: AXP515_ADC_Access_Lock_Protection_Requirement.md V1.0 Concurrency protection]
+ */
+static inline int axp515_get_adc_temp(struct axp515_usb_power *usb_power)
 {
+	struct regmap *regmap = usb_power->regmap;
+	struct sunxi_power_dev *axp_dev;
 	unsigned char temp_val[2];
 	unsigned short ts_res;
 	int die_temp;
 	int ret = 0;
 
+	/* Get parent device sunxi_power_dev pointer */
+	axp_dev = dev_get_drvdata(usb_power->dev->parent);
+	if (!axp_dev) {
+		dev_err(usb_power->dev, "Failed to get axp_dev for ADC lock\n");
+		return -ENODEV;
+	}
+
+	/* Lock protection for ADC register read */
+	sunxi_pmic_lock(axp_dev);
 	ret = regmap_bulk_read(regmap, AXP515_DIE_TEMP, temp_val, 2);
+	sunxi_pmic_unlock(axp_dev);
+
 	if (ret < 0)
 		return ret;
 
+	/* Data conversion (executed outside lock) */
 	ts_res = ((unsigned short) temp_val[0] << 8) | temp_val[1];
 	die_temp = axp_vts_to_temp(ts_res);
 
@@ -122,19 +145,18 @@ static int axp515_get_ic_temp(struct power_supply *ps,
 			     union power_supply_propval *val)
 {
 	struct axp515_usb_power *usb_power = power_supply_get_drvdata(ps);
-	struct regmap *regmap = usb_power->regmap;
 
 	int i = 0, temp, old_temp;
 
-	old_temp = axp515_get_adc_temp(regmap);
+	old_temp = axp515_get_adc_temp(usb_power);
 
 	/* read until abs(old_temp - temp) < 10*/
-	temp = axp515_get_adc_temp(regmap);
+	temp = axp515_get_adc_temp(usb_power);
 
 	PMIC_DEBUG("old_temp:%d, temp:%d\n", old_temp, temp);
 	while ((abs(old_temp - temp) > 100) && (i < 10)) {
 		old_temp = temp;
-		temp = axp515_get_adc_temp(regmap);
+		temp = axp515_get_adc_temp(usb_power);
 		i++;
 		PMIC_DEBUG("turn[%d]:old_temp:%d, temp:%d\n", i, old_temp, temp);
 	}

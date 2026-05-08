@@ -2235,7 +2235,7 @@ static void snd_sunxi_dts_params_init(struct platform_device *pdev, struct sunxi
 
 	ret = of_property_read_u32(np, "clk-en-post-delay", &tmp_val0);
 	if (ret < 0) {
-		SND_LOG_WARN("clk-en-post-delay missing\n");
+		SND_LOG_DEBUG("clk-en-post-delay missing\n");
 		dts->clk_en_post_delay = 0;
 	} else {
 		dts->clk_en_post_delay = tmp_val0;
@@ -2243,7 +2243,7 @@ static void snd_sunxi_dts_params_init(struct platform_device *pdev, struct sunxi
 
 	ret = of_property_read_u32(np, "clk-keep", &tmp_val0);
 	if (ret < 0) {
-		SND_LOG_WARN("clk-keep missing\n");
+		SND_LOG_DEBUG("clk-keep missing\n");
 		dts->clk_keep = 0;
 	} else {
 		dts->clk_keep = tmp_val0;

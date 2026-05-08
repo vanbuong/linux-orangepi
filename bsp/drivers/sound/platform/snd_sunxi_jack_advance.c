@@ -237,16 +237,24 @@ static void sunxi_jack_det_scan_work(struct work_struct *work)
 
 	SND_LOG_DEBUG("\n");
 
-	if ((IS_ERR_OR_NULL(jack_adv)) || (IS_ERR_OR_NULL(jack_adv->extdev))) {
-		SND_LOG_ERR("jack_adv or extdev is null\n");
+	if ((IS_ERR_OR_NULL(jack_adv))) {
+		SND_LOG_ERR("jack_adv is null\n");
 		return;
 	}
-	ret = extcon_get_state(jack_adv->extdev, EXTCON_JACK_HEADPHONE);
-	SND_LOG_DEBUG("jack adv state %d\n", ret);
-	if (ret)
-		jack_adv->jack_plug_sta = JACK_PLUG_STA_IN;
-	else
-		jack_adv->jack_plug_sta = JACK_PLUG_STA_OUT;
+
+	if (jack_adv->typec) {
+		if (IS_ERR_OR_NULL(jack_adv->extdev)) {
+			SND_LOG_ERR("jack_adv extdev is null\n");
+			return;
+		}
+		ret = extcon_get_state(jack_adv->extdev, EXTCON_JACK_HEADPHONE);
+		SND_LOG_DEBUG("jack adv state %d\n", ret);
+		if (ret) {
+			jack_adv->jack_plug_sta = JACK_PLUG_STA_IN;
+		} else {
+			jack_adv->jack_plug_sta = JACK_PLUG_STA_OUT;
+		}
+	}
 
 	if (jack_adv->pre_scan && jack_adv->jack_det_pre_scan_work) {
 		jack_adv->jack_det_pre_scan_work(jack_adv->data, &sunxi_jack.type);
@@ -261,6 +269,8 @@ static void sunxi_jack_det_scan_work(struct work_struct *work)
 
 	if (jack_adv->jack_det_scan_work) {
 		jack_adv->jack_det_scan_work(jack_adv->data, &sunxi_jack.type);
+		if (!jack_adv->typec)
+			goto report;
 		if (!sunxi_jack.type) {
 			sunxi_jack_typec_mode_set(jack_typec_cfg, SND_JACK_MODE_USB);
 			SND_LOG_INFO("typec mode set to usb\n");
@@ -324,6 +334,8 @@ static int sunxi_jack_plugin_notifier(struct notifier_block *nb, unsigned long e
 
 	if (event) {
 		jack_adv->jack_plug_sta = JACK_PLUG_STA_IN;
+		sunxi_jack_typec_mode_set(jack_typec_cfg, SND_JACK_MODE_HP);
+		SND_LOG_INFO("typec mode set to hp\n");
 	} else {
 		jack_adv->jack_plug_sta = JACK_PLUG_STA_OUT;
 		sunxi_jack_typec_mode_set(jack_typec_cfg, SND_JACK_MODE_USB);
@@ -566,18 +578,18 @@ int snd_sunxi_jack_adv_init(void *jack_data)
 			return -1;
 		}
 
+		ret = snd_sunxi_jack_adv_typec_init(jack_adv);
+		if (ret < 0) {
+			SND_LOG_ERR("typec jack init failed\n");
+			return -1;
+		}
+
 		jack_adv->hp_nb.notifier_call = sunxi_jack_plugin_notifier;
 		ret = extcon_register_notifier(jack_adv->extdev,
 					EXTCON_JACK_HEADPHONE,
 					&jack_adv->hp_nb);
 		if (ret < 0) {
 			SND_LOG_ERR("register jack notifier failed\n");
-			return -1;
-		}
-
-		ret = snd_sunxi_jack_adv_typec_init(jack_adv);
-		if (ret < 0) {
-			SND_LOG_ERR("typec jack init failed\n");
 			return -1;
 		}
 	}
@@ -623,10 +635,11 @@ void snd_sunxi_jack_adv_exit(void *jack_data)
 	}
 
 	np = jack_adv->dev->of_node;
-	if (of_property_read_bool(np, "extcon")) {
-		extcon_unregister_notifier(jack_adv->extdev,
-					   EXTCON_JACK_HEADPHONE,
-					   &jack_adv->hp_nb);
+	if (jack_adv->typec) {
+		if (!IS_ERR_OR_NULL(jack_adv->extdev))
+			extcon_unregister_notifier(jack_adv->extdev,
+						   EXTCON_JACK_HEADPHONE,
+						   &jack_adv->hp_nb);
 
 		snd_sunxi_jack_adv_typec_exit(jack_adv);
 	}

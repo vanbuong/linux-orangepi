@@ -54,6 +54,7 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "pvr_debug.h"
 #include "htbserver.h"
 #include "di_server.h"
+#include "rgxinit.h"
 
 #define OS_POWERLOCK_TIMEOUT_MS		(5000UL)
 #define OS_POWERLOCK_TIMEOUT_US		(OS_POWERLOCK_TIMEOUT_MS * 1000UL)
@@ -993,6 +994,12 @@ PVRSRV_ERROR PVRSRVSetDeviceSystemPowerState(PPVRSRV_DEVICE_NODE psDeviceNode,
 	_PVRSRVForcedPowerLock(psDeviceNode);
 	psPowerDevice = psDeviceNode->psPowerDev;
 
+	/* If no power device, do nothing */
+	if (!psPowerDevice) {
+		PVRSRVPowerUnlock(psDeviceNode);
+		return PVRSRV_OK;
+	}
+
 	eNewDevicePowerState = _IsSystemStatePowered(eNewSysPowerState)
 	    ? psPowerDevice->eDefaultPowerState : PVRSRV_DEV_POWER_STATE_OFF;
 
@@ -1003,6 +1010,24 @@ PVRSRV_ERROR PVRSRVSetDeviceSystemPowerState(PPVRSRV_DEVICE_NODE psDeviceNode,
 	/* No power transition requested, so do nothing */
 	if (eNewSysPowerState == psDeviceNode->eCurrentSysPowerState)
 	{
+		PVRSRV_ERROR ret = PVRSRV_OK;
+		if (psPowerDevice != NULL && psPowerDevice->pfnSystemPrePower != NULL
+			&& BITMASK_ANY(ePwrFlags, PVRSRV_POWER_FLAGS_OSPM_RESUME_REQ)) {
+			ret = psPowerDevice->pfnSystemPrePower(psPowerDevice->hSysData,
+								eNewSysPowerState,
+								psDeviceNode->eCurrentSysPowerState,
+								ePwrFlags);
+		} else if (psPowerDevice != NULL && psPowerDevice->pfnSystemPostPower != NULL
+					&& BITMASK_ANY(ePwrFlags, PVRSRV_POWER_FLAGS_OSPM_SUSPEND_REQ)) {
+			ret = psPowerDevice->pfnSystemPostPower(psPowerDevice->hSysData,
+								eNewSysPowerState,
+								psDeviceNode->eCurrentSysPowerState,
+								ePwrFlags);
+		}
+		if (ret != PVRSRV_OK) {
+			PVR_LOG_ERROR(ret, "_PVRSRVDeviceIdleRequestKM");
+		}
+
 		PVRSRVPowerUnlock(psDeviceNode);
 		return PVRSRV_OK;
 	}

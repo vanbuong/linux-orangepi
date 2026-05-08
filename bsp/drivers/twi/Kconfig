@@ -23,9 +23,18 @@ config AW_TWI_DELAYINIT
 	  notify twi in linux to obtain hardware resources, you can say yes
 	  to this option, twi hardware resource init will be delayed.
 
+config AW_TWI_DVFS
+	bool "SUNXI TWI dvfs function "
+	depends on AW_TWI
+	default n
+	help
+	  If you want to use the dvfs function, you need to set this option to y,
+	  provided that the twi of the current platform supports the dvfs function
+
 config AW_TWI_DYNAMIC_DEBUG
 	bool "SUNXI TWI DYNAMIC DEBUG"
 	depends on AW_TWI
 	help
 	  If you need to print twi information, you can say yes to this option.
+
 endmenu

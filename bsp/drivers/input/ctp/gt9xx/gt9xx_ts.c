@@ -2710,6 +2710,7 @@ static const struct of_device_id gtp_match_table[] = {
 	{.compatible = "goodix,gt9xx",},
 	{ },
 };
+MODULE_DEVICE_TABLE(of, gtp_match_table);
 #endif
 
 static const struct i2c_device_id gtp_device_id[] = {

@@ -75,6 +75,7 @@ typedef struct _aw_driver_t {
 	uint64_t default_freq;
 	uint64_t clk_freq;
 	uint32_t set_vol;
+	uint32_t set_vf;
 	uint64_t freqs[MAX_FREQ_POINTS];
 	int vol;
 	bool enable_pm;

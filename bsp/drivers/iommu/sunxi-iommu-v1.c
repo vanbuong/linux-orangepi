@@ -1708,6 +1708,7 @@ static int sunxi_iommu_probe(struct platform_device *pdev)
 	platform_set_drvdata(pdev, sunxi_iommu);
 	sunxi_iommu->dev = dev;
 	spin_lock_init(&sunxi_iommu->iommu_lock);
+	INIT_LIST_HEAD(&sunxi_iommu->rsv_list);
 	global_iommu_dev = sunxi_iommu;
 	sunxi_iommu->plat_data = of_device_get_match_data(dev);
 
@@ -1725,6 +1726,11 @@ static int sunxi_iommu_probe(struct platform_device *pdev)
 		goto err_clk;
 	}
 
+	if (!dma_dev) {
+		dma_dev = &pdev->dev;
+		sunxi_pgtable_set_dma_dev(dma_dev);
+	}
+
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
 	ret = iommu_device_register(&sunxi_iommu->iommu, &sunxi_iommu_ops, dev);
 #else
@@ -1740,13 +1746,6 @@ static int sunxi_iommu_probe(struct platform_device *pdev)
 #ifndef BUS_SET_OP_DEPRECATED
 	bus_set_iommu(&platform_bus_type, &sunxi_iommu_ops);
 #endif
-
-	INIT_LIST_HEAD(&sunxi_iommu->rsv_list);
-
-	if (!dma_dev) {
-		dma_dev = &pdev->dev;
-		sunxi_pgtable_set_dma_dev(dma_dev);
-	}
 
 #if IS_ENABLED(CONFIG_AW_IOMMU_IOVA_TRACE)
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
@@ -1953,6 +1952,6 @@ subsys_initcall(sunxi_iommu_init);
 module_exit(sunxi_iommu_exit);
 
 MODULE_LICENSE("GPL v2");
-MODULE_VERSION("1.5.4");
+MODULE_VERSION("1.5.6");
 MODULE_AUTHOR("huangshuosheng<huangshuosheng@allwinnertech.com>");
 MODULE_AUTHOR("ouayngkun<ouyangkun@allwinnertech.com>");

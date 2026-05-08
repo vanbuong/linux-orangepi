@@ -24,6 +24,11 @@
 #include <linux/i2c.h>
 
 /*------------------------------
+ * Mutex Support
+ *------------------------------*/
+#include <linux/mutex.h>
+
+/*------------------------------
  * AW Power MFD Struct
  *------------------------------*/
 struct sunxi_power_dev {
@@ -44,6 +49,8 @@ struct sunxi_power_dev {
 	/* others */
 	long							variant;
 	void (*dts_parse)				(struct sunxi_power_dev *);
+	/* regmap access mutex lock */
+	struct mutex					regmap_lock;
 };
 
 #endif /*  _SUNXI_POWER_MFD_H_ */

@@ -85,6 +85,11 @@ static void phy_set_lbits(void *addr, u32 shift, u32 width, u32 val)
 	phy_writel(addr, reg_val);
 }
 
+enum sunxi_cadence_pcie_refclk_type {
+	PCIE_INT_100M_REFCLK = 0,
+	PCIE_EXT_100M_REFCLK = 1,
+};
+
 struct sunxi_cadence_combophy {
 	const char *name;
 	void __iomem *top_reg;
@@ -98,6 +103,7 @@ struct sunxi_cadence_combophy {
 
 	unsigned long state;
 	bool usb_dp_state;
+	enum sunxi_cadence_pcie_refclk_type pcie_refclk_type;
 	__u8 hpd_state;
 	__u8 ssc_en;
 	__u32 mode;
@@ -3593,7 +3599,7 @@ static const struct phy_ops combo1_usb_phy_ops = {
 	.owner		= THIS_MODULE,
 };
 
-static void sunxi_cadence_phy_pcie_phy_init(struct sunxi_cadence_phy *sunxi_cphy)
+static void sunxi_cadence_phy_pcie_internal_100m_init(struct sunxi_cadence_phy *sunxi_cphy)
 {
 	struct sunxi_cadence_combophy *combo1 = sunxi_cphy->combo1;
 	u32 val;
@@ -3755,6 +3761,82 @@ static void sunxi_cadence_phy_pcie_phy_init(struct sunxi_cadence_phy *sunxi_cphy
 
 }
 
+static void sunxi_cadence_phy_pcie_external_100m_init(struct sunxi_cadence_phy *sunxi_cphy)
+{
+	struct sunxi_cadence_combophy *combo1 = sunxi_cphy->combo1;
+	u32 val;
+
+	writel(0x2000, combo1->top_reg + 0x4);
+
+	val = readl(combo1->top_reg + 0x100);
+	val &= ~0x30;
+	writel(val, combo1->top_reg + 0x100);
+
+	writew(0x4, combo1->phy_reg + 0x128);
+	writew(0x4, combo1->phy_reg + 0x148);
+	writew(0x4, combo1->phy_reg + 0x1a8);
+
+	writew(0x509, combo1->phy_reg + 0x348);
+	writew(0x509, combo1->phy_reg + 0x368);
+	writew(0x509, combo1->phy_reg + 0x388);
+	writew(0xf00, combo1->phy_reg + 0x34a);
+	writew(0xf00, combo1->phy_reg + 0x36a);
+	writew(0xf00, combo1->phy_reg + 0x38a);
+	writew(0xf08, combo1->phy_reg + 0x34c);
+	writew(0xf08, combo1->phy_reg + 0x36c);
+	writew(0xf08, combo1->phy_reg + 0x38c);
+
+	writew(0x64, combo1->phy_reg + 0x120);
+	writew(0x50, combo1->phy_reg + 0x140);
+	writew(0x50, combo1->phy_reg + 0x1a0);
+
+	writew(0x2, combo1->phy_reg + 0x124);
+	writew(0x2, combo1->phy_reg + 0x144);
+	writew(0x2, combo1->phy_reg + 0x1a4);
+	writew(0x44, combo1->phy_reg + 0x126);
+	writew(0x36, combo1->phy_reg + 0x146);
+	writew(0x36, combo1->phy_reg + 0x1a6);
+
+	writew(0x2, combo1->phy_reg + 0x340);
+	writew(0x2, combo1->phy_reg + 0x360);
+	writew(0x2, combo1->phy_reg + 0x380);
+
+	writew(0x1, combo1->phy_reg + 0x130);
+	writew(0x1, combo1->phy_reg + 0x150);
+	writew(0x1, combo1->phy_reg + 0x1b0);
+	writew(0x11b, combo1->phy_reg + 0x132);
+	writew(0x11b, combo1->phy_reg + 0x152);
+	writew(0x11b, combo1->phy_reg + 0x1b2);
+	writew(0x6e, combo1->phy_reg + 0x134);
+	writew(0x58, combo1->phy_reg + 0x154);
+	writew(0x58, combo1->phy_reg + 0x1b4);
+	writew(0xe, combo1->phy_reg + 0x136);
+	writew(0x12, combo1->phy_reg + 0x156);
+	writew(0x12, combo1->phy_reg + 0x1b6);
+
+	writew(0xc5e, combo1->phy_reg + 0x10c);
+	writew(0xc5e, combo1->phy_reg + 0x18c);
+	writew(0xc56, combo1->phy_reg + 0x110);
+	writew(0xc56, combo1->phy_reg + 0x190);
+
+	writew(0xc7, combo1->phy_reg + 0x138);
+	writew(0xc7, combo1->phy_reg + 0x1b8);
+	writew(0xc7, combo1->phy_reg + 0x13c);
+	writew(0xc7, combo1->phy_reg + 0x1bc);
+	writew(0x5, combo1->phy_reg + 0x13e);
+	writew(0x5, combo1->phy_reg + 0x1be);
+
+	writew(0x0, combo1->phy_reg + 0x103c0);
+	writew(0x19, combo1->phy_reg + 0x102e2);
+	writew(0x19, combo1->phy_reg + 0x102e4);
+	writew(0x1, combo1->phy_reg + 0x103fe);
+
+	val = readl(combo1->top_reg);
+	writel(val | 0x1, combo1->top_reg);
+	val = readl(combo1->top_reg + 0x100);
+	writel(val | 0x1, combo1->top_reg + 0x100);
+}
+
 static int sunxi_cadence_phy_combo1_pcie_init(struct sunxi_cadence_phy *sunxi_cphy)
 {
 	int ret;
@@ -3786,7 +3868,16 @@ static int sunxi_cadence_phy_combo1_pcie_init(struct sunxi_cadence_phy *sunxi_cp
 	/* switch pipe to pcie */
 	writel(SUBSYS_COMB1_PIPE_PCIE, sunxi_cphy->top_combo_reg + SUBSYS_COMB1_PIPE);
 
-	sunxi_cadence_phy_pcie_phy_init(sunxi_cphy);
+	switch (sunxi_cphy->combo1->pcie_refclk_type) {
+	case PCIE_INT_100M_REFCLK:
+		sunxi_cadence_phy_pcie_internal_100m_init(sunxi_cphy);
+		break;
+	case PCIE_EXT_100M_REFCLK:
+		sunxi_cadence_phy_pcie_external_100m_init(sunxi_cphy);
+		break;
+	}
+
+	dev_info(sunxi_cphy->dev, "pcie refclk %s 100M\n", sunxi_cphy->combo1->pcie_refclk_type ? "EXT" : "INT");
 
 	return 0;
 }
@@ -3957,6 +4048,7 @@ int sunxi_cadence_phy_create(struct device *dev, struct device_node *np,
 		break;
 	case COMBO_PHY1:
 		combophy->name = kstrdup_const("combophy1", GFP_KERNEL);
+		of_property_read_u32(np, "pcie-refclk-type", &combophy->pcie_refclk_type);
 		break;
 	case AUX_HPD:
 		combophy->name = kstrdup_const("aux_hpd", GFP_KERNEL);
@@ -4368,5 +4460,5 @@ module_platform_driver(sunxi_cadence_phy_driver);
 
 MODULE_AUTHOR("huangyongxing@allwinnertech.com");
 MODULE_DESCRIPTION("Allwinner CADENCE COMBOPHY driver");
-MODULE_VERSION("0.1.7");
+MODULE_VERSION("0.1.8");
 MODULE_LICENSE("GPL v2");

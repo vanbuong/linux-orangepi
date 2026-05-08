@@ -648,6 +648,7 @@ static int sunxi_isp_logic_s_stream(unsigned char virtual_id, int on)
 		return 0;
 
 	if (on) {
+		csic_isp_bridge_enable(0);
 		bsp_isp_sram_boot_mode_ctrl(logic_isp->id, SRAM_NORMAL_MODE);
 		bsp_isp_enable(logic_isp->id, on);
 		bsp_isp_mode(logic_isp->id, logic_isp->work_mode);
@@ -673,6 +674,7 @@ static int sunxi_isp_logic_s_stream(unsigned char virtual_id, int on)
 		}
 #endif
 #endif
+		csic_isp_bridge_disable(0);
 	}
 
 	return 0;

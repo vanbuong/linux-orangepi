@@ -2060,7 +2060,7 @@ sysfs_show_func(hdmi_source)
 
 	n += sprintf(buf + n, "\n[ver]\n");
 	n += sprintf(buf + n, " - hw: 2.0\n");
-	n += sprintf(buf + n, " - sw: 2.25.1023. Ib84e5b7971fa3a5a4e29b55213dad5f13ebb1357\n");
+	n += sprintf(buf + n, " - sw: 2.25.1122. I05c89b6a3959711cc5fb31e79df6c225e1cd1a78\n");
 
 	n += sprintf(buf + n, "\n[drv cfg]\n");
 	n += sprintf(buf + n, "|       |                  dts                        |                  drm                  |\n");
@@ -2317,6 +2317,53 @@ sysfs_store_func(edid_data)
 	return count;
 }
 
+sysfs_show_func(edid)
+{
+	struct sunxi_drm_hdmi *hdmi = dev_get_drvdata(dev);
+	const struct edid *raw_edid = NULL;
+	u8 *edid_data = NULL;
+	int n = 0;
+
+	if (IS_ERR_OR_NULL(hdmi)) {
+		hdmi_err("hdmi device is null\n");
+		return 0;
+	}
+
+	mutex_lock(&hdmi->hdmi_ctrl.drv_edid_lock);
+
+	if (hdmi->hdmi_ctrl.drv_edid_dbg_mode && hdmi->hdmi_ctrl.drv_edid_dbg_size > 0) {
+		memcpy(buf, hdmi->hdmi_ctrl.drv_edid_dbg_data, SUNXI_HDMI_EDID_LENGTH);
+		n = hdmi->hdmi_ctrl.drv_edid_dbg_size;
+		mutex_unlock(&hdmi->hdmi_ctrl.drv_edid_lock);
+		return n;
+	}
+
+	if (IS_ERR_OR_NULL(hdmi->hdmi_ctrl.drv_edid_data)) {
+		mutex_unlock(&hdmi->hdmi_ctrl.drv_edid_lock);
+		return 0;
+	}
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0)
+	raw_edid = hdmi->hdmi_ctrl.drv_edid_data;
+#else
+	raw_edid = drm_edid_raw(hdmi->hdmi_ctrl.drv_edid_data);
+#endif
+	edid_data = (u8 *)raw_edid;
+
+	if (edid_data) {
+		memcpy(buf, edid_data, SUNXI_HDMI_EDID_LENGTH);
+		n = SUNXI_HDMI_EDID_LENGTH;
+	}
+
+	mutex_unlock(&hdmi->hdmi_ctrl.drv_edid_lock);
+	return n;
+}
+
+sysfs_store_func(edid)
+{
+	return count;
+}
+
 sysfs_show_func(hdcp_enable)
 {
 	int n = 0;
@@ -2425,6 +2472,7 @@ static sysfs_attr(hpd_mask);
 static sysfs_attr(set_ddc);
 static sysfs_attr(edid_debug);
 static sysfs_attr(edid_data);
+static sysfs_attr(edid);
 static sysfs_attr(hdcp_enable);
 static sysfs_attr(hdcp_type);
 static sysfs_attr(hdcp_status);
@@ -2442,6 +2490,7 @@ static struct attribute *_sunxi_hdmi_attrs[] = {
 	&dev_attr_set_ddc.attr,
 	&dev_attr_edid_debug.attr,
 	&dev_attr_edid_data.attr,
+	&dev_attr_edid.attr,
 	&dev_attr_hdcp_enable.attr,
 	&dev_attr_hdcp_type.attr,
 	&dev_attr_hdcp_status.attr,
@@ -2603,8 +2652,8 @@ exit_fill:
 	}
 
 exit:
-	hdmi_inf("drm hdmi check mode: %s >>>>>>>>>>>>>>>>\n",
-		crtc_state->mode_changed ? "change" : "unchange");
+	if (crtc_state->mode_changed)
+		hdmi_inf("drm hdmi check mode: change >>>>>>>>>>>>>>>>\n");
 	return 0;
 }
 

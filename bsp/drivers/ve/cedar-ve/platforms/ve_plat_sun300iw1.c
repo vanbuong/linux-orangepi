@@ -749,6 +749,39 @@ int ioctl_flush_cache_range(unsigned long arg, uint8_t user, struct cedar_dev *c
 	return 0;
 }
 
+int ioctl_invalid_cache_range(unsigned long arg, uint8_t user, struct cedar_dev *cedar_devp)
+{
+	(void)arg;
+	(void)user;
+	(void)cedar_devp;
+	struct cache_range data;
+	phys_addr_t paddr;
+
+	if (copy_from_user(&data, (void __user *)arg, sizeof(struct cache_range)))
+		return -EFAULT;
+
+	if (IS_ERR_OR_NULL((void *)data.start) || IS_ERR_OR_NULL((void *)data.end)) {
+		VE_LOGE("flush 0x%x, end 0x%x fault user virt address!\n",
+			(u32)data.start, (u32)data.end);
+		return -EFAULT;
+	}
+
+	paddr = virt_to_phys_from_pg(data.start);
+	if (paddr) {
+		struct device dev = {0};
+		dma_sync_single_for_cpu(&dev, paddr, data.end - data.start,
+					DMA_BIDIRECTIONAL);
+	} else {
+		VE_LOGE("fail to found paddr %pad of %llx\n", &paddr,
+			data.start);
+	}
+
+	if (copy_to_user((void __user *)arg, &data, sizeof(data)))
+		return -EFAULT;
+
+	return 0;
+}
+
 int ioctl_get_csi_online_related_info(unsigned long arg, uint8_t from_kernel, struct cedar_dev *cedar_devp)
 {
 	CsiOnlineRelatedInfo mCsiInfo[16];

@@ -138,11 +138,11 @@ static int check_ecc_bit3_limit5_err2(unsigned char ecc)
 	return ECC_ERR;
 }
 
-static int check_ecc_bit4_limit5_7_err8_limit12(unsigned char ecc)
+static int check_ecc_bit4_limit6_7_err8_limit12(unsigned char ecc)
 {
-	if (ecc <= 4) {
+	if (ecc <= 5) {
 		return ECC_GOOD;
-	} else if ((ecc >= 5 && ecc <= 7) || (ecc >= 12)) {
+	} else if ((ecc >= 6 && ecc <= 7) || (ecc >= 12)) {
 		sunxi_debug(NULL, "ecc limit 0x%x\n", ecc);
 		return ECC_LIMIT;
 	}
@@ -164,6 +164,40 @@ static int check_ecc_bit2_err2_limit3(unsigned char ecc)
 	return ECC_ERR;
 }
 
+static int check_ecc_bit4_limit5_8_err15(unsigned char ecc)
+{
+	if (ecc <= 4) {
+		return ECC_GOOD;
+	} else if (((ecc >= 5) && (ecc <= 8))) {
+		pr_debug("ecc limit 0x%x\n", ecc);
+		return ECC_LIMIT;
+	}
+	pr_err("ecc err 0x%x\n", ecc);
+	return ECC_ERR;
+}
+
+static int check_ecc_bit4_by_low2bits(unsigned char ecc)
+{
+	/*
+	* ECC status check based on low 2 bits pattern:
+	* - low2=00: GOOD (no errors)
+	* - low2=01: GOOD when ecc=0x1, LIMIT for other 01 cases
+	* - low2=01: GOOD when ecc=0x1, LIMIT for other 05 cases
+	* - low2=10: ERR (uncorrectable errors)
+	* - low2=11: LIMIT (corrected but reached ECC capability)
+	*/
+	unsigned char low2 = ecc & 0x3;
+
+	if ((low2 == 0x0) || ((low2 == 0x1) && ((ecc == 0x1) || (ecc == 0x5)))) {
+		return ECC_GOOD;
+	} else if ((low2 == 0x1) || (low2 == 0x3)) {
+		pr_debug("ecc limit 0x%x\n", ecc);
+		return ECC_LIMIT;
+	}
+	sunxi_err(NULL, "ecc err 0x%x\n", ecc);
+	return ECC_ERR;
+}
+
 static int aw_spinand_ecc_check_ecc(enum ecc_limit_err type, u8 status)
 {
 	unsigned char ecc;
@@ -172,9 +206,18 @@ static int aw_spinand_ecc_check_ecc(enum ecc_limit_err type, u8 status)
 	case BIT3_LIMIT2_TO_6_ERR7:
 		ecc = status & 0x07;
 		return general_check_ecc(ecc, 2, 6, 7, 7);
+	case BIT3_LIMIT3_TO_6_ERR7:
+		ecc = status & 0x07;
+		return general_check_ecc(ecc, 3, 6, 7, 7);
 	case BIT2_LIMIT1_ERR2:
 		ecc = status & 0x03;
 		return general_check_ecc(ecc, 1, 1, 2, 2);
+	case BIT2_LIMIT1_ERR2_TO_ERR3:
+		ecc = status & 0x03;
+		return general_check_ecc(ecc, 1, 1, 2, 3);
+	case BIT2_LIMIT2_ERR3:
+		ecc = status & 0x03;
+		return general_check_ecc(ecc, 2, 2, 3, 3);
 	case BIT2_LIMIT1_ERR2_LIMIT3:
 		ecc = status & 0x03;
 		return check_ecc_bit2_limit1_err2_limit3(ecc);
@@ -190,12 +233,18 @@ static int aw_spinand_ecc_check_ecc(enum ecc_limit_err type, u8 status)
 	case BIT3_LIMIT5_ERR2:
 		ecc = status & 0x07;
 		return check_ecc_bit3_limit5_err2(ecc);
-	case BIT4_LIMIT5_TO_7_ERR8_LIMIT_12:
+	case BIT4_LIMIT6_TO_7_ERR8_LIMIT_12:
 		ecc = status & 0x0f;
-		return check_ecc_bit4_limit5_7_err8_limit12(ecc);
+		return check_ecc_bit4_limit6_7_err8_limit12(ecc);
 	case BIT4_LIMIT5_TO_8_ERR9_TO_15:
 		ecc = status & 0x0f;
 		return general_check_ecc(ecc, 5, 8, 9, 15);
+	case BIT4_LIMIT5_TO_8_ERR15:
+		ecc = status & 0x0f;
+		return check_ecc_bit4_limit5_8_err15(ecc);
+	case BIT4_BY_LOW2BITS:
+		ecc = status & 0x0f;
+		return check_ecc_bit4_by_low2bits(ecc);
 	default:
 		return -EINVAL;
 	}

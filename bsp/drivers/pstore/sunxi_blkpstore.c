@@ -25,6 +25,7 @@
 #include <linux/path.h>
 #include <linux/dcache.h>
 #include <linux/namei.h>
+#include <linux/version.h>
 
 MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);
 
@@ -314,6 +315,39 @@ static ssize_t aw_psblk_generic_blk_write(const char *buf, size_t bytes,
 	return kernel_write(psblk_file, buf, bytes, &pos);
 }
 
+static struct block_device *pstore_blkdev_get_by_path(const char *path, blk_mode_t mode,
+		void *holder, const struct blk_holder_ops *hops)
+{
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0))
+	return blkdev_get_by_path(path, FMODE_READ, NULL);
+#else
+	return blkdev_get_by_path(path, FMODE_READ, NULL, NULL);
+#endif
+}
+
+static void pstore_blkdev_put(struct block_device *bdev, fmode_t mode, void *holder)
+{
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0))
+	blkdev_put(bdev_info.bdev, mode);
+#else
+	blkdev_put(bdev_info.bdev, holder);
+#endif
+
+}
+
+static dev_t pstore_name_to_dev_t(const char *initial_devname)
+{
+	dev_t dev = 0;
+
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0))
+	dev = pstore_name_to_dev_t(initial_devname);
+#else
+	if (early_lookup_bdev(initial_devname, &dev))
+		dev = 0;
+#endif
+	return dev;
+}
+
 /*
  * This takes its configuration only from the module parameters now.
  */
@@ -323,7 +357,7 @@ static int register_pstore_blk(struct pstore_device_info *dev,
 	struct inode *inode;
 	int ret = -ENODEV;
 
-	bdev_info.bdev = blkdev_get_by_path(devpath, FMODE_READ, NULL);
+	bdev_info.bdev = pstore_blkdev_get_by_path(devpath, FMODE_READ, NULL, NULL);
 	if (IS_ERR(bdev_info.bdev)) {
 		pr_err("fail to access bdev %s errno %ld\n", devpath,
 				PTR_ERR(bdev_info.bdev));
@@ -363,7 +397,7 @@ err_fput:
 	dev->zone.write = NULL;
 	fput(psblk_file);
 err:
-	blkdev_put(bdev_info.bdev, FMODE_READ);
+	pstore_blkdev_put(bdev_info.bdev, FMODE_READ, NULL);
 	psblk_file = NULL;
 
 	return ret;
@@ -379,7 +413,7 @@ static __init const char *early_boot_devpath(const char *initial_devname)
 	 * same scheme to find the device that we use for mounting
 	 * the root file system.
 	 */
-	dev_t dev = name_to_dev_t(initial_devname);
+	dev_t dev = pstore_name_to_dev_t(initial_devname);
 
 	if (!dev) {
 		pr_err("failed to resolve '%s'!\n", initial_devname);
@@ -480,7 +514,7 @@ static void __exit aw_pstore_blk_exit(void)
 		aw_unregister_pstore_device(dev);
 		kfree(dev);
 		fput(psblk_file);
-		blkdev_put(bdev_info.bdev, FMODE_READ);
+		pstore_blkdev_put(bdev_info.bdev, FMODE_READ, NULL);
 		psblk_file = NULL;
 	}
 	mutex_unlock(&aw_psblk_lock);

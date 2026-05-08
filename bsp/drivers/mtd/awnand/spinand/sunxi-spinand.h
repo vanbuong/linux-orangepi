@@ -7,12 +7,13 @@
 #include <linux/mtd/aw-spinand.h>
 #include <linux/mtd/mtd.h>
 #include <linux/mutex.h>
+#include <linux/spi/sunxi-spi.h>
 
 #define SECTOR_SHIFT 9
 
 #define AW_MTD_SPINAND_VER_MAIN		0x02
-#define AW_MTD_SPINAND_VER_SUB		0x05
-#define AW_MTD_SPINAND_VER_DATE		0x20220912
+#define AW_MTD_SPINAND_VER_SUB		0x06
+#define AW_MTD_SPINAND_VER_DATE		0x20231125
 
 #define UBOOT_START_BLOCK_BIGNAND 4
 #define UBOOT_START_BLOCK_SMALLNAND 8
@@ -40,7 +41,9 @@ struct aw_spinand {
 };
 
 extern struct aw_spinand *get_aw_spinand(void);
-extern uint64_t get_sys_part_offset(void);
+extern uint64_t get_mtd_part_offset(void *part_name);
+extern uint64_t get_mtd_part_size(void *part_name);
+extern struct mtd_info *__mtd_next_device(int i);
 
 #define spinand_to_mtd(spinand) (&spinand->mtd)
 #define spinand_to_chip(spinand) (&spinand->chip)

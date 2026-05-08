@@ -245,7 +245,6 @@ typedef struct sunxi_udc_io {
 	__u32 clk_is_open;			/* is usb clock open? */
 	struct clk 	*clk_msi_lite;		/* msi-lite */
 	struct clk 	*clk_usb_sys_ahb;	/* usb-sys-ahb */
-	struct clk 	*clk_res;		/* res_dcap-24m */
 	struct clk	*clk_hosc;		/* usb-24m */
 	struct clk	*clk_bus_otg;
 	struct clk	*clk_phy;
@@ -262,7 +261,6 @@ typedef struct sunxi_udc_io {
 	struct phy *usb2_generic_phy;		/* pointer to USB2 PHY */
 	int phy_range;
 	int rate_clk;
-	bool rext_cal_bypass; /* Hardware: the USB0/1-REXT is floating ? */
 
 	bool		dma_addr_ext_enable; /* Feature: 16GB DDR Memory Access */
 	__u32		dma_wordaddr_bypass;

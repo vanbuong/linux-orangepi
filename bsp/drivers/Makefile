@@ -8,10 +8,12 @@ obj-y += timer/
 
 # Basic System
 obj-y += dma/
+obj-y += dma-buf/
 obj-y += rtc/
 obj-y += bus/
 obj-y += dumpreg/
 obj-y += watchdog/
+obj-y += pm_domain/
 obj-y += iommu/
 obj-y += mbus/
 obj-y += aw_trace/
@@ -48,7 +50,7 @@ obj-y += secure_storage/
 obj-y += drm_heap/
 
 # I/O Connectivity
-obj-y += pcie/
+obj-y += pci/
 obj-y += phy/
 obj-y += emac/
 obj-y += gmac/
@@ -79,7 +81,6 @@ obj-y += irqchip/
 obj-y += standby/
 obj-y += thermal/
 obj-y += nvmem/
-obj-y += pm_domain/
 obj-y += power/
 obj-y += cpufreq/
 obj-y += devfreq/

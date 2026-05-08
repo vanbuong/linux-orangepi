@@ -966,13 +966,98 @@ static int simple_soc_remove(struct snd_soc_card *card)
 	return 0;
 }
 
+static int detect_i2s_soundcard(struct platform_device *pdev, bool *is_hdmi, int *i2s_index,
+				const char **soundcard_name)
+{
+	struct device *dev = &pdev->dev;
+	struct device_node *top_np = dev->of_node;
+	int ret;
+
+	ret = of_property_read_string(top_np, "soundcard-mach,name", soundcard_name);
+	if (ret < 0) {
+		SND_LOG_DEBUG("get soundcard name fail\n");
+		return ret;
+	}
+	/* Check if the soundcard is prefixed with sndhdmi */
+	if (strlen(*soundcard_name) >= 7 && strncmp(*soundcard_name, "sndhdmi", 7) == 0) {
+		*is_hdmi = true;
+		SND_LOG_DEBUG("Found HDMI soundcard: %s\n", *soundcard_name);
+		return ret;
+	} else if (sscanf(*soundcard_name, "sndi2s%d", i2s_index) == 1) {
+		SND_LOG_DEBUG("Found I2S soundcard: %s, index: %d\n", *soundcard_name, *i2s_index);
+		return ret;
+	}
+	/* soundcard-name is not i2s or hdmi */
+	return -1;
+}
+
+static const char *get_multiple_codec_names(struct snd_soc_dai_link_component *codecs,
+					    int num_codecs, char *buffer, int buffer_size,
+					    char separator)
+{
+	int offset = 0;
+	int i;
+	const char *codec_name;
+	size_t name_len;
+	int required_len;
+	int remaining_len;
+
+	/* Parameter validation */
+	if (!codecs || num_codecs <= 0 || !buffer || buffer_size <= 1)
+		return NULL;
+
+	for (i = 0; i < num_codecs && offset < buffer_size - 1; i++) {
+		/* Get codec name from dai driver */
+		codec_name = codecs[i].dai_name;
+		if (!codec_name && codecs[i].of_node) {
+			if (of_property_read_string(codecs[i].of_node, "compatible",
+						    &codec_name) != 0) {
+				codec_name = codecs[i].of_node->name;
+			}
+		}
+
+		/* Skip invalid or dummy codecs */
+		if (!codec_name || !*codec_name || strstr(codec_name, "dummy"))
+			continue;
+
+		name_len = strlen(codec_name);
+		/* Calculate required space */
+		required_len = name_len + (offset > 0 ? 1 : 0);
+		remaining_len = buffer_size - offset;
+
+		if (required_len >= remaining_len) {
+			break;
+		}
+
+		/* Add separator and copy name */
+		if (offset > 0) {
+			buffer[offset++] = separator;
+			remaining_len--;
+		}
+		strscpy(buffer + offset, codec_name, remaining_len);
+		offset += name_len;
+	}
+
+	/* Ensure null termination */
+	buffer[offset] = '\0';
+
+	return offset > 0 ? buffer : NULL;
+}
+
 static int asoc_simple_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
 	struct device_node *top_np = dev->of_node;
 	struct asoc_simple_priv *priv;
 	struct snd_soc_card *card;
+	struct snd_card *snd_card;
 	int ret;
+	int i2s_index = -1;
+	bool is_hdmi = false;
+	const char *codec_name = NULL;
+	const char *soundcard_name = NULL;
+	char card_fullname[80], card_id[16], all_codec_names[80] = {0};
+	int max_codec_name_len;
 
 	SND_LOG_DEBUG("\n");
 
@@ -1002,12 +1087,70 @@ static int asoc_simple_probe(struct platform_device *pdev)
 		SND_LOG_ERR("simple card dts available\n");
 	}
 
-	snd_soc_card_set_drvdata(card, priv);
+	ret = detect_i2s_soundcard(pdev, &is_hdmi, &i2s_index, &soundcard_name);
+	if (ret < 0) {
+		/* Not HDMI or I2S soundcard, keep the original soundcard name */
+		snd_soc_card_set_drvdata(card, priv);
+		ret = devm_snd_soc_register_card(dev, card);
+		if (ret < 0)
+			goto err;
+		return 0;
+	}
 
+	if (soundcard_name) {
+		/* 3 is the length of connection symbol between soundcard and codec */
+		max_codec_name_len = 80 - strlen(soundcard_name) - 3;
+		SND_LOG_DEBUG("soundcard_name: %s, max_codec_name_len: %d\n",
+			      soundcard_name, max_codec_name_len);
+	}
+
+	/* Get codec names from dai_driver */
+	if (priv->dai_link->codecs && priv->dai_link->num_codecs > 0) {
+		codec_name = get_multiple_codec_names(priv->dai_link->codecs,
+						      priv->dai_link->num_codecs,
+						      all_codec_names,
+						      max_codec_name_len,
+						      ',');
+		SND_LOG_DEBUG("Final codec name: %s\n", codec_name ? codec_name : "NULL");
+	}
+
+	/* Generate the full soundcard name */
+	if (is_hdmi) {
+		if (!soundcard_name) {
+			SND_LOG_ERR("HDMI soundcard name is NULL\n");
+			ret = -EINVAL;
+			goto err;
+		}
+		if (codec_name && strcmp(codec_name, "snd-soc-dummy") != 0) {
+			snprintf(card_fullname, sizeof(card_fullname), "%s - %s",
+				soundcard_name, codec_name);
+		} else {
+			strscpy(card_fullname, soundcard_name, sizeof(card_fullname));
+		}
+		strscpy(card_id, soundcard_name, sizeof(card_id));
+	} else if (i2s_index >= 0) {
+		if (codec_name && strcmp(codec_name, "snd-soc-dummy") != 0) {
+			snprintf(card_fullname, sizeof(card_fullname), "sndi2s%d - %s",
+				i2s_index, codec_name);
+		} else {
+			snprintf(card_fullname, sizeof(card_fullname), "sndi2s%d", i2s_index);
+		}
+		snprintf(card_id, sizeof(card_id), "sndi2s%d", i2s_index);
+	}
+
+	snd_soc_card_set_drvdata(card, priv);
 	/* asoc_simple_debug_info(priv); */
 	ret = devm_snd_soc_register_card(dev, card);
 	if (ret < 0)
 		goto err;
+
+	snd_card = card->snd_card;
+	if (snd_card) {
+		strncpy(snd_card->id, card_id, sizeof(snd_card->id));
+		strncpy(snd_card->driver, card_id, sizeof(snd_card->driver));
+		strncpy(snd_card->shortname, card_id, sizeof(snd_card->shortname));
+		strncpy(snd_card->longname, card_fullname, sizeof(snd_card->longname));
+	}
 
 	return 0;
 err:
@@ -1064,5 +1207,5 @@ module_exit(sunxi_soundcard_machine_dev_exit);
 
 MODULE_AUTHOR("Dby@allwinnertech.com");
 MODULE_LICENSE("GPL");
-MODULE_VERSION("1.0.6");
+MODULE_VERSION("1.0.7");
 MODULE_DESCRIPTION("sunxi soundcard machine");

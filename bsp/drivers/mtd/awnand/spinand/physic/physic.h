@@ -71,19 +71,6 @@ enum ecc_status_shift {
 	ECC_STATUS_SHIFT_7,
 };
 
-enum ecc_limit_err {
-	ECC_TYPE_ERR = 0,
-	BIT3_LIMIT2_TO_6_ERR7,
-	BIT2_LIMIT1_ERR2,
-	BIT2_LIMIT1_ERR2_LIMIT3,
-	BIT2_ERR2_LIMIT3,
-	BIT4_LIMIT3_TO_4_ERR15,
-	BIT3_LIMIT3_TO_4_ERR7,
-	BIT3_LIMIT5_ERR2,
-	BIT4_LIMIT5_TO_7_ERR8_LIMIT_12,
-	BIT4_LIMIT5_TO_8_ERR9_TO_15,
-};
-
 enum ecc_oob_protected {
 	ECC_PROTECTED_TYPE = 0,
 	/* all spare data are under ecc protection */
@@ -125,6 +112,7 @@ struct aw_spinand_phy_info {
 #define SPINAND_QUAD_NO_NEED_ENABLE		BIT(3)
 #define SPINAND_TWO_PLANE_SELECT		BIT(7)
 #define SPINAND_ONEDUMMY_AFTER_RANDOMREAD	BIT(8)
+#define SPINAND_POWER_1V8			BIT(9)
 	int OperationOpt;
 	int MaxEraseTimes;
 #define HAS_EXT_ECC_SE01			BIT(0)

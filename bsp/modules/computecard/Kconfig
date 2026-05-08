@@ -1,0 +1,9 @@
+menu "Compute Card Drivers"
+
+config AW_COMPUTECARD_TYPE
+	string "The Compute Card Type"
+	default "None"
+	help
+	  The GPU type used on the platform.
+
+endmenu

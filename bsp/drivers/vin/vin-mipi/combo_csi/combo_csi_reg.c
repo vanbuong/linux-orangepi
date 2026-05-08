@@ -157,6 +157,10 @@ void cmb_phy_top_enable(void)
 	cmb_phy_set_vref_0p9(0x1);
 	cmb_phy_set_vref_0p2(0x2);
 	cmb_phy_set_trescal(0xe);
+#elif IS_ENABLED(CONFIG_ARCH_SUN60IW2)
+	cmb_phy_set_vref_0p9(0x2);
+	cmb_phy_set_vref_0p2(0x3);
+	cmb_phy_set_trescal(0x10);
 #else
 	cmb_phy_set_vref_0p9(0x2);
 	cmb_phy_set_vref_0p2(0x3);

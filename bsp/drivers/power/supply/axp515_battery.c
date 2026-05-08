@@ -91,13 +91,40 @@ static inline int axp_vts_to_mV(u16 reg)
 	return ((int)(((reg >> 8) << 4) | (reg & 0x000F))) * 800 / 1000;
 }
 
-static int axp515_ichg(struct regmap *regmap)
+/**
+ * axp515_ichg - Read charge current ADC value (with concurrency protection)
+ * @bat_power: axp515_bat_power instance pointer
+ *
+ * Return: Charge current in mA on success, 0 on failure
+ *
+ * [Code Source: drivers/power/supply/axp515_battery.c L94-L105 Original function Modified]
+ * [Design Basis: AXP515_ADC_Access_Lock_Protection_Requirement.md V1.0 Concurrency protection]
+ */
+static int axp515_ichg(struct axp515_bat_power *bat_power)
 {
+	struct regmap *regmap = bat_power->regmap;
+	struct sunxi_power_dev *axp_dev;
 	uint8_t tmp[2];
 	int ibat;
 	u32 res;
+	int ret;
 
-	regmap_bulk_read(regmap, AXP515_IBATH_REG, tmp, 2);
+	/* Get parent device sunxi_power_dev pointer */
+	axp_dev = dev_get_drvdata(bat_power->dev->parent);
+	if (!axp_dev) {
+		dev_warn(bat_power->dev, "Failed to get axp_dev for ADC lock\n");
+		return -ENODEV;
+	}
+
+	/* Lock protection for ADC register read */
+	sunxi_pmic_lock(axp_dev);
+	ret = regmap_bulk_read(regmap, AXP515_IBATH_REG, tmp, 2);
+	sunxi_pmic_unlock(axp_dev);
+
+	if (ret < 0)
+		return ret;
+
+	/* Data conversion (executed outside lock) */
 	res = (tmp[0] << 8) | tmp[1];
 	ibat = axp515_ibat_to_mA(res);
 
@@ -318,17 +345,40 @@ static inline int axp_vts_to_temp(int data,
 	return temp;
 }
 
-static inline int axp515_get_adc_raw(struct regmap *regmap)
+/**
+ * axp515_get_adc_raw - Read NTC raw ADC voltage value (with concurrency protection)
+ * @bat_power: axp515_bat_power instance pointer
+ *
+ * Return: Voltage in mV on success, negative error code on failure
+ *
+ * [Code Source: drivers/power/supply/axp515_battery.c L321-L336 Original function Modified]
+ * [Design Basis: AXP515_ADC_Access_Lock_Protection_Requirement.md V1.0 Concurrency protection]
+ */
+static inline int axp515_get_adc_raw(struct axp515_bat_power *bat_power)
 {
+	struct regmap *regmap = bat_power->regmap;
+	struct sunxi_power_dev *axp_dev;
 	unsigned char temp_val[2];
 	unsigned short ts_res;
 	int bat_temp_mv;
 	int ret = 0;
 
+	/* Get parent device sunxi_power_dev pointer */
+	axp_dev = dev_get_drvdata(bat_power->dev->parent);
+	if (!axp_dev) {
+		dev_err(bat_power->dev, "Failed to get axp_dev for ADC lock\n");
+		return -ENODEV;
+	}
+
+	/* Lock protection for ADC register read */
+	sunxi_pmic_lock(axp_dev);
 	ret = regmap_bulk_read(regmap, AXP515_VTS_RES, temp_val, 2);
+	sunxi_pmic_unlock(axp_dev);
+
 	if (ret < 0)
 		return ret;
 
+	/* Data conversion (executed outside lock) */
 	ts_res = ((unsigned short) temp_val[0] << 8) | temp_val[1];
 	bat_temp_mv = axp_vts_to_mV(ts_res);
 
@@ -346,12 +396,12 @@ static inline int axp515_get_adc(struct axp515_bat_power *bat_power)
 	bat_charging = ((((data & AXP515_MASK_CHARGE) > 0))
 			&& ((data & AXP515_MASK_CHARGE) < AXP515_CHARGE_MAX)) ? 1 : 0;
 
-	bat_temp_mv = axp515_get_adc_raw(regmap);
+	bat_temp_mv = axp515_get_adc_raw(bat_power);
 
 	if (!bat_charging)
 		bat_temp_mv += (calib * axp515_disichg(regmap) / 1000);
 	else
-		bat_temp_mv -= (calib * axp515_ichg(regmap) / 1000);
+		bat_temp_mv -= (calib * axp515_ichg(bat_power) / 1000);
 
 	return bat_temp_mv;
 }
@@ -480,20 +530,43 @@ static int axp515_get_bat_status(struct power_supply *ps,
 	return 0;
 }
 
+/**
+ * axp515_get_vbat_vol - Read battery voltage ADC value (with concurrency protection)
+ * @ps: power_supply instance pointer
+ * @val: Output parameter, stores voltage value (unit: uV)
+ *
+ * Return: 0 on success, negative error code on failure
+ *
+ * [Code Source: drivers/power/supply/axp515_battery.c L483-L500 Original function Modified]
+ * [Design Basis: AXP515_ADC_Access_Lock_Protection_Requirement.md V1.0 Concurrency protection]
+ */
 static int axp515_get_vbat_vol(struct power_supply *ps,
 			     union power_supply_propval *val)
 {
 	struct axp515_bat_power *bat_power = power_supply_get_drvdata(ps);
 	struct regmap *regmap = bat_power->regmap;
+	struct sunxi_power_dev *axp_dev;
 	uint8_t tmp[2];
 	u32 res;
 	int ret;
 
+	/* Get parent device sunxi_power_dev pointer */
+	axp_dev = dev_get_drvdata(bat_power->dev->parent);
+	if (!axp_dev) {
+		dev_err(bat_power->dev, "Failed to get axp_dev for ADC lock\n");
+		return -ENODEV;
+	}
+
+	/* Lock protection for ADC register read */
+	sunxi_pmic_lock(axp_dev);
 	ret = regmap_bulk_read(regmap, AXP515_VBATH_REG, tmp, 2);
+	sunxi_pmic_unlock(axp_dev);
+
 	if (ret < 0)
 		return ret;
-	res = (tmp[0] << 8) | tmp[1];
 
+	/* Data conversion (executed outside lock) */
+	res = (tmp[0] << 8) | tmp[1];
 	val->intval = axp515_vbat_to_mV(res) * 1000;
 
 	return 0;
@@ -506,7 +579,7 @@ static int axp515_get_ichg(struct power_supply *ps,
 	struct regmap *regmap = bat_power->regmap;
 	int ibat, disibat;
 
-	ibat = axp515_ichg(regmap);
+	ibat = axp515_ichg(bat_power);
 	disibat = axp515_disichg(regmap);
 
 	val->intval = (ibat - disibat) * 1000;
@@ -1872,12 +1945,12 @@ static void axp515_temp_process_init(struct work_struct *work)
 
 	regmap_update_bits(regmap, AXP515_IPRECHG_CFG, BIT(7), 0);
 	mdelay(500);
-	vts1 = axp515_get_adc_raw(regmap);
+	vts1 = axp515_get_adc_raw(bat_power);
 	regmap_update_bits(regmap, AXP515_IPRECHG_CFG, BIT(7), BIT(7));
 	mdelay(500);
-	vts2 = axp515_get_adc_raw(regmap);
+	vts2 = axp515_get_adc_raw(bat_power);
 
-	charge_cur = axp515_ichg(regmap);
+	charge_cur = axp515_ichg(bat_power);
 
 	if (!charge_cur) {
 		bat_power->bat_temp_calib = axp_config->pmu_bat_temp_comp;

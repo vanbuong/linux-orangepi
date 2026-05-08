@@ -764,25 +764,15 @@ static void usb_new_phy_init(struct sunxi_hci_hcd *sunxi_hci)
 
 #endif
 
-#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN60IW2)
-void usb_phyx_res_cal(__u32 usbc_no, bool enable, bool bypass)
+#if IS_ENABLED(CONFIG_ARCH_SUN55IW3)
+void usb_phyx_res_cal(__u32 usbc_no, bool enable)
 {
 	__u32 reg_val = 0;
 	void __iomem *rescal, *res200;
 	__u32 port = 0, tmp; /* port companion enable ? */
 
-	if (bypass) {
-		pr_info(" External Resistance Calibration already Bypass, not %s it\n",
-			enable ? "enable" : "disable");
-		return;
-	}
-
 	rescal = ioremap(syscfg_reg(RESCAL_CTRL_REG), 4);
-#if IS_ENABLED(CONFIG_ARCH_SUN60IW2)
-	res200 = ioremap(syscfg_reg(RES0_CTRL_REG), 4);
-#else	/* CONFIG_ARCH_SUN55IW3 */
 	res200 = ioremap(syscfg_reg(RES200_CTRL_REG), 4);
-#endif
 
 	tmp = GENMASK(6, 4) & (~PHY_o_RES200_SEL(usbc_no));
 	reg_val = readl(rescal);
@@ -799,17 +789,9 @@ void usb_phyx_res_cal(__u32 usbc_no, bool enable, bool bypass)
 
 	reg_val = readl(res200);
 	if (enable)
-#if IS_ENABLED(CONFIG_ARCH_SUN60IW2)
-		reg_val &= ~PHY_o_RES200_TRIM(usbc_no);
-#else	/* CONFIG_ARCH_SUN55IW3 */
 		reg_val &= ~PHY_o_RES200_CTRL(usbc_no);
-#endif
 	else
-#if IS_ENABLED(CONFIG_ARCH_SUN60IW2)
-		reg_val |= PHY_o_RES200_TRIM_DEFAULT(usbc_no);
-#else	/* CONFIG_ARCH_SUN55IW3 */
 		reg_val |= PHY_o_RES200_CTRL_DEFAULT(usbc_no);
-#endif
 	writel(reg_val, res200);
 
 	iounmap(rescal);
@@ -1142,30 +1124,6 @@ void sunxi_hci_clean_standby_irq(struct sunxi_hci_hcd *sunxi_hci)
 }
 #endif
 
-static int __maybe_unused usb_rescal_clock_set(struct sunxi_hci_hcd *sunxi_hci, bool enable)
-{
-	int ret = 0;
-
-	if (sunxi_hci->rext_cal_bypass) {
-		DMSG_DEBUG("external resistance calibration bypass, skip set clk_res\n");
-		return 0;
-	}
-
-	if (enable) {
-		if (sunxi_hci->clk_res) {
-			ret = clk_prepare_enable(sunxi_hci->clk_res);
-			if (ret) {
-				sunxi_err(&sunxi_hci->pdev->dev, "enable clk_res err, return %d\n", ret);
-				return ret;
-			}
-		}
-	} else {
-		if (sunxi_hci->clk_res)
-			clk_disable_unprepare(sunxi_hci->clk_res);
-	}
-	return 0;
-}
-
 static int open_clock(struct sunxi_hci_hcd *sunxi_hci, u32 ohci)
 {
 	int ret;
@@ -1208,9 +1166,8 @@ static int open_clock(struct sunxi_hci_hcd *sunxi_hci, u32 ohci)
 	if (!sunxi_hci->clk_is_open) {
 		sunxi_hci->clk_is_open = 1;
 
-#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN60IW2)
-		usb_rescal_clock_set(sunxi_hci, true);
-		usb_phyx_res_cal(sunxi_hci->usbc_no, true, sunxi_hci->rext_cal_bypass);
+#if IS_ENABLED(CONFIG_ARCH_SUN55IW3)
+		usb_phyx_res_cal(sunxi_hci->usbc_no, true);
 #endif
 		if (sunxi_hci->ahb) {
 			ret = clk_prepare_enable(sunxi_hci->ahb);
@@ -1548,9 +1505,8 @@ static int close_clock(struct sunxi_hci_hcd *sunxi_hci, u32 ohci)
 			clk_disable_unprepare(sunxi_hci->clk_msi_lite);
 
 		udelay(10);
-#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN60IW2)
-		usb_phyx_res_cal(sunxi_hci->usbc_no, false, sunxi_hci->rext_cal_bypass);
-		usb_rescal_clock_set(sunxi_hci, false);
+#if IS_ENABLED(CONFIG_ARCH_SUN55IW3)
+		usb_phyx_res_cal(sunxi_hci->usbc_no, false);
 #endif
 	} else {
 		DMSG_WARN("[%s]: wrn: open clock failed, (%d, 0x%p)\n",
@@ -2144,20 +2100,6 @@ static int sunxi_get_hci_clock(struct platform_device *pdev,
 	}
 #endif
 
-#if IS_ENABLED(CONFIG_ARCH_SUN60IW2)
-	sunxi_hci->clk_res = devm_clk_get(&pdev->dev, "res_dcap");
-	if (IS_ERR(sunxi_hci->clk_res)) {
-		sunxi_err(&pdev->dev, "Could not get res dcap clock\n");
-		return PTR_ERR(sunxi_hci->clk_res);
-	}
-
-	sunxi_hci->clk_msi_lite = devm_clk_get(&pdev->dev, "msi_lite");
-	if (IS_ERR(sunxi_hci->clk_msi_lite)) {
-		dev_err(&pdev->dev, "Could not get msi-lite clock\n");
-		return PTR_ERR(sunxi_hci->clk_msi_lite);
-	}
-#endif
-
 #if IS_ENABLED(CONFIG_ARCH_SUN60IW2) || IS_ENABLED(CONFIG_ARCH_SUN65IW1)
 	sunxi_hci->clk_usb_sys_ahb = devm_clk_get(&pdev->dev, "usb_sys_ahb");
 	if (IS_ERR(sunxi_hci->clk_usb_sys_ahb)) {
@@ -2214,8 +2156,6 @@ static int sunxi_get_hci_clock(struct platform_device *pdev,
 				sunxi_hci->hci_name);
 		}
 	}
-
-	sunxi_hci->rext_cal_bypass = device_property_read_bool(&pdev->dev, "aw,rext_cal_bypass");
 
 #if IS_ENABLED(CONFIG_ARCH_SUN65IW1)
 	sunxi_hci->usb2_generic_phy = devm_phy_get(&pdev->dev, "usb2-phy");

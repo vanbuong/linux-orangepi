@@ -826,7 +826,9 @@ static void _ProcessStatsDKPShow(PVRSRV_DEVICE_NODE *psDevNode,
                                  int pid,
                                  IMG_HANDLE hPrivData)
 {
-	PVRSRV_PROCESS_STATS *psProcessStats = _FindProcessStatsInLiveList((IMG_PID)pid);
+	PVRSRV_PROCESS_STATS *psProcessStats;
+	OSLockAcquire(g_psLinkedListLock);
+	psProcessStats = _FindProcessStatsInLiveList((IMG_PID)pid);
 
 	PVR_UNREFERENCED_PARAMETER(psDevNode);
 	PVR_UNREFERENCED_PARAMETER(hPrivData);
@@ -836,6 +838,7 @@ static void _ProcessStatsDKPShow(PVRSRV_DEVICE_NODE *psDevNode,
 		/* Just return if the specified process is no longer in the process
 		 * stats list.
 		 */
+		OSLockRelease(g_psLinkedListLock);
 		return;
 	}
 
@@ -868,6 +871,8 @@ static void _ProcessStatsDKPShow(PVRSRV_DEVICE_NODE *psDevNode,
 	GENERATE_PROCESS_STAT_FDINFO(ghDKPHandle, _stat_type, "drm-active-"_dkp_name, psProcessStats);
 	PVRSRV_DKP_MEM_STAT_GROUP_ACTIVE
 	#undef X
+
+	OSLockRelease(g_psLinkedListLock);
 }
 
 #undef GENERATE_PROCESS_STAT_FDINFO

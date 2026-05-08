@@ -89,6 +89,9 @@ typedef struct dwc3_cfg {
 	/* Type-C support */
 	struct power_supply *psy; /* pmu type */
 
+	/* lane defalut orientation */
+	enum typec_orientation default_orientation;
+
 } dwc3_cfg_t;
 
 struct dwc3_sunxi_plat {
@@ -740,7 +743,8 @@ static int dwc3_sunxi_extcon_register(struct dwc3_sunxi_plat *dwc3)
 static __s32 dwc3_script_parse(struct device_node *np, dwc3_cfg_t *cfg)
 {
 	int ret = -1;
-	const char  *used_status;
+	const char *used_status;
+	const char *default_orientation;
 
 	/* usbc enable */
 	ret = of_property_read_string(np, "status", &used_status);
@@ -793,6 +797,19 @@ static __s32 dwc3_script_parse(struct device_node *np, dwc3_cfg_t *cfg)
 			cfg->gma340_sel_gpio_valid = 1;
 		else
 			cfg->gma340_sel_gpio_valid = 0;
+	}
+
+	/* usbc lane default working orientation */
+	ret = of_property_read_string(np, "lane_default_orientation", &default_orientation);
+	if (ret) {
+		sunxi_debug(NULL, "get lane_default_orientation is fail, %d\n", ret);
+		cfg->default_orientation = TYPEC_ORIENTATION_NONE;
+	} else if (!strcmp(default_orientation, "normal")) {
+		cfg->default_orientation = TYPEC_ORIENTATION_NORMAL;
+	} else if (!strcmp(default_orientation, "reverse")) {
+		cfg->default_orientation = TYPEC_ORIENTATION_REVERSE;
+	} else {
+		cfg->default_orientation = TYPEC_ORIENTATION_NONE;
 	}
 
 	return 0;
@@ -980,6 +997,9 @@ static int dwc3_sunxi_plat_probe(struct platform_device *pdev)
 	ret = dwc3_sunxi_init(dwc3);
 	if (ret)
 		goto err_clk_put;
+
+	if (dwc3->cfg.default_orientation != TYPEC_ORIENTATION_NONE)
+		phy_set_mode_ext(dwc3->dwc->usb3_generic_phy, PHY_MODE_USB_HOST_SS, dwc3->cfg.default_orientation);
 
 	if (dwc3->cfg.detect_mode == DWC3_DETECT_MODE_NOTIFY) {
 		INIT_WORK(&dwc3->det_work, dwc3_typec_det_work);

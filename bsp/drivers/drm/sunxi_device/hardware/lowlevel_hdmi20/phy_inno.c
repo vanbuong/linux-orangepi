@@ -502,11 +502,6 @@ static int _inno_phy_config_pll(void)
 {
 	int i = 0, index = 0;
 
-	if (inno_phy.tmds_clock == 594000)
-		_inno_phy_config_4k60();
-	else if (inno_phy.tmds_clock == 297000)
-		_inno_phy_config_4k30();
-
 	/* 1. find tmds&pixel macth mpll params */
 	for (i = 0; i < inno_phy.mpll_size; i++) {
 		if (phy_diff_range(inno_phy.tmds_clock, inno_phy.mpll[i].tmds_clk, 0) &&
@@ -546,6 +541,11 @@ static int _inno_phy_config_pll(void)
 	return -1;
 
 mpll_cfg:
+	if (inno_phy.mpll[index].tmds_clk == 594000)
+		_inno_phy_config_4k60();
+	else if (inno_phy.mpll[index].tmds_clk == 297000)
+		_inno_phy_config_4k30();
+
 	phy_base->hdmi_phy_pll0_1.bits.prepll_div    = dword_to_byte(inno_phy.mpll[index].pre_fbdiv, 0);
 	phy_base->hdmi_phy_pll0_3.bits.prepll_fbdiv0 = dword_to_byte(inno_phy.mpll[index].pre_fbdiv, 1);
 	phy_base->hdmi_phy_pll0_2.bits.prepll_fbdiv1 = dword_to_byte(inno_phy.mpll[index].pre_fbdiv, 2);

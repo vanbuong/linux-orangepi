@@ -305,39 +305,53 @@ static int regulator_enable_regmap_axp515_drivevbus(struct regulator_dev *rdev)
 
 static int regulator_disable_regmap_axp515_drivevbus(struct regulator_dev *rdev)
 {
-	int ret;
+	struct sunxi_power_dev *axp_dev;
 	unsigned int reg_val[2];
+	int ret;
+
+	/* Get sunxi_power_dev instance */
+	axp_dev = dev_get_drvdata(rdev->dev.parent);
+	if (!axp_dev) {
+		dev_err(&rdev->dev, "Failed to get axp_dev\n");
+		return -ENODEV;
+	}
+
+	/* Acquire lock - protect regmap operation sequence */
+	sunxi_pmic_lock(axp_dev);
 
 	regmap_write(rdev->regmap, AXP515_EXT_PARA4, 0x06);
 	regmap_write(rdev->regmap, AXP515_EXT_PARA2, 0x04);
 	regmap_write(rdev->regmap, AXP515_EXT_PARA5, 0x04);
-	regmap_write(rdev->regmap, AXP515_ADDR_EXTENSION, 0x01);
-	regmap_write(rdev->regmap, AXP515_BOOST_EXT0, 0x51);
-	regmap_write(rdev->regmap, AXP515_CC_GLOBAL_CTRL, 0xC0);
-	regmap_write(rdev->regmap, AXP515_CC_LOW_POWER_CTRL, 0x07);
-	regmap_write(rdev->regmap, AXP515_BOOST_EXT6, 0x08);
-	regmap_write(rdev->regmap, AXP515_CC_STATUS0, 0x08);
-	regmap_write(rdev->regmap, AXP515_ADDR_EXTENSION, 0x00);
+	regmap_write(rdev->regmap, AXP515_ADDR0_EXTENSION, 0x51);
+	regmap_write(rdev->regmap, AXP515_ADDR1_EXTENSION, 0xC0);
+	regmap_write(rdev->regmap, AXP515_ADDR2_EXTENSION, 0x07);
+	regmap_write(rdev->regmap, AXP515_ADDR3_EXTENSION, 0x08);
+	regmap_write(rdev->regmap, AXP515_ADDR4_EXTENSION, 0x08);
 
 	regmap_read(rdev->regmap, AXP515_INTEN3, &reg_val[0]);
 	regmap_read(rdev->regmap, AXP515_INTEN2, &reg_val[1]);
 	regmap_update_bits(rdev->regmap, AXP515_INTEN3, 0xC0, 0);
 	regmap_write(rdev->regmap, AXP515_INTEN2, 0);
-	mdelay(500);
+
+	msleep(500);
+
 	ret = regmap_update_bits(rdev->regmap, AXP515_RBFET_SET, BIT(6), 0);
 	regmap_update_bits(rdev->regmap, AXP515_INTSTS3, 0xC0, 0xC0);
 	regmap_update_bits(rdev->regmap, AXP515_INTSTS2, 0xFF, 0xFF);
-	mdelay(500);
 
-	regmap_write(rdev->regmap, AXP515_ADDR_EXTENSION, 0x01);
-	regmap_write(rdev->regmap, AXP515_CC_STATUS0, 0x00);
-	regmap_write(rdev->regmap, AXP515_BOOST_EXT6, 0x00);
-	regmap_write(rdev->regmap, AXP515_CC_GLOBAL_CTRL, 0x00);
-	regmap_write(rdev->regmap, AXP515_CC_LOW_POWER_CTRL, 0x00);
-	regmap_write(rdev->regmap, AXP515_BOOST_EXT0, 0x00);
-	regmap_write(rdev->regmap, AXP515_ADDR_EXTENSION, 0x00);
+	msleep(500);
 
-	mdelay(100);
+	regmap_write(rdev->regmap, AXP515_ADDR4_EXTENSION, 0x00);
+	regmap_write(rdev->regmap, AXP515_ADDR3_EXTENSION, 0x00);
+	regmap_write(rdev->regmap, AXP515_ADDR1_EXTENSION, 0x00);
+	regmap_write(rdev->regmap, AXP515_ADDR2_EXTENSION, 0x00);
+	regmap_write(rdev->regmap, AXP515_ADDR0_EXTENSION, 0x00);
+
+
+	msleep(100);
+
+	/* Release lock */
+	sunxi_pmic_unlock(axp_dev);
 
 	regmap_write(rdev->regmap, AXP515_EXT_PARA4, 0x00);
 	regmap_write(rdev->regmap, AXP515_EXT_PARA2, 0x00);

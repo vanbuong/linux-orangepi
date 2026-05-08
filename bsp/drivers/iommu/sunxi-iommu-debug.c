@@ -1161,7 +1161,7 @@ static const struct file_operations iommu_debug_large_phys_fops = {
 #endif
 
 #ifdef TEST_USE_G2D
-#include <sunxi-g2d.h>
+#include <uapi/linux/sunxi-g2d.h>
 
 static int __prepare_rotate0_param(dma_addr_t src, dma_addr_t dst, size_t size,
 				   g2d_blt_h *blit_para)
@@ -1735,5 +1735,5 @@ module_init(iommu_debug_init);
 module_exit(iommu_debug_exit);
 
 MODULE_LICENSE("GPL v2");
-MODULE_VERSION("1.1.0");
+MODULE_VERSION("1.1.1");
 MODULE_AUTHOR("huangshuosheng<huangshuosheng@allwinnertech.com>");

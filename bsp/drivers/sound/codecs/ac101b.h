@@ -689,6 +689,7 @@ struct sunxi_jack_adv_priv {
 	struct snd_sunxi_pacfg *pa_cfg;
 
 	unsigned int key_data;
+	bool key_first_press;
 };
 
 struct ac101b_data {

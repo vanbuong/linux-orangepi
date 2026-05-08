@@ -21,6 +21,10 @@
 #include <linux/spinlock.h>
 #include <linux/pinctrl/pinconf-generic.h>
 
+#if IS_ENABLED(CONFIG_AW_AMP_SYS_RSC_MANAGER)
+#include "../amp_rsc/core/include/asrm_common.h"
+#endif
+
 #define SUNXI_BANK_OFFSET(bank, bankbase)	((bank) - (bankbase))
 #define SUNXI_PIN_BASE(bank)			(SUNXI_BANK_OFFSET(bank, 'A') * 32)
 
@@ -38,6 +42,7 @@
 #define PL_BASE			SUNXI_PIN_BASE('L')
 #define PM_BASE			SUNXI_PIN_BASE('M')
 #define PN_BASE			SUNXI_PIN_BASE('N')
+#define PW_BASE			SUNXI_PIN_BASE('W')	/* sun8iw22 PWR_IRQ bank */
 
 #define SUNXI_PINCTRL_PIN(bank, pin)		\
 	PINCTRL_PIN(P ## bank ## _BASE + (pin), "P" #bank #pin)
@@ -144,22 +149,24 @@ enum sunxi_pinctrl_hw_type {
 	SUNXI_PCTL_HW_TYPE_5,  /* Support self-adaption */
 	SUNXI_PCTL_HW_TYPE_6,  /* chips: sun55iw3-prcm */
 	SUNXI_PCTL_HW_TYPE_7,  /* chips: sun55iw6-prcm */
-	SUNXI_PCTL_HW_TYPE_8,  /* chips: sun300iw1-r */
+	SUNXI_PCTL_HW_TYPE_8,  /* chips: sun300iw1-r, sun8iw22-rtc */
 	SUNXI_PCTL_HW_TYPE_9,  /* chips: sun8iw20 */
 	SUNXI_PCTL_HW_TYPE_10, /* chips: sun60iw2 B-Version IC */
+	SUNXI_PCTL_HW_TYPE_11, /* chips: sun252iw1 */
+	SUNXI_PCTL_HW_TYPE_12, /* chips: sun252iw3 */
 	/* Add new types here ... */
 	SUNXI_PCTL_HW_TYPE_CNT,
 };
 
 /* Reference <Port_Controller_Spec: Port Register List> for the information below: */
 struct sunxi_pinctrl_hw_info {
-	u8 initial_bank_offset;	/* First bank offset to pin base */
-	u8 mux_regs_offset;	/* Configure Register's offset */
+	u32 initial_bank_offset;	/* First bank offset to pin base */
+	u32 bank_mem_size;  	/* Size of the basic registers (including CFG/DAT/DRV/PUL) of any bank  */
 	u32 data_regs_offset;	/* Data Register's offset */
 	u32 data_set_regs_offset;	/* Set Data Register's offset */
 	u32 data_clr_regs_offset;	/* Clear data Register's offset */
+	u8 mux_regs_offset;	/* Configure Register's offset */
 	u8 dlevel_regs_offset;	/* Multi Driving Register's offset */
-	u8 bank_mem_size;  	/* Size of the basic registers (including CFG/DAT/DRV/PUL) of any bank  */
 	u8 pull_regs_offset;	/* Pull Register's offset */
 	u8 dlevel_pins_per_reg; /* How many pins does a 'Multi-Driving Register' contain? */
 	u8 dlevel_pins_bits;	/* How many bits does a 'Multi-Driving Register' use for a pin? */
@@ -178,12 +185,12 @@ struct sunxi_pinctrl_hw_info {
 	u32 mode_ctrl_vccio_bit;
 	u32 power_mode_val_reg;  /* GPIO_POW_VAL: the register read the voltage withstand */
 	u32 mode_val_vccio_bit;
+	u32 power_val_pf_bit;
 	u32 pio_pow_ctrl_reg;
 	bool power_mode_reverse;  /* true: GPIO_POW_VAL and GPIO_POW_MID_SEL bit reverse, A523 SOC, for example */
 	bool auto_power_detect_mode_reverse;  /* true: GPIO_PWR_VAL bit reverse, for example A733-B SoC */
 	bool power_mode_detect;  /* true: Config voltage withstand by reading power_mode_val_reg */
 	bool data_reg_irregular;
-	bool data_set_mode_select; /* true: change the value of pin by data_set and data_cle reg */
 	u32 data_mem_size;
 };
 
@@ -204,6 +211,16 @@ struct sunxi_desc_pin {
 	struct sunxi_desc_function	*functions;
 };
 
+#if IS_ENABLED(CONFIG_AW_AMP_SYS_RSC_MANAGER)
+struct gpio_group {
+	sunxi_amp_rsc_t hw_rsc_arr[PINS_PER_BANK];
+};
+
+struct bank_pins_mask {
+	uint32_t pin_irq_mask;
+};
+#endif
+
 struct sunxi_pinctrl_desc {
 	const struct sunxi_desc_pin	*pins;
 	unsigned int			npins;
@@ -219,6 +236,7 @@ struct sunxi_pinctrl_desc {
 	enum sunxi_desc_bias_voltage	io_bias_cfg_variant;
 	bool				pf_power_source_switch;
 	bool				auto_power_source_switch;
+	bool				is_data_reg_atomic_access;
 	enum sunxi_pinctrl_hw_type	hw_type;
 };
 
@@ -263,6 +281,10 @@ struct sunxi_pinctrl {
 	struct pinctrl_dev		*pctl_dev;
 	unsigned long			variant;
 	struct pad_route_addr		pad_addr[2];
+#if IS_ENABLED(CONFIG_AW_AMP_SYS_RSC_MANAGER)
+	struct gpio_group 		*gpio_group_arr;
+	struct bank_pins_mask		*bank_pins_mask;
+#endif
 };
 
 #define SUNXI_PIN(_pin, ...)					\

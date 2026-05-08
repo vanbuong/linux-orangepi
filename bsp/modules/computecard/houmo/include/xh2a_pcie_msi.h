@@ -1,0 +1,98 @@
+// SPDX-License-Identifier: GPL-2.0
+/*
+ * Copyright(c) 2024 Houmo AI Inc.
+ * Author: hongxing.ma<hongxing.ma@houmo.ai>
+ */
+
+#ifndef _XH2A_PCIE_MSI_H_
+#define _XH2A_PCIE_MSI_H_
+
+/* MSI usage:
+ * msi 2:0 -- for ipuss
+ * msi 3 -- for aoss
+ * msi 4 -- for cpuss
+ * msi 4 -- for periss
+ * msi 5 -- for ctc
+ * msi 6 -- for ipuss profile
+ * msi 7 -- for pcie hdma
+ */
+#define XH2A_PCIE_MSI_NVEC  (8)
+typedef enum
+{
+    XH2A_PCIE_MSI_ID_IPUSS_C0T0 = 0,
+    XH2A_PCIE_MSI_ID_IPUSS_C0T1 = 0,
+    XH2A_PCIE_MSI_ID_IPUSS_C0T2 = 0,
+    XH2A_PCIE_MSI_ID_IPUSS_C0T3 = 0,
+    XH2A_PCIE_MSI_ID_IPUSS_C1T0 = 1,
+    XH2A_PCIE_MSI_ID_IPUSS_C1T1 = 1,
+    XH2A_PCIE_MSI_ID_IPUSS_C1T2 = 1,
+    XH2A_PCIE_MSI_ID_IPUSS_C1T3 = 1,
+    XH2A_PCIE_MSI_ID_IPUSS_C0C1 = 2,
+    XH2A_PCIE_MSI_ID_AOSS       = 3,
+    XH2A_PCIE_MSI_ID_CPUSS      = 4,
+    XH2A_PCIE_MSI_ID_PERISS     = 4,
+    XH2A_PCIE_MSI_ID_CTC        = 5,
+    XH2A_PCIE_MSI_ID_CTC0_C0    = XH2A_PCIE_MSI_ID_CTC,
+    XH2A_PCIE_MSI_ID_CTC0_C1    = XH2A_PCIE_MSI_ID_CTC,
+    XH2A_PCIE_MSI_ID_CTC0_PHY   = XH2A_PCIE_MSI_ID_CTC,
+    XH2A_PCIE_MSI_ID_CTC1_C0    = XH2A_PCIE_MSI_ID_CTC,
+    XH2A_PCIE_MSI_ID_CTC1_C1    = XH2A_PCIE_MSI_ID_CTC,
+    XH2A_PCIE_MSI_ID_CTC1_PHY   = XH2A_PCIE_MSI_ID_CTC,
+    XH2A_PCIE_MSI_ID_CTC2_C0    = XH2A_PCIE_MSI_ID_CTC,
+    XH2A_PCIE_MSI_ID_CTC2_C1    = XH2A_PCIE_MSI_ID_CTC,
+    XH2A_PCIE_MSI_ID_CTC2_PHY   = XH2A_PCIE_MSI_ID_CTC,
+    XH2A_PCIE_MSI_ID_CTC3_C0    = XH2A_PCIE_MSI_ID_CTC,
+    XH2A_PCIE_MSI_ID_CTC3_C1    = XH2A_PCIE_MSI_ID_CTC,
+    XH2A_PCIE_MSI_ID_CTC3_PHY   = XH2A_PCIE_MSI_ID_CTC,
+    XH2A_PCIE_MSI_ID_PROFILE_C0 = 6,
+    XH2A_PCIE_MSI_ID_PROFILE_C1 = 6,
+    XH2A_PCIE_MSI_ID_HDMA       = 7,
+    XH2A_PCIE_MSI_ID_MAX        = XH2A_PCIE_MSI_NVEC,
+} XH2A_PCIE_MSI_ID;
+
+/* MSI mapping table */
+#define XH2A_PCIE_MSI_MAPPING_3_0         \
+    (XH2A_PCIE_MSI_ID_IPUSS_C0T0 << 0)  | \
+    (XH2A_PCIE_MSI_ID_IPUSS_C0T1 << 8)  | \
+    (XH2A_PCIE_MSI_ID_IPUSS_C0T2 << 16) | \
+    (XH2A_PCIE_MSI_ID_IPUSS_C0T3 << 24)
+#define XH2A_PCIE_MSI_MAPPING_7_4         \
+    (XH2A_PCIE_MSI_ID_IPUSS_C1T0 << 0)  | \
+    (XH2A_PCIE_MSI_ID_IPUSS_C1T1 << 8)  | \
+    (XH2A_PCIE_MSI_ID_IPUSS_C1T2 << 16) | \
+    (XH2A_PCIE_MSI_ID_IPUSS_C1T3 << 24)
+#define XH2A_PCIE_MSI_MAPPING_11_8        \
+    (XH2A_PCIE_MSI_ID_IPUSS_C0C1 << 0)  | \
+    (XH2A_PCIE_MSI_ID_AOSS << 8)        | \
+    (XH2A_PCIE_MSI_ID_CPUSS << 16)      | \
+    (XH2A_PCIE_MSI_ID_PERISS << 24)
+#define XH2A_PCIE_MSI_MAPPING_15_12       \
+    (XH2A_PCIE_MSI_ID_CTC0_C0 << 0)     | \
+    (XH2A_PCIE_MSI_ID_CTC0_C1 << 8)     | \
+    (XH2A_PCIE_MSI_ID_CTC0_PHY << 16)   | \
+    (XH2A_PCIE_MSI_ID_CTC1_C0 << 24)
+#define XH2A_PCIE_MSI_MAPPING_19_16       \
+    (XH2A_PCIE_MSI_ID_CTC1_C1 << 0)     | \
+    (XH2A_PCIE_MSI_ID_CTC1_PHY << 8)    | \
+    (XH2A_PCIE_MSI_ID_CTC2_C0 << 16)    | \
+    (XH2A_PCIE_MSI_ID_CTC2_C1 << 24)
+#define XH2A_PCIE_MSI_MAPPING_23_20       \
+    (XH2A_PCIE_MSI_ID_CTC2_PHY << 0)    | \
+    (XH2A_PCIE_MSI_ID_CTC3_C0 << 8)     | \
+    (XH2A_PCIE_MSI_ID_CTC3_C1 << 16)    | \
+    (XH2A_PCIE_MSI_ID_CTC3_PHY << 24)
+#define XH2A_PCIE_MSI_MAPPING_27_24       \
+    (XH2A_PCIE_MSI_ID_PROFILE_C0 << 0)  | \
+    (XH2A_PCIE_MSI_ID_PROFILE_C0 << 8)  | \
+    (XH2A_PCIE_MSI_ID_PROFILE_C0 << 16) | \
+    (XH2A_PCIE_MSI_ID_PROFILE_C0 << 24)
+#define XH2A_PCIE_MSI_MAPPING_31_28       \
+    (XH2A_PCIE_MSI_ID_PROFILE_C1 << 0)  | \
+    (XH2A_PCIE_MSI_ID_PROFILE_C1 << 8)  | \
+    (XH2A_PCIE_MSI_ID_PROFILE_C1 << 16) | \
+    (XH2A_PCIE_MSI_ID_PROFILE_C1 << 24)
+
+/* MSI ID CPUSS shared mask */
+#define XH2A_PCIE_MSI_ID_CPUSS_MASK 0x101
+
+#endif

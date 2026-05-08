@@ -229,4 +229,22 @@ static __always_inline int wait_field_equ(const volatile void  __iomem *addr, u3
 #define wait_field_set_maysleep(addr, bits, sleep_us, timeout_us)	wait_bits_set_maysleep(addr, bits, sleep_us, timeout_us)
 #define wait_field_cleared_maysleep(addr, bits, sleep_us, timeout_us)	wait_bits_cleared_maysleep(addr, bits, sleep_us, timeout_us)
 
+static __always_inline int wait_field_equ_maysleep(const volatile void  __iomem *addr, u32 bits, u32 val_on_bits, unsigned long sleep_us, unsigned int timeout_us)
+{
+	int i, err;
+	u32 read_val;
+
+	if (WARN_ON(!bits))
+		return -EINVAL;
+
+	/* @bits should always be greater than 0 */
+	for (i = 0; !(bits & (1 << i)); )
+		i++;
+
+	err = readl_poll_timeout(addr, read_val, ((read_val & bits) == (val_on_bits << i)), sleep_us, timeout_us);
+	if (err)
+		pr_err("wait_field_equ(): Timeout. addr=0x%p, bits=0x%x\n", addr, bits);
+	return err;
+}
+
 #endif

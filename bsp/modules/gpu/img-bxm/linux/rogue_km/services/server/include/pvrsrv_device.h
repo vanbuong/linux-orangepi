@@ -213,6 +213,9 @@ typedef PVRSRV_ERROR
 
 #endif /* defined(SUPPORT_TRUSTED_DEVICE) */
 
+typedef PVRSRV_ERROR
+(*PFN_TD_SYSTEM_SECURE_CONFIG)(IMG_HANDLE hSysData);
+
 #if defined(SUPPORT_GPUVIRT_VALIDATION)
 typedef void (*PFN_SYS_INIT_FIREWALL)(IMG_HANDLE hSysData,
                                       IMG_UINT64[GPUVIRT_VALIDATION_NUM_REGIONS][GPUVIRT_VALIDATION_NUM_OS],
@@ -352,6 +355,8 @@ struct _PVRSRV_DEVICE_CONFIG_
 	IMG_CHAR *pszSecureDMAHeapName;
 #endif
 #endif /* defined(SUPPORT_TRUSTED_DEVICE) */
+
+	PFN_TD_SYSTEM_SECURE_CONFIG pfnTDSystemSecureConfig;
 
 	/*! Function that does device feature specific system layer initialisation */
 	PFN_SYS_DEV_FEAT_DEP_INIT	pfnSysDevFeatureDepInit;

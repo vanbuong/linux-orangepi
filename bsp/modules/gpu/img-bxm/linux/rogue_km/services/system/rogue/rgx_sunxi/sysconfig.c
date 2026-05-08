@@ -92,6 +92,9 @@ CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 static void SetFrequency(IMG_HANDLE hSysData, IMG_UINT32 ui32Frequency)
 {
 	PVR_DPF((PVR_DBG_MESSAGE, "%s %u", __func__, ui32Frequency));
+
+	//struct sunxi_platform *sunxi_private_data = (struct sunxi_platform *)hSysData;
+
 	sunxiSetFrequency(ui32Frequency);
 }
 
@@ -100,7 +103,58 @@ static void SetVoltage(IMG_HANDLE hSysData, IMG_UINT32 ui32Voltage)
 	PVR_DPF((PVR_DBG_MESSAGE, "%s %u", __func__, ui32Voltage));
 	sunxiSetVoltage(ui32Voltage);
 }
+
+#if defined(CONFIG_DEVFREQ_THERMAL)
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+static unsigned long get_static_power(struct devfreq *df,
+					      unsigned long voltage)
+#else
+static unsigned long get_static_power(unsigned long voltage)
 #endif
+{
+	return sunxi_get_static_power(voltage);
+}
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 10, 0)
+static unsigned long get_dynamic_power(struct devfreq *df,
+					       unsigned long freq,
+					       unsigned long voltage)
+#else
+static unsigned long get_dynamic_power(unsigned long freq,
+					       unsigned long voltage)
+#endif
+{
+	return sunxi_get_dynamic_power(freq, voltage);
+}
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0))
+static int get_real_power(struct devfreq *df,
+						   u32 *power,
+					       unsigned long freq,
+					       unsigned long voltage)
+{
+	if (!df || !power)
+		return -EINVAL;
+
+	*power = get_static_power(df, voltage) +
+		     get_dynamic_power(df, freq, voltage);
+
+	return 0;
+}
+#endif /* LINUX_VERSION_CODE >= KERNEL_VERSION(5, 11, 0) */
+
+static struct devfreq_cooling_power sPowerOps = {
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(5, 11, 0))
+	.get_static_power = get_static_power,
+	.get_dynamic_power = get_dynamic_power,
+#else
+	.get_real_power = get_real_power,
+#endif /* LINUX_VERSION_CODE < KERNEL_VERSION(5, 11, 0) */
+};
+#endif //~THERMAL
+
+#endif //~dvfs
 
 /*
 	CPU to Device physical address translation
@@ -220,7 +274,7 @@ PVRSRV_ERROR SysDevInit(void *pvOSDevice, PVRSRV_DEVICE_CONFIG **ppsDevConfig)
 	PHYS_HEAP_CONFIG *pasPhysHeaps;
 	IMG_UINT32 uiPhysHeapCount;
 	PVRSRV_ERROR eError;
-	struct sunxi_platform *sunxi_data;
+	struct sunxi_platform *sunxi_private_data;
 	struct device *dev = (struct device *)pvOSDevice;
 
 	pr_info(LOG_TAG "%s start!\n", __func__);
@@ -228,7 +282,7 @@ PVRSRV_ERROR SysDevInit(void *pvOSDevice, PVRSRV_DEVICE_CONFIG **ppsDevConfig)
 		pr_err(LOG_TAG " sunxi_platform_init failed\n");
 		return PVRSRV_ERROR_INIT_FAILURE;
 	}
-	sunxi_data = (struct sunxi_platform *)dev->platform_data;
+	sunxi_private_data = (struct sunxi_platform *)dev->platform_data;
 
 #if defined(CONFIG_ARM64)
 	dma_set_mask(pvOSDevice, DMA_BIT_MASK(48));
@@ -256,7 +310,7 @@ PVRSRV_ERROR SysDevInit(void *pvOSDevice, PVRSRV_DEVICE_CONFIG **ppsDevConfig)
 	}
 
 	/* Setup RGX specific timing data */
-	psRGXTimingInfo->ui32CoreClockSpeed        = clk_get_rate(sunxi_data->clk_core);
+	psRGXTimingInfo->ui32CoreClockSpeed        = clk_get_rate(sunxi_private_data->clk_core);
 	psRGXTimingInfo->bEnableActivePM           = IMG_TRUE;
 	psRGXTimingInfo->bEnableRDPowIsland        = IMG_FALSE;
 	psRGXTimingInfo->ui32ActivePMLatencyms     = SYS_RGX_ACTIVE_POWER_LATENCY_MS;
@@ -271,9 +325,9 @@ PVRSRV_ERROR SysDevInit(void *pvOSDevice, PVRSRV_DEVICE_CONFIG **ppsDevConfig)
 	psDevConfig->pfnSysDevFeatureDepInit = SysDevFeatureDepInit;
 
 	/* Device setup information */
-	psDevConfig->sRegsCpuPBase.uiAddr   = sunxi_data->reg_base;
-	psDevConfig->ui32RegsSize           = sunxi_data->reg_size;
-	psDevConfig->ui32IRQ                = sunxi_data->irq_num;
+	psDevConfig->sRegsCpuPBase.uiAddr   = sunxi_private_data->reg_base;
+	psDevConfig->ui32RegsSize           = sunxi_private_data->reg_size;
+	psDevConfig->ui32IRQ                = sunxi_private_data->irq_num;
 
 	psDevConfig->pasPhysHeaps			= pasPhysHeaps;
 	psDevConfig->ui32PhysHeapCount		= uiPhysHeapCount;
@@ -289,7 +343,7 @@ PVRSRV_ERROR SysDevInit(void *pvOSDevice, PVRSRV_DEVICE_CONFIG **ppsDevConfig)
 	psDevConfig->pfnClockFreqGet        = sunxi_get_device_clk_rate;
 
 	psDevConfig->hDevData               = psRGXData;
-	psDevConfig->hSysData               = sunxi_data;
+	psDevConfig->hSysData               = sunxi_private_data;
 
 	/* Setup other system specific stuff */
 #if defined(SUPPORT_ION)
@@ -301,17 +355,20 @@ PVRSRV_ERROR SysDevInit(void *pvOSDevice, PVRSRV_DEVICE_CONFIG **ppsDevConfig)
 
 #if defined(SUPPORT_PDVFS) || defined(SUPPORT_LINUX_DVFS)
 	/* Fake DVFS configuration used purely for testing purposes */
-	psDevConfig->sDVFS.sDVFSDeviceCfg.pasOPPTable = sunxi_data->asOPPTable;
-	psDevConfig->sDVFS.sDVFSDeviceCfg.ui32OPPTableSize = sunxi_data->ui32OPPTableSize;
+	psDevConfig->sDVFS.sDVFSDeviceCfg.pasOPPTable = sunxi_private_data->asOPPTable;
+	psDevConfig->sDVFS.sDVFSDeviceCfg.ui32OPPTableSize = sunxi_private_data->ui32OPPTableSize;
 	psDevConfig->sDVFS.sDVFSDeviceCfg.pfnSetFrequency = SetFrequency;
 	psDevConfig->sDVFS.sDVFSDeviceCfg.pfnSetVoltage = SetVoltage;
-
+#if defined(CONFIG_DEVFREQ_THERMAL)
+	psDevConfig->sDVFS.sDVFSDeviceCfg.psPowerOps = &sPowerOps;
+#endif
 	psDevConfig->sDVFS.sDVFSDeviceCfg.ui32PollMs = 200;
 	psDevConfig->sDVFS.sDVFSDeviceCfg.bIdleReq = IMG_TRUE;
 	psDevConfig->sDVFS.sDVFSGovernorCfg.ui32UpThreshold = 90;
 	psDevConfig->sDVFS.sDVFSGovernorCfg.ui32DownDifferential = 10;
 #endif
 
+	psDevConfig->pfnTDSystemSecureConfig = sunxi_secure_config;
 	*ppsDevConfig = psDevConfig;
 
 	pr_info(LOG_TAG "%s end!\n", __func__);

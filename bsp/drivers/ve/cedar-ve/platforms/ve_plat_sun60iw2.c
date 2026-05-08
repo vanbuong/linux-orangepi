@@ -33,7 +33,7 @@
 #define VE_REG_VCUENC_INT_STA	(VE_REG_VCUENC_BASE + 0x28)
 #define VE_REG_VCUDEC_INT_STA	(VE_REG_VCUDEC_BASE + 0x28)
 
-/* dvfs v0.31 */
+/* dvfs v0.92 */
 struct ve_dvfs_pair {
 	unsigned int dvfs_index;
 	const char dvfs_name[64];
@@ -56,6 +56,7 @@ static struct ve_dvfs_pair ve_dvfs[] = {
 	{0x08, "opp-vf0800", "opp-hz-0", "opp-microvolt-0"},
 	{0x14, "opp-vf0401", "opp-hz-0", "opp-microvolt-0"},
 	{0x15, "opp-vf0501", "opp-hz-0", "opp-microvolt-0"},
+	{0x35, "opp-vf0503", "opp-hz-0", "opp-microvolt-0"},
 };
 
 enum VE_DVFS_LEVEL {
@@ -342,6 +343,7 @@ int ve_dvfs_get_attr(struct cedar_dev *cedar_devp)
 	u32 dvfs = 0;
 	unsigned int dvfs_arry_size = 0, opp_volt = 0;
 	const char *dvfs_name = NULL;
+	int array_size = 0;
 
 	/* enable VF */
 	opp_table_node = of_parse_phandle(node, "operating-points-v2", 0);
@@ -383,8 +385,9 @@ int ve_dvfs_get_attr(struct cedar_dev *cedar_devp)
 		attr->dvfs_array[j].ve_freq = (unsigned int)opp_hz / 1000000;
 		of_property_read_u32(opp_node, ve_dvfs[i].dvfs_volt_name, &opp_volt);
 		attr->dvfs_array[j].voltage = (unsigned int)opp_volt / 1000;
-		if (attr->dvfs_array[j].voltage == cedar_devp->voltage)
-			attr->default_freq = attr->dvfs_array[j].ve_freq;
+		attr->default_freq = attr->dvfs_array[j].ve_freq;
+		// if (attr->dvfs_array[j].voltage == cedar_devp->voltage)
+			// attr->default_freq = attr->dvfs_array[j].ve_freq;
 		j += 1;
 	}
 	if (!attr->default_freq) {
@@ -392,6 +395,13 @@ int ve_dvfs_get_attr(struct cedar_dev *cedar_devp)
 		VE_LOGW("get vf table failed, default %uMHz\n", attr->default_freq);
 	}
 	VE_LOGV("voltage %d ve_freq_default %d", cedar_devp->voltage, attr->default_freq);
+
+	array_size = sizeof(dvfs_performat) / sizeof(struct ve_performat_info);
+	for (i = 0; i < array_size; ++i) {
+		if (dvfs_performat[i].end_pixels == L_MAX_END_PIXELS) {
+			dvfs_performat[i].ve_freq = attr->default_freq;
+		}
+	}
 
 	/* enable DF */
 	cedar_devp->case_load_channels = MAX_VE_LOAD_PARAM_CHANNEL;
@@ -585,6 +595,17 @@ int ioctl_flush_cache_range(unsigned long arg,  uint8_t user, struct cedar_dev *
 	cedar_dma_flush_range((void *)data.start, (void *)data.end);
 	if (copy_to_user((void __user *)arg, &data, sizeof(data)))
 		return -EFAULT;
+
+	return 0;
+}
+
+int ioctl_invalid_cache_range(unsigned long arg, uint8_t user, struct cedar_dev *cedar_devp)
+{
+	(void)arg;
+	(void)user;
+	(void)cedar_devp;
+
+	VE_LOGW("unsupport api\n");
 
 	return 0;
 }

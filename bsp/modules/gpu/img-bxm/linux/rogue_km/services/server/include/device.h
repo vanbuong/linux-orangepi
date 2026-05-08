@@ -222,6 +222,7 @@ typedef struct DI_VZ_DATA DI_VZ_DATA;
 typedef struct _PVRSRV_DEVICE_DEBUG_INFO_
 {
 	DI_GROUP *psGroup;
+	DI_ENTRY *psGetUtilStatsErrorEntry;
 	DI_ENTRY *psDumpDebugEntry;
 #ifdef SUPPORT_RGX
 	DI_ENTRY *psFWTraceEntry;

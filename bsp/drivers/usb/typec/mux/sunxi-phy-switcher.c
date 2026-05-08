@@ -22,6 +22,7 @@
 #include <linux/extcon.h>
 #include <linux/extcon-provider.h>
 #include <linux/power_supply.h>
+#include <linux/errno.h>
 
 struct sunxi_phy_switcher {
 	struct mutex lock; /* protects the cached conf register */
@@ -374,7 +375,9 @@ static int sunxi_phy_switcher_probe(struct platform_device *pdev)
 	/* default manaual external pull up/down, auxp pull down and auxn pull up*/
 	sprintf(gpio_name, "aux_p");
 	phy_switcher->auxp_gpio = of_get_named_gpio(node, gpio_name, 0);
-	if (!gpio_is_valid(phy_switcher->auxp_gpio)) {
+	if (phy_switcher->auxp_gpio == -ENOENT) {
+		pr_info("aux_p pull external up/down pin for phy mux not found, may be useless!\n");
+	} else if (!gpio_is_valid(phy_switcher->auxp_gpio)) {
 		pr_warn("get aux_p pull external up/down pin for phy mux failed, may be useless!\n");
 	} else {
 		/* init hotplug state to plugout */
@@ -384,7 +387,9 @@ static int sunxi_phy_switcher_probe(struct platform_device *pdev)
 
 	sprintf(gpio_name, "aux_n");
 	phy_switcher->auxn_gpio = of_get_named_gpio(node, gpio_name, 0);
-	if (!gpio_is_valid(phy_switcher->auxn_gpio)) {
+	if (phy_switcher->auxn_gpio == -ENOENT) {
+		pr_info("aux_n pull external up/down pin for phy mux not found, may be useless!\n");
+	} else if (!gpio_is_valid(phy_switcher->auxn_gpio)) {
 		pr_warn("get aux_n pull external up/down pin for phy mux failed, may be useless!\n");
 	} else {
 		/* init hotplug state to plugout */

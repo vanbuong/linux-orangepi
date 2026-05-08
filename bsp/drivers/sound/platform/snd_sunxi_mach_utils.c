@@ -369,7 +369,7 @@ int asoc_simple_parse_ucfmt(struct device_node *node, char *prefix,
 	snprintf(prop, sizeof(prop), "%sdata-late", prefix);
 	ret = of_property_read_u32(node, "data-late", &temp_val);
 	if (ret < 0 || temp_val > 3) {
-		SND_LOG_WARN("set data late to default\n");
+		SND_LOG_DEBUG("set data late to default\n");
 		if (dai_ucfmt->fmt == SND_SOC_DAIFMT_I2S)
 			dai_ucfmt->data_late = 1;
 		else if (dai_ucfmt->fmt == SND_SOC_DAIFMT_RIGHT_J

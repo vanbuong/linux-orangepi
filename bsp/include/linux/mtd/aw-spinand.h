@@ -7,6 +7,10 @@
 #include <linux/mutex.h>
 #include <linux/spi/spi.h>
 
+/* boot param */
+#define BOOT_PARAM_MAGIC		"bootpara"
+#define BOOT_PARAM_SIZE			4096
+
 #define AW_OOB_SIZE_PER_PHY_PAGE (16)
 /**
  * In order to fix for nftl nand, make they has the same address
@@ -35,6 +39,24 @@ struct aw_spinand_ecc;
 struct aw_spinand_info;
 struct aw_spinand_phy_info;
 struct aw_spinand_chip_ops;
+
+enum ecc_limit_err {
+	ECC_TYPE_ERR = 0,
+	BIT3_LIMIT2_TO_6_ERR7,
+	BIT3_LIMIT3_TO_6_ERR7,
+	BIT2_LIMIT1_ERR2,
+	BIT2_LIMIT1_ERR2_TO_ERR3,
+	BIT2_LIMIT2_ERR3,
+	BIT2_LIMIT1_ERR2_LIMIT3,
+	BIT2_ERR2_LIMIT3,
+	BIT4_LIMIT3_TO_4_ERR15,
+	BIT3_LIMIT3_TO_4_ERR7,
+	BIT3_LIMIT5_ERR2,
+	BIT4_LIMIT6_TO_7_ERR8_LIMIT_12,
+	BIT4_LIMIT5_TO_8_ERR9_TO_15,
+	BIT4_LIMIT5_TO_8_ERR15,
+	BIT4_BY_LOW2BITS,
+};
 
 struct aw_spinand_chip {
 	struct aw_spinand_chip_ops *ops;
@@ -150,7 +172,12 @@ typedef struct {
 	__u32       physic_block_reserved;
 	__u32	    sample_mode;
 	__u32	    sample_delay;
-	__u32       Reserved[4];
+	__u32		EccFlag;
+	enum ecc_limit_err EccType;
+	__u32 boot_offset;
+	__u32 boot_size;
+	__u32 boot_param_offset;
+	__u32       Reserved[2];
 } boot_spinand_para_t;
 
 typedef struct {
@@ -202,8 +229,29 @@ typedef struct _normal_gpio_cfg {
 } normal_gpio_cfg;
 
 /******************************************************************************/
+/*                                boot param                                  */
+/******************************************************************************/
+
+struct sunxi_boot_parameter_header {
+	u8 magic[8]; //bootpara
+	u32 version; // describe the region version
+	u32 check_sum;
+	u32 length;
+	u8 reserved[12];
+};
+struct sunxi_boot_param_region {
+	struct sunxi_boot_parameter_header header;//32
+	char sdmmc_info[256 - 32];
+	char nand_info[256];
+	char spiflash_info[256];
+	char ddr_info[512];
+	u8 reserved[2784];// = 4096 - sdmmc_size - nand_size - spi_size - ddr_size - 32
+};
+
+/******************************************************************************/
 /*                              head of Boot0                                 */
 /******************************************************************************/
+#define BOOT0_MAGIC                     "eGON.BT0"
 typedef struct _boot0_private_head_t {
 	unsigned int prvt_head_size;
 	char prvt_head_vsn[4];        /* the version of boot0_private_head_t */
