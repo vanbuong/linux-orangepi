@@ -33,6 +33,8 @@
 
 #if defined(CONFIG_ARCH_SUN55IW3)
 #define SMC_REG_BASE 0x03110000
+#elif defined(CONFIG_ARCH_SUN65IW1)
+#define SMC_REG_BASE 0x0a000000
 #else
 #error "Need configure SMC for GPU"
 #endif
@@ -44,8 +46,8 @@ static struct sunxi_data *sunxi_data;
 static struct kbase_device *s_kbdev;
 
 void kbase_pm_get_dvfs_metrics(struct kbase_device *kbdev,
-			       struct kbasep_pm_metrics *last,
-			       struct kbasep_pm_metrics *diff);
+				       struct kbasep_pm_metrics *last,
+				       struct kbasep_pm_metrics *diff);
 
 static inline void ioremap_regs(void)
 {
@@ -165,15 +167,15 @@ static int parse_dts_and_fex(struct kbase_device *kbdev, struct sunxi_data *sunx
 }
 
 static ssize_t scene_ctrl_cmd_show(struct device *dev,
-				struct device_attribute *attr,
-				char *buf)
+					struct device_attribute *attr,
+					char *buf)
 {
 	return sprintf(buf, "%d\n", sunxi_data->sence_ctrl);
 }
 
 static ssize_t scene_ctrl_cmd_store(struct device *dev,
-				struct device_attribute *attr,
-				const char *buf, size_t count)
+					struct device_attribute *attr,
+					const char *buf, size_t count)
 {
 	int err;
 	unsigned long val;
@@ -737,7 +739,8 @@ static ssize_t gpu_opp_ops_store(struct device *dev,
 		sunxi_data->max_u_volt = dev_pm_opp_get_voltage(opp);
 	dev_pm_opp_put(opp);
 
-	clk_set_rate(sunxi_data->pll_gpu, freq);
+	if (!IS_ERR_OR_NULL(sunxi_data->pll_gpu))
+		clk_set_rate(sunxi_data->pll_gpu, freq);
 
 free_input_table:
 	kfree(freq_MHz);
@@ -775,6 +778,10 @@ int sunxi_platform_init(struct kbase_device *kbdev)
 #endif
 	unsigned long freq = SUNXI_BAK_CLK_RATE;
 	unsigned long u_volt = 950000;
+	int clk_idx = 0;
+#if IS_ENABLED(CONFIG_ARCH_SUN65IW1) || IS_ENABLED(CONFIG_REGULATOR)
+	unsigned int i = 0;
+#endif
 
 	sunxi_data = (struct sunxi_data *)kzalloc(sizeof(struct sunxi_data), GFP_KERNEL);
 	if (IS_ERR_OR_NULL(sunxi_data)) {
@@ -795,7 +802,7 @@ int sunxi_platform_init(struct kbase_device *kbdev)
 	sunxi_data->independent_power = 0;
 #endif
 
-	sunxi_data->pll_gpu = of_clk_get(kbdev->dev->of_node, 2);
+	sunxi_data->pll_gpu = devm_clk_get(kbdev->dev, "clk_parent");
 	if (IS_ERR_OR_NULL(sunxi_data->pll_gpu)) {
 		/* pll-gpu is one of the clk-gpu parent clks, which is
 		 * defined in ccu-sun55iw3.c.
@@ -838,12 +845,13 @@ int sunxi_platform_init(struct kbase_device *kbdev)
 		u_volt = regulator_get_voltage(kbdev->regulators[0]);
 #endif
 	clk_set_rate(kbdev->clocks[0], freq);
-	clk_set_rate(sunxi_data->pll_gpu, freq);
+	if (!IS_ERR_OR_NULL(sunxi_data->pll_gpu))
+		clk_set_rate(sunxi_data->pll_gpu, freq);
 #endif
 
-	sunxi_data->reset = devm_reset_control_get(kbdev->dev, NULL);
-	if (IS_ERR_OR_NULL(sunxi_data->reset)) {
-		dev_info(kbdev->dev, "sunxi init gpu Failed to get reset ctrl\n");
+	sunxi_data->reset[0] = devm_reset_control_get(kbdev->dev, "rst_bus_gpu");
+	if (IS_ERR_OR_NULL(sunxi_data->reset[0])) {
+		dev_info(kbdev->dev, "sunxi init gpu Failed to get rst_bus_gpu reset ctrl\n");
 	}
 
 	sunxi_data->max_freq = freq;
@@ -865,7 +873,10 @@ int sunxi_platform_init(struct kbase_device *kbdev)
 	 * In previous kbase_device_pm_init() phase, the pll-gpu and gpu
 	 * clk have been initialized. So only need to deassert gpu reset.
 	 */
-	reset_control_deassert(sunxi_data->reset);
+	if (!IS_ERR_OR_NULL(sunxi_data->reset[0]))
+		reset_control_deassert(sunxi_data->reset[0]);
+	if (!IS_ERR_OR_NULL(sunxi_data->reset[1]))
+		reset_control_deassert(sunxi_data->reset[1]);
 #endif
 
 #ifdef CONFIG_MALI_DEVFREQ
@@ -873,6 +884,7 @@ int sunxi_platform_init(struct kbase_device *kbdev)
 	kbdev->current_voltages[0] = u_volt;
 #endif
 	sunxi_data->current_freq = freq;
+	sunxi_data->last_pll_gpu_freq = freq;
 	sunxi_data->current_u_volt = u_volt;
 
 	if (sysfs_create_group(&kbdev->dev->kobj, &sunxi_gpu_attribute_group)) {
@@ -894,8 +906,11 @@ void sunxi_platform_term(struct kbase_device *kbdev)
 {
 	sysfs_remove_group(&kbdev->dev->kobj, &sunxi_gpu_attribute_group);
 
-#if defined(CONFIG_ARCH_SUN55IW3)
-	reset_control_deassert(sunxi_data->reset);
+#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN65IW1)
+	if (!IS_ERR_OR_NULL(sunxi_data->reset[0]))
+		reset_control_deassert(sunxi_data->reset[0]);
+	if (!IS_ERR_OR_NULL(sunxi_data->reset[1]))
+		reset_control_deassert(sunxi_data->reset[1]);
 #endif
 
 	iounmap_regs();
@@ -971,8 +986,16 @@ static void enable_gpu_power_control(struct kbase_device *kbdev)
 	 * cannot be awakened.
 	 */
 	if (sunxi_data->is_resume_pll_gpu) {
-		clk_set_parent(kbdev->clocks[0], sunxi_data->pll_gpu);
-		kbase_devfreq_force_freq(kbdev, sunxi_data->max_freq);
+		if (!IS_ERR_OR_NULL(sunxi_data->pll_gpu)) {
+			clk_set_parent(kbdev->clocks[0], sunxi_data->pll_gpu);
+
+			if (kbdev->devfreq) {
+				kbase_devfreq_force_freq(kbdev, sunxi_data->max_freq);
+				dev_dbg(kbdev->dev, "gpu sync freq between dvfs and hardware\n");
+			}
+		} else {
+			dev_err(kbdev->dev, "pll_gpu is not available for resume\n");
+		}
 		sunxi_data->is_resume_pll_gpu = false;
 	}
 
@@ -982,12 +1005,26 @@ static void enable_gpu_power_control(struct kbase_device *kbdev)
 		else if (!__clk_is_enabled(kbdev->clocks[i]))
 			WARN_ON(clk_prepare_enable(kbdev->clocks[i]));
 	}
+
+	if (!sunxi_data->is_perclk_set) {
+		for (i = 0; i < SUNXI_MAX_CLOCKS; i++) {
+			if (sunxi_data->sunxi_clocks[i]) {
+				int ret = clk_prepare_enable(sunxi_data->sunxi_clocks[i]);
+				if (ret < 0) {
+					sunxi_err(kbdev->dev, "prepare %s failed %d\n",
+							  SUNXI_CLOCK_NAMES[i], ret);
+				}
+			}
+		}
+		sunxi_data->is_perclk_set = true;
+	}
 }
 
 static void disable_gpu_power_control(struct kbase_device *kbdev)
 {
 	unsigned int i;
 	dev_dbg(kbdev->dev, "%s\n", __func__);
+	sunxi_data->is_resume_pll_gpu = true;
 
 	for (i = 0; i < kbdev->nr_clocks; i++) {
 		if (WARN_ON(kbdev->clocks[i] == NULL))
@@ -997,6 +1034,27 @@ static void disable_gpu_power_control(struct kbase_device *kbdev)
 			WARN_ON(__clk_is_enabled(kbdev->clocks[i]));
 		}
 	}
+
+	if (sunxi_data->is_perclk_set) {
+		for (i = 0; i < SUNXI_MAX_CLOCKS; i++) {
+			if (sunxi_data->sunxi_clocks[i]) {
+				clk_disable_unprepare(sunxi_data->sunxi_clocks[i]);
+			}
+		}
+	}
+
+#if IS_ENABLED(CONFIG_ARCH_SUN65IW1)
+	if (sunxi_data->is_perclk_set) {
+		for (i = 0; i < BASE_MAX_NR_EXTRA_CLOCKS; i++) {
+			if (sunxi_data->extra_gpu_clk[i]) {
+				clk_disable_unprepare(sunxi_data->extra_gpu_clk[i]);
+			}
+		}
+	}
+#endif
+
+	if (sunxi_data->is_perclk_set)
+		sunxi_data->is_perclk_set = false;
 
 /*
  * If GPU use independent_power, user need to care regulators
@@ -1018,8 +1076,12 @@ static int sunxi_pm_callback_power_on(struct kbase_device *kbdev)
 {
 	int ret = 1; /* Assume GPU has been powered off */
 	int error;
+	unsigned long flags;
 
 	dev_dbg(kbdev->dev, "%s %pK\n", __func__, (void *)kbdev->dev->pm_domain);
+	spin_lock_irqsave(&kbdev->hwaccess_lock, flags);
+	WARN_ON(kbdev->pm.backend.gpu_powered);
+	spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
 
 #ifdef KBASE_PM_RUNTIME
 	error = pm_runtime_get_sync(kbdev->dev);
@@ -1041,7 +1103,12 @@ static int sunxi_pm_callback_power_on(struct kbase_device *kbdev)
 
 static void sunxi_pm_callback_power_off(struct kbase_device *kbdev)
 {
+	unsigned long flags;
+
 	dev_dbg(kbdev->dev, "%s\n", __func__);
+
+	spin_lock_irqsave(&kbdev->hwaccess_lock, flags);
+	spin_unlock_irqrestore(&kbdev->hwaccess_lock, flags);
 
 #ifdef KBASE_PM_RUNTIME
 	pm_runtime_mark_last_busy(kbdev->dev);
@@ -1070,6 +1137,11 @@ static int kbase_device_runtime_init(struct kbase_device *kbdev)
 	if (!pm_runtime_enabled(kbdev->dev)) {
 		dev_warn(kbdev->dev, "pm_runtime not enabled");
 		ret = -EINVAL;
+	} else if (atomic_read(&kbdev->dev->power.usage_count)) {
+		dev_warn(kbdev->dev,
+			 "%s: Device runtime usage count unexpectedly non zero %d",
+			__func__, atomic_read(&kbdev->dev->power.usage_count));
+		ret = -EINVAL;
 	}
 
 	return ret;
@@ -1078,6 +1150,12 @@ static int kbase_device_runtime_init(struct kbase_device *kbdev)
 static void kbase_device_runtime_disable(struct kbase_device *kbdev)
 {
 	dev_dbg(kbdev->dev, "%s\n", __func__);
+
+	if (atomic_read(&kbdev->dev->power.usage_count))
+		dev_warn(kbdev->dev,
+			 "%s: Device runtime usage count unexpectedly non zero %d",
+			__func__, atomic_read(&kbdev->dev->power.usage_count));
+
 	pm_runtime_disable(kbdev->dev);
 }
 #endif /* KBASE_PM_RUNTIME */

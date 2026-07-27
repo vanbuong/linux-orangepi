@@ -469,19 +469,25 @@ int kbase_device_early_init(struct kbase_device *kbdev)
 	if (err)
 		goto fail_runtime_pm;
 
+	/* This spinlock is initialized before doing the first access to GPU
+	 * registers and installing interrupt handlers.
+	 */
+	spin_lock_init(&kbdev->hwaccess_lock);
+
 	/* Ensure we can access the GPU registers */
 	kbase_pm_register_access_enable(kbdev);
 
-	/* Find out GPU properties based on the GPU feature registers */
+	/*
+	 * Find out GPU properties based on the GPU feature registers.
+	 * Note that this does not populate the few properties that depend on
+	 * hw_features being initialized. Those are set by kbase_gpuprops_set_features
+	 * soon after this in the init process.
+	 */
 	kbase_gpuprops_set(kbdev);
 
 	/* We're done accessing the GPU registers for now. */
 	kbase_pm_register_access_disable(kbdev);
 
-	/* This spinlock has to be initialized before installing interrupt
-	 * handlers that require to hold it to process interrupts.
-	 */
-	spin_lock_init(&kbdev->hwaccess_lock);
 #ifdef CONFIG_MALI_ARBITER_SUPPORT
 	if (kbdev->arb.arb_if)
 		err = kbase_arbiter_pm_install_interrupts(kbdev);

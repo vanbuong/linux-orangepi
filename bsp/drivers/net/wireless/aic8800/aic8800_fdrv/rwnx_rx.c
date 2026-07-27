@@ -362,6 +362,9 @@ static void rwnx_rx_data_skb_forward(struct rwnx_hw *rwnx_hw, struct rwnx_vif *r
 
 	//printk("forward\n");
 
+#ifdef CONFIG_ALIGN_8BYTES
+	rwnx_skb_align_8bytes(rx_skb);
+#endif
 	rx_skb->protocol = eth_type_trans(rx_skb, rwnx_vif->ndev);
 	memset(rx_skb->cb, 0, sizeof(rx_skb->cb));
 	REG_SW_SET_PROFILING(rwnx_hw, SW_PROF_IEEE80211RX);
@@ -507,6 +510,9 @@ static bool rwnx_rx_data_skb(struct rwnx_hw *rwnx_hw, struct rwnx_vif *rwnx_vif,
 			rwnx_vif->net_stats.rx_packets++;
 			rwnx_vif->net_stats.rx_bytes += rx_skb->len;
 
+#ifdef CONFIG_ALIGN_8BYTES
+			rwnx_skb_align_8bytes(rx_skb);
+#endif
 			rx_skb->protocol = eth_type_trans(rx_skb, rwnx_vif->ndev);
 #ifdef AICWF_ARP_OFFLOAD
 			if (RWNX_VIF_TYPE(rwnx_vif) == NL80211_IFTYPE_STATION || RWNX_VIF_TYPE(rwnx_vif) == NL80211_IFTYPE_P2P_CLIENT)
@@ -1278,7 +1284,7 @@ void reord_deinit_sta(struct aicwf_rx_priv *rx_priv, struct reord_ctrl_info *reo
 	for (i = 0; i < 8; i++) {
 		struct recv_msdu *req, *next;
 		preorder_ctrl = &reord_info->preorder_ctrl[i];
-		if(preorder_ctrl->enable){
+		if (preorder_ctrl->enable) {
 			preorder_ctrl->enable = false;
 			if (timer_pending(&preorder_ctrl->reord_timer)) {
 				ret = del_timer_sync(&preorder_ctrl->reord_timer);
@@ -1342,6 +1348,9 @@ int reord_single_frame_ind(struct aicwf_rx_priv *rx_priv, struct recv_msdu *prfr
 		//printk("netif sn=%d, len=%d\n", precv_frame->attrib.seq_num, skb->len);
 
 		rx_skb->dev = rwnx_vif->ndev;
+#ifdef CONFIG_ALIGN_8BYTES
+		rwnx_skb_align_8bytes(rx_skb);
+#endif
 		rx_skb->protocol = eth_type_trans(rx_skb, rwnx_vif->ndev);
 
 #ifdef AICWF_ARP_OFFLOAD
@@ -1927,7 +1936,11 @@ check_len_update:
 		hdr = (struct ieee80211_hdr *)(skb->data + msdu_offset);
 		rwnx_vif = rwnx_rx_get_vif(rwnx_hw, hw_rxhdr->flags_vif_idx);
 		if (rwnx_vif) {
-			rwnx_cfg80211_rx_spurious_frame(rwnx_vif->ndev, hdr->addr2, GFP_ATOMIC);
+			rwnx_cfg80211_rx_spurious_frame(rwnx_vif->ndev, hdr->addr2,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 16, 0))
+											0,
+#endif
+											GFP_ATOMIC);
 		}
 		goto end;
 	}
@@ -2210,7 +2223,11 @@ check_len_update:
 
 				if (hw_rxhdr->flags_is_4addr && !rwnx_vif->use_4addr) {
 					rwnx_cfg80211_rx_unexpected_4addr_frame(rwnx_vif->ndev,
-													   sta->mac_addr, GFP_ATOMIC);
+													   sta->mac_addr,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 16, 0))
+													   0,
+#endif
+													   GFP_ATOMIC);
 				}
 			}
 

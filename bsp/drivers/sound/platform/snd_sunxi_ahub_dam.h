@@ -20,15 +20,25 @@
 #define SUNXI_AHUB_RST				0x08
 #define SUNXI_AHUB_GAT				0x0c
 
+#if IS_ENABLED(CONFIG_ARCH_SUN50IW9)
 #define SUNXI_AHUB_APBIF_TX_CTL(n)		(0x10 + ((n) * 0x30))
 #define SUNXI_AHUB_APBIF_TX_IRQ_CTL(n)		(0x14 + ((n) * 0x30))
 #define SUNXI_AHUB_APBIF_TX_IRQ_STA(n)		(0x18 + ((n) * 0x30))
-
 #define SUNXI_AHUB_APBIF_TXFIFO_CTL(n)		(0x20 + ((n) * 0x30))
 #define SUNXI_AHUB_APBIF_TXFIFO_STA(n)		(0x24 + ((n) * 0x30))
-
 #define SUNXI_AHUB_APBIF_TXFIFO(n)		(0x30 + ((n) * 0x30))
 #define SUNXI_AHUB_APBIF_TXFIFO_CNT(n)		(0x34 + ((n) * 0x30))
+#endif
+
+#if IS_ENABLED(CONFIG_ARCH_SUN55IW7)
+#define SUNXI_AHUB_APBIF_TX_CTL(n)		(0x10 + ((n) * 0x1000))
+#define SUNXI_AHUB_APBIF_TX_IRQ_CTL(n)		(0x14 + ((n) * 0x1000))
+#define SUNXI_AHUB_APBIF_TX_IRQ_STA(n)		(0x18 + ((n) * 0x1000))
+#define SUNXI_AHUB_APBIF_TXFIFO(n)		(0x20 + ((n) * 0x1000))
+#define SUNXI_AHUB_APBIF_TXFIFO_STA(n)		(0x24 + ((n) * 0x1000))
+#define SUNXI_AHUB_APBIF_TXFIFO_CTL(n)		(0x30 + ((n) * 0x1000))
+#define SUNXI_AHUB_APBIF_TXFIFO_CNT(n)		(0x34 + ((n) * 0x1000))
+#endif
 
 #define SUNXI_AHUB_APBIF_RX_CTL(n)		(0x100 + ((n) * 0x30))
 #define SUNXI_AHUB_APBIF_RX_IRQ_CTL(n)		(0x104 + ((n) * 0x30))
@@ -83,7 +93,13 @@
 #define SUNXI_AHUB_DAM_GAIN_CTL6(n)		(0xA68 + ((n) << 7))
 #define SUNXI_AHUB_DAM_GAIN_CTL7(n)		(0xA6C + ((n) << 7))
 
+#if IS_ENABLED(CONFIG_ARCH_SUN50IW9)
 #define SUNXI_AHUB_MAX_REG			SUNXI_AHUB_DAM_GAIN_CTL7(1)
+#endif
+
+#if IS_ENABLED(CONFIG_ARCH_SUN55IW7)
+#define SUNXI_AHUB_MAX_REG			SUNXI_AHUB_APBIF_TXFIFO_CNT(2)
+#endif
 
 /* SUNXI_AHUB_CTL */
 #define HDMI_SRC_SEL			0x04
@@ -98,7 +114,9 @@
 #define I2S0_RST			23
 #define I2S1_RST			22
 #define I2S2_RST			21
+#if IS_ENABLED(CONFIG_ARCH_SUN50IW9)
 #define I2S3_RST			20
+#endif
 #define DAM0_RST			15
 #define DAM1_RST			14
 
@@ -112,7 +130,9 @@
 #define I2S0_GAT			23
 #define I2S1_GAT			22
 #define I2S2_GAT			21
+#if IS_ENABLED(CONFIG_ARCH_SUN50IW9)
 #define I2S3_GAT			20
+#endif
 #define DAM0_GAT			15
 #define DAM1_GAT			14
 
@@ -127,7 +147,7 @@
 #define APBIF_TX_EMEN			0
 
 /* SUNXI_AHUB_APBIF_TX_IRQ_STA */
-#define APBIF_TX_OV_PEND		2
+#define APBIF_TX_OV_PEND		1
 #define APBIF_TX_EM_PEND		0
 
 /* SUNXI_AHUB_APBIF_TXFIFO_CTL */
@@ -169,7 +189,9 @@
 #define APBIF_RX_I2S0_TXDIF		27
 #define APBIF_RX_I2S1_TXDIF		26
 #define APBIF_RX_I2S2_TXDIF		25
+#if IS_ENABLED(CONFIG_ARCH_SUN50IW9)
 #define APBIF_RX_I2S3_TXDIF		23
+#endif
 #define APBIF_RX_DAM0_TXDIF		19
 #define APBIF_RX_DAM1_TXDIF		15
 
@@ -221,7 +243,9 @@
 #define I2S_RX_I2S0_TXDIF		27
 #define I2S_RX_I2S1_TXDIF		26
 #define I2S_RX_I2S2_TXDIF		25
+#if IS_ENABLED(CONFIG_ARCH_SUN50IW9)
 #define I2S_RX_I2S3_TXDIF		23
+#endif
 #define I2S_RX_DAM0_TXDIF		19
 #define I2S_RX_DAM1_TXDIF		15
 
@@ -265,9 +289,13 @@
 #define DAM_RX_I2S0_TXDIF		27
 #define DAM_RX_I2S1_TXDIF		26
 #define DAM_RX_I2S2_TXDIF		25
+#if IS_ENABLED(CONFIG_ARCH_SUN50IW9)
 #define DAM_RX_I2S3_TXDIF		23
+#endif
 #define DAM_RX_DAM0_TXDIF		19
 #define DAM_RX_DAM1_TXDIF		15
+
+typedef struct sunxi_ahub_clk *sunxi_ahub_clk_t;
 
 struct sunxi_ahub_mem {
 	char *dev_name;
@@ -275,14 +303,6 @@ struct sunxi_ahub_mem {
 	void __iomem *membase;
 	struct resource *memregion;
 	struct regmap *regmap;
-};
-
-struct sunxi_ahub_clk {
-	struct clk *clk_pll;
-	struct clk *clk_pllx4;
-	struct clk *clk_module;
-	struct clk *clk_bus;
-	struct reset_control *clk_rst;
 };
 
 /* debug */
@@ -296,9 +316,16 @@ struct sunxi_ahub_dump {
 };
 
 extern int snd_sunxi_ahub_mem_get(struct sunxi_ahub_mem *mem);
-extern int snd_sunxi_ahub_clk_get(struct sunxi_ahub_clk *clk);
 
 extern void sunxi_ahub_dam_ctrl(bool enable,
 				unsigned int apb_num, unsigned int tdm_num, unsigned int channels);
+
+extern struct platform_driver *sunxi_get_ahub_dam_drv(void);
+sunxi_ahub_clk_t snd_sunxi_ahub_clk_get(void);
+sunxi_ahub_clk_t snd_ahub_clk_init(struct platform_device *pdev);
+int snd_sunxi_ahub_clk_enable(sunxi_ahub_clk_t clk_orig);
+void snd_sunxi_ahub_clk_exit(sunxi_ahub_clk_t clk_orig);
+void snd_sunxi_ahub_clk_disable(sunxi_ahub_clk_t clk_orig);
+int snd_sunxi_ahub_clk_rate(sunxi_ahub_clk_t clk_orig, unsigned int freq_in, unsigned int freq_out);
 
 #endif /* __SND_SUNXI_AHUB_DAM_H */

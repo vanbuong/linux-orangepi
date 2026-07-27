@@ -46,7 +46,8 @@ static void xh2a_device_schedule_work(struct work_struct *work)
 	group = ipu_dev->policy->ops->pick_runnable_group(ipu_dev->policy);
 
 	while (group) {
-		xh2a_ipu_group_kds_load(group);
+		xh2a_ipu_group_load_kds(group);
+		xh2a_ipu_group_put(group);
 		mutex_unlock(&ipu_dev->dev_mutex);
 		mutex_lock(&ipu_dev->dev_mutex);
 
@@ -65,6 +66,47 @@ static void xh2a_ipu_device_safe_release(struct kref *kref)
 		container_of(kref, struct xh2a_ipu_device, dev_refcnt);
 
 	kfree(ipu_dev);
+}
+
+int xh2a_ipu_prepare_fullchip_reset(void *handle)
+{
+	struct xh2a_pcie_client *client = NULL;
+	struct xh2a_ipu_device *ipu_dev;
+
+	xh2a_pcie_get_client(handle, &client, XH2A_IPU_DEVICE_NAME);
+
+	if (!client)
+		return 0;
+
+	ipu_dev = client->client_data;
+	if (!ipu_dev)
+		return -EINVAL;
+
+	if (atomic_read(&ipu_dev->dev_removed))
+		return 0;
+
+	atomic_set(&ipu_dev->is_reboot, 1);
+	xh2a_ipu_load_stop(ipu_dev);
+
+	return 0;
+}
+
+void xh2a_ipu_abort_fullchip_reset(void *handle)
+{
+	struct xh2a_pcie_client *client = NULL;
+	struct xh2a_ipu_device *ipu_dev;
+
+	xh2a_pcie_get_client(handle, &client, XH2A_IPU_DEVICE_NAME);
+
+	if (!client)
+		return;
+
+	ipu_dev = client->client_data;
+	if (!ipu_dev || atomic_read(&ipu_dev->dev_removed))
+		return;
+
+	atomic_set(&ipu_dev->is_reboot, 0);
+	xh2a_ipu_load_start(ipu_dev);
 }
 
 static int xh2a_ipu_open(struct inode *inode, struct file *filp)
@@ -328,7 +370,7 @@ static int xh2a_ipu_pm_prepare(void *handle, bool is_compatible)
 		cancel_work_sync(&ipu_dev->group_sche_work);
 
 	xh2a_ipu_spm_save_snapshot(ipu_dev);
-	xh2a_ipu_hw_shutdown(ipu_dev);
+	xh2a_ipu_hw_shutdown(ipu_dev, false);
 
 	mutex_lock(&ipu_dev->dev_mutex);
 	old = ipu_dev->policy;
@@ -381,7 +423,7 @@ static int xh2a_ipu_pm_complete(void *handle, bool is_compatible)
 
 	ipu_dev->policy = xh2a_ipu_policy_create(ipu_dev);
 
-	xh2a_ipu_hw_startup(ipu_dev);
+	xh2a_ipu_hw_startup(ipu_dev, false);
 	xh2a_ipu_spm_restore_snapshot(ipu_dev);
 
 	if (atomic_dec_and_test(&ipu_dev->block_ioctl_flag))
@@ -420,7 +462,7 @@ static int xh2a_ipu_pm_runtime_suspend(void *handle)
 	xh2a_ipu_load_stop(ipu_dev);
 
 	xh2a_ipu_spm_save_snapshot(ipu_dev);
-	xh2a_ipu_hw_shutdown(ipu_dev);
+	xh2a_ipu_hw_shutdown(ipu_dev, false);
 
 	return 0;
 }
@@ -452,7 +494,7 @@ static int xh2a_ipu_pm_runtime_resume(void *handle)
 		return -EINVAL;
 	}
 
-	xh2a_ipu_hw_startup(ipu_dev);
+	xh2a_ipu_hw_startup(ipu_dev, false);
 	xh2a_ipu_spm_restore_snapshot(ipu_dev);
 
 	xh2a_ipu_load_start(ipu_dev);
@@ -528,11 +570,15 @@ struct xh2a_ipu_device *xh2a_ipu_device_create(void *handle)
 		goto err_mem;
 	}
 
+	atomic_set(&ipu_dev->reset_flag, 0);
+	atomic_set(&ipu_dev->sync_cnt, 0);
+	init_waitqueue_head(&ipu_dev->group_sync_wq);
+
 	ipu_dev->group_wq = create_singlethread_workqueue(wq_name);
 	if (!ipu_dev->group_wq) {
 		dev_err(ipu_dev->miscdev.this_device, "create workqueue "
 						      "failed\n");
-		goto err_misc_dev;
+		goto err_mem;
 	}
 
 	ipu_dev->last_core = -1;
@@ -564,6 +610,7 @@ struct xh2a_ipu_device *xh2a_ipu_device_create(void *handle)
 
 	mutex_init(&ipu_dev->dev_mutex);
 	mutex_init(&ipu_dev->fh_mutex);
+	mutex_init(&ipu_dev->reset_mutex);
 	mutex_init(&ipu_dev->dump_mutex);
 
 	INIT_LIST_HEAD(&ipu_dev->file_handle_list);
@@ -578,7 +625,7 @@ struct xh2a_ipu_device *xh2a_ipu_device_create(void *handle)
 
 	xh2a_ipu_booter_pre_startup(ipu_dev);
 
-	xh2a_ipu_hw_startup(ipu_dev);
+	xh2a_ipu_hw_startup(ipu_dev, false);
 
 	xh2a_ipu_event_pool_create(&ipu_dev->event_pool);
 
@@ -613,6 +660,7 @@ err_mem:
 		if (ipu_dev->spm_snapshot_buf[i])
 			vfree(ipu_dev->spm_snapshot_buf[i]);
 	}
+	goto err_misc_dev;
 
 err_misc_dev:
 	xh2a_ipu_msi_work_unregister(ipu_dev);
@@ -631,11 +679,18 @@ void xh2a_ipu_device_destroy(struct xh2a_ipu_device *ipu_dev)
 	uint32_t mask;
 	struct xh2a_pcie_client *client = &ipu_dev->client;
 	struct xh2a_ipu_file_handle *fh_pos, *fh_n;
+	struct xh2a_ipu_event *event, *event_n;
+	LIST_HEAD(event_list);
+	unsigned long flags;
+	struct xh2a_ipu_booter_queue *queue;
+	struct xh2a_ipu_group *group, *group_n;
 
 	if (!ipu_dev)
 		return;
 
 	atomic_set(&ipu_dev->dev_removed, 1);
+
+	xh2a_ipu_msi_work_unregister(ipu_dev);
 
 	mutex_lock(&ipu_dev->fh_mutex);
 	list_for_each_entry_safe(fh_pos, fh_n, &ipu_dev->file_handle_list,
@@ -644,12 +699,6 @@ void xh2a_ipu_device_destroy(struct xh2a_ipu_device *ipu_dev)
 		xh2a_ipu_file_handle_stop_group(fh_pos);
 	}
 	mutex_unlock(&ipu_dev->fh_mutex);
-
-	xh2a_ipu_load_exit(ipu_dev);
-
-	xh2a_ipu_event_pool_destroy(&ipu_dev->event_pool);
-
-	xh2a_ipu_hw_shutdown(ipu_dev);
 
 	if (ipu_dev->group_work_inited) {
 		cancel_work_sync(&ipu_dev->group_sche_work);
@@ -666,6 +715,35 @@ void xh2a_ipu_device_destroy(struct xh2a_ipu_device *ipu_dev)
 		ipu_dev->group_work_inited = false;
 	}
 
+	spin_lock_irqsave(&ipu_dev->event_lock, flags);
+	list_splice_init(&ipu_dev->isr_event_list, &event_list);
+	spin_unlock_irqrestore(&ipu_dev->event_lock, flags);
+
+	list_for_each_entry_safe(event, event_n, &event_list, node) {
+		list_del_init(&event->node);
+		xh2a_ipu_event_free(&ipu_dev->event_pool, event);
+	}
+
+	for (i = 0; i < XH2A_IPU_CORE_NUM; i++) {
+		int j;
+
+		for (j = 0; j < XH2A_TILE_NUM_PER_CORE; j++) {
+			queue = &ipu_dev->tile_queues[i][j];
+			mutex_lock(&queue->tile_mutex);
+			list_for_each_entry_safe(group, group_n,
+						 &queue->group_list,
+						 tile_list_node) {
+				list_del_init(&group->tile_list_node);
+				xh2a_ipu_group_put(group);
+			}
+			mutex_unlock(&queue->tile_mutex);
+		}
+	}
+
+	xh2a_ipu_load_exit(ipu_dev);
+
+	xh2a_ipu_hw_shutdown(ipu_dev, false);
+
 	if (ipu_dev->policy) {
 		xh2a_ipu_policy_destroy(ipu_dev->policy);
 		ipu_dev->policy = NULL;
@@ -676,7 +754,7 @@ void xh2a_ipu_device_destroy(struct xh2a_ipu_device *ipu_dev)
 		ipu_dev->group_wq = NULL;
 	}
 
-	xh2a_ipu_msi_work_unregister(ipu_dev);
+	xh2a_ipu_event_pool_destroy(&ipu_dev->event_pool);
 
 	for (i = 0; i < XH2A_IPU_CORE_NUM; i++) {
 		if (ipu_dev->spm_snapshot_buf[i])

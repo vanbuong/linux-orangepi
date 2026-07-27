@@ -141,11 +141,11 @@ int notrace nsi_port_setpri(enum nsi_pmu port, unsigned int pri)
 EXPORT_SYMBOL_GPL(nsi_port_setpri);
 
 /**
- * nsi_port_setqos() - set a master qos(hpr/lpr)
+ * nsi_port_sethpr() - set a master (hpr/lpr)
  *
- * @qos: the qos value want to set
+ * @hpr: the hpr value want to set
  */
-int notrace nsi_port_setqos(enum nsi_pmu port, unsigned int qos)
+int notrace nsi_port_sethpr(enum nsi_pmu port, unsigned int qos)
 {
 	unsigned int value;
 
@@ -160,8 +160,8 @@ int notrace nsi_port_setqos(enum nsi_pmu port, unsigned int qos)
 #if defined(AW_NSI_CPU_CHANNEL) && defined(NSI_HARDCODED_PORT_MAPPING)
 	if (port == 0) {
 		value = readl_relaxed(sunxi_nsi.cpu_base + CPU_QOS_CFG);
-		value &= ~(0x3 << ((port % 16) * 2));
-		writel_relaxed(value | (qos << ((port % 16) * 2)),
+		value &= ~(0x1 << 0);
+		writel_relaxed(value | (qos << 0),
 			       sunxi_nsi.cpu_base + CPU_QOS_CFG);
 	} else
 #endif
@@ -171,8 +171,8 @@ int notrace nsi_port_setqos(enum nsi_pmu port, unsigned int qos)
 #endif
 
 		value = readl_relaxed(sunxi_nsi.base + IAG_QOS_CFG(port));
-		value &= ~(0x3 << ((port % 16) * 2));
-		writel_relaxed(value | (qos << ((port % 16) * 2)),
+		value &= ~IAG_QOS_SET(0x3, port);
+		writel_relaxed(value | IAG_QOS_SET(qos, port),
 			       sunxi_nsi.base + IAG_QOS_CFG(port));
 	}
 
@@ -180,7 +180,7 @@ int notrace nsi_port_setqos(enum nsi_pmu port, unsigned int qos)
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(nsi_port_setqos);
+EXPORT_SYMBOL_GPL(nsi_port_sethpr);
 
 /**
  * nsi_port_setio() - set a master's qos in or out
@@ -1554,7 +1554,7 @@ static unsigned int nsi_get_value(struct nsi_pmu_data *data,
 		}
 		break;
 
-	case MBUS_PORT_PRI:
+	case MBUS_PORT_QOS_PRI:
 		for_each_ports(i) {
 #if defined(AW_NSI_CPU_CHANNEL) && defined(NSI_HARDCODED_PORT_MAPPING)
 			if (i == 0)
@@ -1575,13 +1575,16 @@ static unsigned int nsi_get_value(struct nsi_pmu_data *data,
 		}
 		break;
 
-	case MBUS_PORT_QOS:
+	case MBUS_PORT_HPR:
 		for_each_ports(i) {
 #if defined(AW_NSI_CPU_CHANNEL) && defined(NSI_HARDCODED_PORT_MAPPING)
-			if (i == 0)
+			if (i == 0) {
 				value = readl_relaxed(sunxi_nsi.cpu_base +
 						CPU_QOS_CFG);
-			else
+
+				size += sprintf(buf + size, "master[%2d]:%-8s qos(0-lpr 1-hpr):%lu \n",
+						i, get_name(i), value & 0x1);
+			} else
 #endif
 			{
 #if defined(AW_NSI_CPU_CHANNEL) && defined(NSI_HARDCODED_PORT_MAPPING)
@@ -1589,10 +1592,10 @@ static unsigned int nsi_get_value(struct nsi_pmu_data *data,
 #else
 				value = readl_relaxed(sunxi_nsi.base + IAG_QOS_CFG(i));
 #endif
-			}
 
-			size += sprintf(buf + size, "master[%2d]:%-8s qos(0-lpr 1-hpr):%lu \n",
-					i, get_name(i), (value >> ((i % 16) * 2)) & 0x3);
+				size += sprintf(buf + size, "master[%2d]:%-8s qos(0-lpr 1-hpr):%lu \n",
+						i, get_name(i), IAG_QOS_GET(value, i));
+			}
 		}
 		break;
 
@@ -1767,11 +1770,11 @@ static unsigned int nsi_set_value(struct nsi_pmu_data *data, unsigned int index,
 	case MBUS_PORT_MODE:
 		nsi_port_setmode(port, val);
 		break;
-	case MBUS_PORT_PRI:
+	case MBUS_PORT_QOS_PRI:
 		nsi_port_setpri(port, val);
 		break;
-	case MBUS_PORT_QOS:
-		nsi_port_setqos(port, val);
+	case MBUS_PORT_HPR:
+		nsi_port_sethpr(port, val);
 		break;
 	case MBUS_INPUT_OUTPUT:
 		nsi_port_setio(port, val);
@@ -1858,12 +1861,12 @@ static ssize_t nsi_store_value(struct device *dev,
 /* get all masters' mode or set a master's mode */
 static SENSOR_DEVICE_ATTR(port_mode, 0644,
 			  nsi_show_value, nsi_store_value, MBUS_PORT_MODE);
-/* get all masters' prio or set a master's prio */
-static SENSOR_DEVICE_ATTR(port_prio, 0644,
-			  nsi_show_value, nsi_store_value, MBUS_PORT_PRI);
+/* get all masters' qos prio or set a master's qos prio */
+static SENSOR_DEVICE_ATTR(port_qos_prio, 0644,
+			  nsi_show_value, nsi_store_value, MBUS_PORT_QOS_PRI);
 /* get all masters' prio or set a master's qos(hpr/lpr) */
-static SENSOR_DEVICE_ATTR(port_qos, 0644,
-			  nsi_show_value, nsi_store_value, MBUS_PORT_QOS);
+static SENSOR_DEVICE_ATTR(port_hpr, 0644,
+			  nsi_show_value, nsi_store_value, MBUS_PORT_HPR);
 /* get all masters' inout or set a master's inout */
 static SENSOR_DEVICE_ATTR(port_select, 0644,
 			  nsi_show_value, nsi_store_value, MBUS_INPUT_OUTPUT);
@@ -1910,8 +1913,8 @@ static struct attribute *nsi_attributes[] = {
 	&dev_attr_pmu_cmd_rd.attr,
 
 	&sensor_dev_attr_port_mode.dev_attr.attr,
-	&sensor_dev_attr_port_prio.dev_attr.attr,
-	&sensor_dev_attr_port_qos.dev_attr.attr,
+	&sensor_dev_attr_port_qos_prio.dev_attr.attr,
+	&sensor_dev_attr_port_hpr.dev_attr.attr,
 	&sensor_dev_attr_port_select.dev_attr.attr,
 	&sensor_dev_attr_port_abs_bwl.dev_attr.attr,
 	&sensor_dev_attr_port_abs_bwlen.dev_attr.attr,
@@ -2165,4 +2168,4 @@ module_exit(nsi_pmu_exit);
 MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("SUNXI NSI support");
 MODULE_AUTHOR("huangshuosheng");
-MODULE_VERSION("1.1.1");
+MODULE_VERSION("1.1.2");

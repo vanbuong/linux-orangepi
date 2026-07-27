@@ -36,6 +36,22 @@ struct spinand_manufacture m;
 
 struct aw_spinand_phy_info gigadevice[] = {
 	{
+		.Model		= "GD5F4GM8UEYIGR",
+		.NandID		= {0xc8, 0x95, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff},
+		.DieCntPerChip  = 1,
+		.SectCntPerPage = 4,
+		.PageCntPerBlk  = 64,
+		.BlkCntPerDie	= 4096,
+		.OobSizePerPage = 64,
+		.OperationOpt	= SPINAND_QUAD_READ | SPINAND_QUAD_PROGRAM |
+			SPINAND_DUAL_READ, SPINAND_ONEDUMMY_AFTER_RANDOMREAD,
+		.MaxEraseTimes  = 50000,
+		.EccFlag	= HAS_EXT_ECC_SE01,
+		.EccType	= BIT4_LIMIT5_TO_7_ERR8_LIMIT_12,
+		.EccProtectedType = SIZE16_OFF0_LEN16,
+		.BadBlockFlag	= BAD_BLK_FLAG_FRIST_1_PAGE,
+	},
+	{
 		.Model		= "GD5F1GQ4UCYIG",
 		.NandID		= {0xc8, 0xb1, 0x48, 0xff, 0xff, 0xff, 0xff, 0xff},
 		.DieCntPerChip  = 1,

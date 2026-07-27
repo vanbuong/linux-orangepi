@@ -15,6 +15,9 @@ config AIC_INTF_SDIO
 config AIC_INTF_USB
 		bool "USB interface support"
 		depends on AIC_WLAN_SUPPORT && USB
+config AIC_INTF_PCIE
+		bool "PCIE interface support"
+		depends on AIC_WLAN_SUPPORT && PCI
 endchoice
 
 choice
@@ -42,10 +45,21 @@ config USB_MSG_EP
 	  This would enable usb message endpoint
 
 if AIC_WLAN_SUPPORT
+if AIC_INTF_PCIE
+source "bsp/drivers/net/wireless/aic8800/aic8800p_fdrv/Kconfig"
+endif
+if !AIC_INTF_PCIE
 source "bsp/drivers/net/wireless/aic8800/aic8800_fdrv/Kconfig"
+endif
 source "bsp/drivers/net/wireless/aic8800/aic8800_btlpm/Kconfig"
 endif
 
 if AIC_INTF_USB
 source "bsp/drivers/net/wireless/aic8800/aic8800_btusb/Kconfig"
 endif
+
+config AIC_NAN
+	bool "AIC NAN Support"
+	default n
+	help
+	  This would enable AIC NAN(Wifi Aware) feature.

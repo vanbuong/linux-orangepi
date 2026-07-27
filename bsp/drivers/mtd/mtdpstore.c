@@ -560,14 +560,14 @@ static void mtdpstore_notify_add(struct mtd_info *mtd)
 		cxt->index = mtd->index;
 
 	if (mtd->index != cxt->index || cxt->index < 0)
-		return;
+		goto err;
 
 	dev_dbg(&mtd->dev, "found matching MTD device %s\n", mtd->name);
 
 	if (mtd->size < info->kmsg_size * 2) {
 		dev_err(&mtd->dev, "MTD partition %d not big enough\n",
 				mtd->index);
-		return;
+		goto err;
 	}
 	/*
 	 * kmsg_size must be aligned to 4096 Bytes, which is limited by
@@ -578,13 +578,13 @@ static void mtdpstore_notify_add(struct mtd_info *mtd)
 	if (mtd->erasesize < info->kmsg_size) {
 		dev_err(&mtd->dev, "eraseblock size of MTD partition %d too small\n",
 				mtd->index);
-		return;
+		goto err;
 	}
 	if (unlikely(info->kmsg_size % mtd->writesize)) {
 		dev_err(&mtd->dev, "record size %lu KB must align to write size %d KB\n",
 				info->kmsg_size / 1024,
 				mtd->writesize / 1024);
-		return;
+		goto err;
 	}
 
 	longcnt = BITS_TO_LONGS(div_u64(mtd->size, info->kmsg_size));
@@ -606,11 +606,11 @@ static void mtdpstore_notify_add(struct mtd_info *mtd)
 	if (ret) {
 		dev_err(&mtd->dev, "mtd%d register to psblk failed\n",
 				mtd->index);
-		return;
+		goto err;
 	}
 	cxt->mtd = mtd;
 	dev_info(&mtd->dev, "Attached to MTD device %d\n", mtd->index);
-
+err:
 	mutex_unlock(&aw_psmtd_lock);
 }
 

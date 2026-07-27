@@ -55,7 +55,7 @@
 #define UAPSD_ID       1
 
 #define PS_SP_INTERRUPTED  255
-#define MAC_ADDR_LEN 6
+#define MAC_ADDR_LEN   6
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0)
 #define IEEE80211_MAX_AMPDU_BUF                             IEEE80211_MAX_AMPDU_BUF_HE
@@ -63,6 +63,17 @@
 #define IEEE80211_HE_PHY_CAP6_TRIG_SU_BEAMFORMER_FB         IEEE80211_HE_PHY_CAP6_TRIG_SU_BEAMFORMING_FB
 #define IEEE80211_HE_PHY_CAP3_RX_HE_MU_PPDU_FROM_NON_AP_STA IEEE80211_HE_PHY_CAP3_RX_PARTIAL_BW_SU_IN_20MHZ_MU
 #endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 15, 0)
+#define from_timer        timer_container_of
+#endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 14, 18)
+#define del_timer_sync    timer_delete_sync
+#define del_timer         timer_delete
+#endif
+
+#define ETHER_ADDR_LEN 6
 
 /**
  * struct rwnx_bcn - Information of the beacon in used (AP mode)
@@ -202,6 +213,7 @@ struct rwnx_vif {
 	struct rwnx_key key[6];
 	unsigned long drv_flags;
 	atomic_t drv_conn_state;
+	spinlock_t conn_state_lock;
 	u8 drv_vif_index;           /* Identifier of the VIF in driver */
 	u8 vif_index;               /* Identifier of the station in FW */
 	u8 ch_index;                /* Channel context identifier */
@@ -480,7 +492,11 @@ struct rwnx_hw {
 	struct wiphy *wiphy;
 	struct list_head vifs;
 	struct rwnx_vif *vif_table[NX_VIRT_DEV_MAX + NX_REMOTE_STA_MAX]; /* indexed with fw id */
+#ifdef CONFIG_PREALLOC_STA_TABLE
+	struct rwnx_sta *sta_table;
+#else
 	struct rwnx_sta sta_table[NX_REMOTE_STA_MAX + NX_VIRT_DEV_MAX];
+#endif
 	struct rwnx_survey_info survey[SCAN_CHANNEL_MAX];
 	struct cfg80211_scan_request *scan_request;
 #ifdef CONFIG_SCHED_SCAN
@@ -629,6 +645,6 @@ static inline uint8_t master_vif_idx(struct rwnx_vif *vif)
 void rwnx_external_auth_enable(struct rwnx_vif *vif);
 void rwnx_external_auth_disable(struct rwnx_vif *vif);
 
-void rwnx_set_conn_state(atomic_t *drv_conn_state, int state);
+void rwnx_set_conn_state(struct rwnx_vif *vif, atomic_t *drv_conn_state, int state);
 
 #endif /* _RWNX_DEFS_H_ */

@@ -15,6 +15,18 @@
 #include <linux/completion.h>
 #include <linux/module.h>
 #include "aic_bsp_export.h"
+#include <linux/vmalloc.h>
+#include <linux/platform_device.h>
+#include <linux/version.h>
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 15, 0)
+#define from_timer        timer_container_of
+#endif
+
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 14, 18)
+#define del_timer_sync    timer_delete_sync
+#define del_timer         timer_delete
+#endif
 
 #define RWNX_CMD_TIMEOUT_MS         6000//500//300
 
@@ -412,6 +424,13 @@ enum aicdev_hw_feature {
 
 #define FW_PATH_MAX_LEN 200
 
+#define MATCH_NODE(type, node, cfg_key) {cfg_key, offsetof(type, node)}
+
+struct parse_match_t {
+	char keyname[64];
+	int  offset;
+};
+
 typedef u32 (*array2_tbl_t)[2];
 typedef u32 (*array3_tbl_t)[3];
 
@@ -456,6 +475,7 @@ struct aicbsp_firmware {
 	const char *wl_fw;
 	const char *wl_table;
 	const char *wl_calib;
+	const char *hw_config;
 };
 
 struct aicbsp_info_t {
@@ -484,9 +504,7 @@ struct aicbt_patch_table *aicbt_patch_table_alloc(const char *filename);
 int aicbt_patch_info_unpack(struct aicbt_patch_table *head, struct aicbt_patch_info_t *patch_info);
 int aicbt_patch_table_load(struct priv_dev *aicdev, struct aicbt_info_t *aicbt_info, struct aicbt_patch_table *head);
 int aicbt_ext_patch_data_load(struct priv_dev *aicdev, struct aicbt_patch_info_t *patch_info);
-
-int aicbsp_driver_btmode_reinit(struct aicbt_info_t *aicbt_info);
-int aicbsp_driver_lpm_enable_reinit(struct aicbt_info_t *aicbt_info);
+int aicbt_reload_config(const char *filename, struct aicbt_info_t *aicbt_info);
 
 extern u8 binding_enc_data[16];
 extern bool need_binding_verify;

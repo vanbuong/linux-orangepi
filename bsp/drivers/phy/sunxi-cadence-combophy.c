@@ -122,6 +122,8 @@ struct sunxi_cadence_phy {
 	struct clk *serdes_clk;
 	struct clk *dcxo_serdes0_clk;
 	struct clk *dcxo_serdes1_clk;
+	struct clk *usb_u3_utmi_clk;
+	struct clk *usb_u2_pipe_clk;
 	struct reset_control *serdes_reset;
 	struct regulator *avdd_h_regulator;
 	struct regulator *avdd_c_regulator;
@@ -135,6 +137,7 @@ struct sunxi_cadence_phy {
 
 	__u32 vernum; /* SUBSYS TOP Version number */
 	bool usb_supported; /* USB can use combo0/1 or support only U3/U2 mode */
+	u32 usb_mode; /* 0-normal, 1-u2only, 2-u3only, 3-none */
 	bool udp_supported; /* Both USB and DP can use combo0 meanwhile */
 	bool phy_switcher_quirk;
 
@@ -149,6 +152,13 @@ enum phy_type_e {
 
 enum phy_config_e {
 	PHY_CFG_SSC = 0x1,
+};
+
+enum phy_usb3_mode_e {
+	USB3_U2U3_BOTH = 0,
+	USB3_U2_ONLY = 1,
+	USB3_U3_ONLY = 2,
+	USB3_U2U3_NONE = 3,
 };
 
 static int combo0_configure_usb_dp(struct sunxi_cadence_combophy *combo0);
@@ -760,6 +770,19 @@ static void combo_usb_clk_set(struct sunxi_cadence_phy *sunxi_cphy, bool enable)
 
 	val = readl(SUBSYS_REG_USB3BGR(sunxi_cphy->top_subsys_reg));
 	tmp = USB3P1_ACLK_EN | USB3P1_HCLK_EN;
+	switch (sunxi_cphy->usb_mode) {
+	case USB3_U2_ONLY:
+		tmp |= USB3P1_ONLY_PIPE_CLK_SEL;
+		break;
+	case USB3_U3_ONLY:
+		tmp |= USB3P1_ONLY_UTMI_CLK_SEL;
+		break;
+	case USB3_U2U3_NONE:
+		tmp |= USB3P1_ONLY_PIPE_CLK_SEL | USB3P1_ONLY_UTMI_CLK_SEL;
+		break;
+	default:
+		break;
+	}
 	if (enable)
 		val |= tmp;
 	else
@@ -3036,6 +3059,22 @@ static int combo0_usb_phy_init(struct sunxi_cadence_combophy *combo0)
 
 	combo0->configuration = PHY_CFG_SSC;
 
+	if (sunxi_cphy->usb_mode == USB3_U2U3_NONE || sunxi_cphy->usb_mode == USB3_U2_ONLY) {
+		ret = clk_prepare_enable(sunxi_cphy->usb_u2_pipe_clk);
+		if (ret) {
+			dev_err(sunxi_cphy->dev, "enable usb_u2_pipe_clk err, return %d\n", ret);
+			return ret;
+		}
+	}
+
+	if (sunxi_cphy->usb_mode == USB3_U2U3_NONE || sunxi_cphy->usb_mode == USB3_U3_ONLY) {
+		ret = clk_prepare_enable(sunxi_cphy->usb_u3_utmi_clk);
+		if (ret) {
+			dev_err(sunxi_cphy->dev, "enable usb_u3_utmi_clk err, return %d\n", ret);
+			return ret;
+		}
+	}
+
 	if (sunxi_cphy->avdd_h_regulator)
 		ret = regulator_enable(sunxi_cphy->avdd_h_regulator);
 
@@ -3045,42 +3084,45 @@ static int combo0_usb_phy_init(struct sunxi_cadence_combophy *combo0)
 	if (sunxi_cphy->avdd_c_regulator)
 		ret = regulator_enable(sunxi_cphy->avdd_c_regulator);
 
-	combo_usb2_clk_set(sunxi_cphy, true);
+	if (sunxi_cphy->usb_mode == USB3_U2U3_BOTH || sunxi_cphy->usb_mode == USB3_U2_ONLY)
+		combo_usb2_clk_set(sunxi_cphy, true);
 
-	if (sunxi_cphy->serdes_clk) {
-		ret = clk_set_rate(sunxi_cphy->serdes_clk, 100000000);
-		if (ret) {
-			dev_err(sunxi_cphy->dev, "set serdes_clk rate 100MHz err, return %d\n", ret);
-			return ret;
+	if (sunxi_cphy->usb_mode == USB3_U2U3_BOTH || sunxi_cphy->usb_mode == USB3_U3_ONLY) {
+		if (sunxi_cphy->serdes_clk) {
+			ret = clk_set_rate(sunxi_cphy->serdes_clk, 100000000);
+			if (ret) {
+				dev_err(sunxi_cphy->dev, "set serdes_clk rate 100MHz err, return %d\n", ret);
+				return ret;
+			}
+
+			ret = clk_prepare_enable(sunxi_cphy->serdes_clk);
+			if (ret) {
+				dev_err(sunxi_cphy->dev, "enable serdes_clk err, return %d\n", ret);
+				return ret;
+			}
 		}
 
-		ret = clk_prepare_enable(sunxi_cphy->serdes_clk);
-		if (ret) {
-			dev_err(sunxi_cphy->dev, "enable serdes_clk err, return %d\n", ret);
-			return ret;
+		if (sunxi_cphy->dcxo_serdes0_clk) {
+			ret = clk_prepare_enable(sunxi_cphy->dcxo_serdes0_clk);
+			if (ret) {
+				dev_err(sunxi_cphy->dev, "enable dcxo_serdes0_clk err, return %d\n", ret);
+				return ret;
+			}
 		}
+
+		if (combo0->clk) {
+			ret = clk_prepare_enable(combo0->clk);
+			if (ret) {
+				dev_err(sunxi_cphy->dev, "enable combo0 clk err, return %d\n", ret);
+				return ret;
+			}
+		}
+
+		combo0_usb_pwr_set(sunxi_cphy, false);
+		combo0_usb_clk_set(sunxi_cphy, true);
+		combo0_usb_param_config(combo0);
+		combo0_usb_phy_reset(combo0, true);
 	}
-
-	if (sunxi_cphy->dcxo_serdes0_clk) {
-		ret = clk_prepare_enable(sunxi_cphy->dcxo_serdes0_clk);
-		if (ret) {
-			dev_err(sunxi_cphy->dev, "enable dcxo_serdes0_clk err, return %d\n", ret);
-			return ret;
-		}
-	}
-
-	if (combo0->clk) {
-		ret = clk_prepare_enable(combo0->clk);
-		if (ret) {
-			dev_err(sunxi_cphy->dev, "enable combo0 clk err, return %d\n", ret);
-			return ret;
-		}
-	}
-
-	combo0_usb_pwr_set(sunxi_cphy, false);
-	combo0_usb_clk_set(sunxi_cphy, true);
-	combo0_usb_param_config(combo0);
-	combo0_usb_phy_reset(combo0, true);
 
 	return 0;
 }
@@ -3089,20 +3131,23 @@ static int combo0_usb_phy_exit(struct sunxi_cadence_combophy *combo0)
 {
 	struct sunxi_cadence_phy *sunxi_cphy = combo0->sunxi_cphy;
 
-	combo0_usb_clk_set(sunxi_cphy, false);
-	combo0_usb_phy_reset(combo0, false);
-	combo0_usb_pwr_set(sunxi_cphy, true);
+	if (sunxi_cphy->usb_mode == USB3_U2U3_BOTH || sunxi_cphy->usb_mode == USB3_U3_ONLY) {
+		combo0_usb_clk_set(sunxi_cphy, false);
+		combo0_usb_phy_reset(combo0, false);
+		combo0_usb_pwr_set(sunxi_cphy, true);
 
-	if (combo0->clk)
-		clk_disable_unprepare(combo0->clk);
+		if (combo0->clk)
+			clk_disable_unprepare(combo0->clk);
 
-	if (sunxi_cphy->dcxo_serdes0_clk)
-		clk_disable_unprepare(sunxi_cphy->dcxo_serdes0_clk);
+		if (sunxi_cphy->dcxo_serdes0_clk)
+			clk_disable_unprepare(sunxi_cphy->dcxo_serdes0_clk);
 
-	if (sunxi_cphy->serdes_clk)
-		clk_disable_unprepare(sunxi_cphy->serdes_clk);
+		if (sunxi_cphy->serdes_clk)
+			clk_disable_unprepare(sunxi_cphy->serdes_clk);
+	}
 
-	combo_usb2_clk_set(sunxi_cphy, false);
+	if (sunxi_cphy->usb_mode == USB3_U2U3_BOTH || sunxi_cphy->usb_mode == USB3_U2_ONLY)
+		combo_usb2_clk_set(sunxi_cphy, false);
 
 	if (sunxi_cphy->avdd_h_regulator)
 		regulator_disable(sunxi_cphy->avdd_h_regulator);
@@ -3112,6 +3157,12 @@ static int combo0_usb_phy_exit(struct sunxi_cadence_combophy *combo0)
 
 	if (sunxi_cphy->avdd_c_regulator)
 		regulator_disable(sunxi_cphy->avdd_c_regulator);
+
+	if (sunxi_cphy->usb_mode == USB3_U2U3_NONE || sunxi_cphy->usb_mode == USB3_U3_ONLY)
+		clk_disable_unprepare(sunxi_cphy->usb_u3_utmi_clk);
+
+	if (sunxi_cphy->usb_mode == USB3_U2U3_NONE || sunxi_cphy->usb_mode == USB3_U2_ONLY)
+		clk_disable_unprepare(sunxi_cphy->usb_u2_pipe_clk);
 
 	return 0;
 }
@@ -3128,6 +3179,10 @@ static void combo0_usb_phy_power_off(struct sunxi_cadence_combophy *combo0)
 static int sunxi_cadence_combo0_usb_phy_init(struct phy *phy)
 {
 	struct sunxi_cadence_combophy *combo0 = phy_get_drvdata(phy);
+	struct sunxi_cadence_phy *sunxi_cphy = combo0->sunxi_cphy;
+
+	if (!sunxi_cphy->usb_supported)
+		return 0;
 
 	mutex_lock(&combo0->phy_lock);
 
@@ -3143,6 +3198,10 @@ static int sunxi_cadence_combo0_usb_phy_init(struct phy *phy)
 static int sunxi_cadence_combo0_usb_phy_exit(struct phy *phy)
 {
 	struct sunxi_cadence_combophy *combo0 = phy_get_drvdata(phy);
+	struct sunxi_cadence_phy *sunxi_cphy = combo0->sunxi_cphy;
+
+	if (!sunxi_cphy->usb_supported)
+		return 0;
 
 	mutex_lock(&combo0->phy_lock);
 
@@ -3158,6 +3217,10 @@ static int sunxi_cadence_combo0_usb_phy_exit(struct phy *phy)
 static int sunxi_cadence_combo0_usb_phy_power_on(struct phy *phy)
 {
 	struct sunxi_cadence_combophy *combo0 = phy_get_drvdata(phy);
+	struct sunxi_cadence_phy *sunxi_cphy = combo0->sunxi_cphy;
+
+	if (!sunxi_cphy->usb_supported)
+		return 0;
 
 	mutex_lock(&combo0->phy_lock);
 
@@ -3171,6 +3234,10 @@ static int sunxi_cadence_combo0_usb_phy_power_on(struct phy *phy)
 static int sunxi_cadence_combo0_usb_phy_power_off(struct phy *phy)
 {
 	struct sunxi_cadence_combophy *combo0 = phy_get_drvdata(phy);
+	struct sunxi_cadence_phy *sunxi_cphy = combo0->sunxi_cphy;
+
+	if (!sunxi_cphy->usb_supported)
+		return 0;
 
 	mutex_lock(&combo0->phy_lock);
 
@@ -3188,6 +3255,9 @@ static int sunxi_cadence_combo0_usb_phy_set_mode(struct phy *phy, enum phy_mode 
 	enum typec_orientation orientation = COMBO0_TYPEC_ORIENTATION(submode);
 	unsigned long state = COMBO0_TYPEC_MODE(submode);
 
+	if (!sunxi_cphy->usb_supported)
+		return 0;
+
 	combo0->usb_dp_state = false;
 	pr_debug("mode: %d, submode: %d, orientation: %s, state: %s", mode, submode,
 	       typec_orientation_name[orientation], typec_state_name[state]);
@@ -3200,8 +3270,8 @@ static int sunxi_cadence_combo0_usb_phy_set_mode(struct phy *phy, enum phy_mode 
 		if ((combo0->orientation != orientation) || (combo0->state != state)) {
 			combo0->orientation = orientation;
 			combo0->state = state;
-
-			combo0_usb_param_config(combo0);
+			if (sunxi_cphy->usb_mode == USB3_U2U3_BOTH || sunxi_cphy->usb_mode == USB3_U3_ONLY)
+				combo0_usb_param_config(combo0);
 		}
 		combo0->orientation = orientation;
 		combo0->state = state;
@@ -3216,7 +3286,8 @@ static int sunxi_cadence_combo0_usb_phy_set_mode(struct phy *phy, enum phy_mode 
 		 */
 		if (combo0->orientation == TYPEC_ORIENTATION_NONE) {
 			combo0->orientation = orientation;
-			combo0_usb_param_config(combo0);
+			if (sunxi_cphy->usb_mode == USB3_U2U3_BOTH || sunxi_cphy->usb_mode == USB3_U3_ONLY)
+				combo0_usb_param_config(combo0);
 		} else if (orientation != TYPEC_ORIENTATION_NONE) {
 			combo0->orientation = orientation;
 		}
@@ -3502,42 +3573,61 @@ static int sunxi_cadence_phy_combo1_usb3_init(struct sunxi_cadence_phy *sunxi_cp
 	struct sunxi_cadence_combophy *combo1 = sunxi_cphy->combo1;
 	int ret;
 
-	combo_usb2_clk_set(sunxi_cphy, true);
-
-	if (sunxi_cphy->serdes_clk) {
-		ret = clk_set_rate(sunxi_cphy->serdes_clk, 100000000);
+	if (sunxi_cphy->usb_mode == USB3_U2U3_NONE || sunxi_cphy->usb_mode == USB3_U2_ONLY) {
+		ret = clk_prepare_enable(sunxi_cphy->usb_u2_pipe_clk);
 		if (ret) {
-			dev_err(sunxi_cphy->dev, "set serdes_clk rate 100MHz err, return %d\n", ret);
-			return ret;
-		}
-
-		ret = clk_prepare_enable(sunxi_cphy->serdes_clk);
-		if (ret) {
-			dev_err(sunxi_cphy->dev, "enable serdes_clk err, return %d\n", ret);
+			dev_err(sunxi_cphy->dev, "enable usb_u2_pipe_clk err, return %d\n", ret);
 			return ret;
 		}
 	}
 
-	if (sunxi_cphy->dcxo_serdes1_clk) {
-		ret = clk_prepare_enable(sunxi_cphy->dcxo_serdes1_clk);
+	if (sunxi_cphy->usb_mode == USB3_U2U3_NONE || sunxi_cphy->usb_mode == USB3_U3_ONLY) {
+		ret = clk_prepare_enable(sunxi_cphy->usb_u3_utmi_clk);
 		if (ret) {
-			dev_err(sunxi_cphy->dev, "enable dcxo_serdes1_clk err, return %d\n", ret);
+			dev_err(sunxi_cphy->dev, "enable usb_u3_utmi_clk err, return %d\n", ret);
 			return ret;
 		}
 	}
 
-	if (combo1->clk) {
-		ret = clk_prepare_enable(combo1->clk);
-		if (ret) {
-			dev_err(sunxi_cphy->dev, "enable combo1 clk err, return %d\n", ret);
-			return ret;
-		}
-	}
+	if (sunxi_cphy->usb_mode == USB3_U2U3_BOTH || sunxi_cphy->usb_mode == USB3_U2_ONLY)
+		combo_usb2_clk_set(sunxi_cphy, true);
 
-	combo1_usb_pwr_set(sunxi_cphy, false);
-	combo1_usb_clk_set(sunxi_cphy, true);
-	combo1_usb_param_config(combo1);
-	combo1_usb_phy_reset(combo1, true);
+	if (sunxi_cphy->usb_mode == USB3_U2U3_BOTH || sunxi_cphy->usb_mode == USB3_U3_ONLY) {
+		if (sunxi_cphy->serdes_clk) {
+			ret = clk_set_rate(sunxi_cphy->serdes_clk, 100000000);
+			if (ret) {
+				dev_err(sunxi_cphy->dev, "set serdes_clk rate 100MHz err, return %d\n", ret);
+				return ret;
+			}
+
+			ret = clk_prepare_enable(sunxi_cphy->serdes_clk);
+			if (ret) {
+				dev_err(sunxi_cphy->dev, "enable serdes_clk err, return %d\n", ret);
+				return ret;
+			}
+		}
+
+		if (sunxi_cphy->dcxo_serdes1_clk) {
+			ret = clk_prepare_enable(sunxi_cphy->dcxo_serdes1_clk);
+			if (ret) {
+				dev_err(sunxi_cphy->dev, "enable dcxo_serdes1_clk err, return %d\n", ret);
+				return ret;
+			}
+		}
+
+		if (combo1->clk) {
+			ret = clk_prepare_enable(combo1->clk);
+			if (ret) {
+				dev_err(sunxi_cphy->dev, "enable combo1 clk err, return %d\n", ret);
+				return ret;
+			}
+		}
+
+		combo1_usb_pwr_set(sunxi_cphy, false);
+		combo1_usb_clk_set(sunxi_cphy, true);
+		combo1_usb_param_config(combo1);
+		combo1_usb_phy_reset(combo1, true);
+	}
 
 	return 0;
 }
@@ -3546,20 +3636,29 @@ static void sunxi_cadence_phy_combo1_usb3_exit(struct sunxi_cadence_phy *sunxi_c
 {
 	struct sunxi_cadence_combophy *combo1 = sunxi_cphy->combo1;
 
-	combo1_usb_clk_set(sunxi_cphy, false);
-	combo1_usb_phy_reset(combo1, false);
-	combo1_usb_pwr_set(sunxi_cphy, true);
+	if (sunxi_cphy->usb_mode == USB3_U2U3_BOTH || sunxi_cphy->usb_mode == USB3_U3_ONLY) {
+		combo1_usb_clk_set(sunxi_cphy, false);
+		combo1_usb_phy_reset(combo1, false);
+		combo1_usb_pwr_set(sunxi_cphy, true);
 
-	if (combo1->clk)
-		clk_disable_unprepare(combo1->clk);
+		if (combo1->clk)
+			clk_disable_unprepare(combo1->clk);
 
-	if (sunxi_cphy->dcxo_serdes1_clk)
-		clk_disable_unprepare(sunxi_cphy->dcxo_serdes1_clk);
+		if (sunxi_cphy->dcxo_serdes1_clk)
+			clk_disable_unprepare(sunxi_cphy->dcxo_serdes1_clk);
 
-	if (sunxi_cphy->serdes_clk)
-		clk_disable_unprepare(sunxi_cphy->serdes_clk);
+		if (sunxi_cphy->serdes_clk)
+			clk_disable_unprepare(sunxi_cphy->serdes_clk);
+	}
 
-	combo_usb2_clk_set(sunxi_cphy, false);
+	if (sunxi_cphy->usb_mode == USB3_U2U3_BOTH || sunxi_cphy->usb_mode == USB3_U2_ONLY)
+		combo_usb2_clk_set(sunxi_cphy, false);
+
+	if (sunxi_cphy->usb_mode == USB3_U2U3_NONE || sunxi_cphy->usb_mode == USB3_U3_ONLY)
+		clk_disable_unprepare(sunxi_cphy->usb_u3_utmi_clk);
+
+	if (sunxi_cphy->usb_mode == USB3_U2U3_NONE || sunxi_cphy->usb_mode == USB3_U2_ONLY)
+		clk_disable_unprepare(sunxi_cphy->usb_u2_pipe_clk);
 }
 
 static int sunxi_cadence_combo1_usb_phy_init(struct phy *phy)
@@ -3567,6 +3666,9 @@ static int sunxi_cadence_combo1_usb_phy_init(struct phy *phy)
 	struct sunxi_cadence_combophy *combo1 = phy_get_drvdata(phy);
 	struct sunxi_cadence_phy *sunxi_cphy = combo1->sunxi_cphy;
 	int ret = 0;
+
+	if (!sunxi_cphy->usb_supported)
+		return 0;
 
 	mutex_lock(&combo1->phy_lock);
 
@@ -3583,6 +3685,9 @@ static int sunxi_cadence_combo1_usb_phy_exit(struct phy *phy)
 {
 	struct sunxi_cadence_combophy *combo1 = phy_get_drvdata(phy);
 	struct sunxi_cadence_phy *sunxi_cphy = combo1->sunxi_cphy;
+
+	if (!sunxi_cphy->usb_supported)
+		return 0;
 
 	mutex_lock(&combo1->phy_lock);
 
@@ -4254,6 +4359,24 @@ static int sunxi_cadence_phy_parse_dt(struct platform_device *pdev)
 
 	/* usb supported */
 	sunxi_cphy->usb_supported = !device_property_read_bool(dev, "usb-disable");
+	if (sunxi_cphy->usb_supported) {
+		device_property_read_u32(dev, "usb-mode", &sunxi_cphy->usb_mode);
+		dev_info(dev, "get usb-mode : %d\n", sunxi_cphy->usb_mode);
+		if (sunxi_cphy->usb_mode) {
+			sunxi_cphy->usb_u2_pipe_clk = devm_clk_get(dev, "usb-u2-pipe-clk");
+			if (IS_ERR(sunxi_cphy->usb_u2_pipe_clk)) {
+				return dev_err_probe(dev, PTR_ERR(sunxi_cphy->usb_u2_pipe_clk),
+					"failed to get usb-u2-pipe clock for sunxi cadence phy\n");
+			}
+
+			sunxi_cphy->usb_u3_utmi_clk = devm_clk_get(dev, "usb-u3-utmi-clk");
+			if (IS_ERR(sunxi_cphy->usb_u3_utmi_clk)) {
+				return dev_err_probe(dev, PTR_ERR(sunxi_cphy->usb_u3_utmi_clk),
+					"failed to get usb-u3-utmi clock for sunxi cadence phy\n");
+			}
+		}
+	}
+
 	sunxi_cphy->udp_supported = !device_property_read_bool(dev, "udp-disable");
 	sunxi_cphy->phy_switcher_quirk = device_property_read_bool(dev, "aw,phy-switcher-quirk");
 	/* parse top register, which determide general configuration such as mode */
@@ -4404,7 +4527,7 @@ static int sunxi_cadence_phy_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static int __maybe_unused sunxi_cadence_phy_suspend(struct device *dev)
+static int __maybe_unused sunxi_cadence_phy_suspend_noirq(struct device *dev)
 {
 	struct sunxi_cadence_phy *sunxi_cphy = dev_get_drvdata(dev);
 
@@ -4413,7 +4536,7 @@ static int __maybe_unused sunxi_cadence_phy_suspend(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused sunxi_cadence_phy_resume(struct device *dev)
+static int __maybe_unused sunxi_cadence_phy_resume_noirq(struct device *dev)
 {
 	struct sunxi_cadence_phy *sunxi_cphy = dev_get_drvdata(dev);
 	struct sunxi_cadence_combophy *combo0 = sunxi_cphy->combo0;
@@ -4438,7 +4561,7 @@ static int __maybe_unused sunxi_cadence_phy_resume(struct device *dev)
 }
 
 static struct dev_pm_ops sunxi_cadence_phy_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(sunxi_cadence_phy_suspend, sunxi_cadence_phy_resume)
+	SET_NOIRQ_SYSTEM_SLEEP_PM_OPS(sunxi_cadence_phy_suspend_noirq, sunxi_cadence_phy_resume_noirq)
 };
 
 static const struct of_device_id sunxi_cadence_phy_of_match_table[] = {
@@ -4460,5 +4583,5 @@ module_platform_driver(sunxi_cadence_phy_driver);
 
 MODULE_AUTHOR("huangyongxing@allwinnertech.com");
 MODULE_DESCRIPTION("Allwinner CADENCE COMBOPHY driver");
-MODULE_VERSION("0.1.8");
+MODULE_VERSION("0.2.2");
 MODULE_LICENSE("GPL v2");

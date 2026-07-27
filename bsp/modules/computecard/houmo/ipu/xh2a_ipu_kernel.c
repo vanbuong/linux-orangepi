@@ -14,8 +14,9 @@
 #include "xh2a_ipu_kernel.h"
 #include "xh2a_ipu_config.h"
 
-struct xh2a_ipu_kernel *xh2a_ipu_kernel_create(struct xh2a_ipu_group *group,
-					       struct ipu_kernel_launch_data *kld)
+struct xh2a_ipu_kernel *
+xh2a_ipu_kernel_create(struct xh2a_ipu_group *group,
+		       struct ipu_kernel_launch_data *kld)
 {
 	struct xh2a_ipu_kernel *kernel = NULL;
 	struct xh2a_ipu_device *ipu_dev = group->ipu_dev;
@@ -52,6 +53,11 @@ struct xh2a_ipu_kernel *xh2a_ipu_kernel_create(struct xh2a_ipu_group *group,
 	kernel->param_spm_offset = group->param_size;
 
 	if (group->param_type == XH2A_GROUP_PARAM_SPM) {
+		void __user *param_uaddr;
+
+		param_uaddr =
+			(void __user *)(uintptr_t)kernel->kld.param_phy_addr;
+
 		kernel->host_param =
 			kzalloc(kernel->kld.param_size, GFP_KERNEL);
 		if (kernel->host_param == NULL) {
@@ -63,8 +69,7 @@ struct xh2a_ipu_kernel *xh2a_ipu_kernel_create(struct xh2a_ipu_group *group,
 			return NULL;
 		}
 
-		if (copy_from_user(kernel->host_param,
-				   (void *)kernel->kld.param_phy_addr,
+		if (copy_from_user(kernel->host_param, param_uaddr,
 				   kernel->kld.param_size)) {
 			dev_err(miscdev->this_device,
 				"%s: param copy_from_user failed\n", __func__);

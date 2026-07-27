@@ -1076,7 +1076,7 @@ static int sunxi_combphy_remove(struct platform_device *pdev)
 	return 0;
 }
 
-static int __maybe_unused sunxi_combo_suspend(struct device *dev)
+static int __maybe_unused sunxi_combo_suspend_noirq(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	int ret;
@@ -1091,7 +1091,7 @@ static int __maybe_unused sunxi_combo_suspend(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused sunxi_combo_resume(struct device *dev)
+static int __maybe_unused sunxi_combo_resume_noirq(struct device *dev)
 {
 	struct platform_device *pdev = to_platform_device(dev);
 	int ret;
@@ -1106,7 +1106,7 @@ static int __maybe_unused sunxi_combo_resume(struct device *dev)
 }
 
 static struct dev_pm_ops sunxi_combo_pm_ops = {
-	SET_SYSTEM_SLEEP_PM_OPS(sunxi_combo_suspend, sunxi_combo_resume)
+	SET_NOIRQ_SYSTEM_SLEEP_PM_OPS(sunxi_combo_suspend_noirq, sunxi_combo_resume_noirq)
 };
 
 /*
@@ -1154,5 +1154,5 @@ module_platform_driver(sunxi_combphy_driver);
 
 MODULE_DESCRIPTION("Allwinner INNO COMBOPHY driver");
 MODULE_AUTHOR("songjundong@allwinnertech.com");
-MODULE_VERSION("0.0.23");
+MODULE_VERSION("0.0.24");
 MODULE_LICENSE("GPL v2");

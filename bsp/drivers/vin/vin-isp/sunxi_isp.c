@@ -68,6 +68,13 @@ struct isp_dev *glb_isp[VIN_MAX_ISP];
 #define MAX_IN_WIDTH			4224
 #define MAX_IN_HEIGHT			4224
 
+#if defined CONFIG_ARCH_SUN65IW1
+#define TDM_RDMA_FIFO_LOW_LIMIT		0x07
+#define TDM_RDMA_FIFO_HIGH_LIMIT	0x07
+#define TDM_WDMA_FIFO_LOW_LIMIT		0x07
+#define TDM_WDMA_FIFO_HIGH_LIMIT	0x07
+#endif
+
 static struct isp_pix_fmt sunxi_isp_formats[] = {
 	{
 		.fourcc = V4L2_PIX_FMT_SBGGR8,
@@ -434,15 +441,15 @@ static void isp_3d_pingpong_free(struct isp_dev *isp)
 
 static int isp_3d_pingpong_update(struct isp_dev *isp)
 {
-	dma_addr_t addr;
+	vin_dma_addr_t addr;
 #if !defined ISP_600
 #if IS_ENABLED(CONFIG_ARCH_SUN8IW19P1)
-	addr = (dma_addr_t)isp->d3d_pingpong[0].dma_addr;
+	addr = (vin_dma_addr_t)isp->d3d_pingpong[0].dma_addr;
 	bsp_isp_set_d3d_ref_k_addr(isp->id, addr);
-	addr = (dma_addr_t)isp->d3d_pingpong[1].dma_addr;
+	addr = (vin_dma_addr_t)isp->d3d_pingpong[1].dma_addr;
 	bsp_isp_set_d3d_ref_raw_addr(isp->id, addr);
 #if IS_ENABLED(CONFIG_D3D_LTF_EN)
-	addr = (dma_addr_t)isp->d3d_pingpong[2].dma_addr;
+	addr = (vin_dma_addr_t)isp->d3d_pingpong[2].dma_addr;
 	bsp_isp_set_d3d_ltf_raw_addr(isp->id, addr);
 #endif
 
@@ -465,9 +472,9 @@ static int isp_3d_pingpong_update(struct isp_dev *isp)
 	isp->d3d_pingpong[0] = isp->d3d_pingpong[1];
 	isp->d3d_pingpong[1] = tmp;
 
-	addr = (dma_addr_t)isp->d3d_pingpong[0].dma_addr;
+	addr = (vin_dma_addr_t)isp->d3d_pingpong[0].dma_addr;
 	bsp_isp_set_d3d_addr0(isp->id, addr);
-	addr = (dma_addr_t)isp->d3d_pingpong[1].dma_addr;
+	addr = (vin_dma_addr_t)isp->d3d_pingpong[1].dma_addr;
 	bsp_isp_set_d3d_addr1(isp->id, addr);
 #if IS_ENABLED(CONFIG_ARCH_SUN8IW16P1) && !defined CONFIG_D3D_LTF_EN
 	/* close d3d long time frame */
@@ -475,13 +482,13 @@ static int isp_3d_pingpong_update(struct isp_dev *isp)
 #endif
 #endif
 #else /* else ISP_600 */
-	addr = (dma_addr_t)isp->d3d_pingpong[0].dma_addr;
+	addr = (vin_dma_addr_t)isp->d3d_pingpong[0].dma_addr;
 	bsp_isp_set_d3d_bayer_addr(isp->id, addr);
-	addr = (dma_addr_t)isp->d3d_pingpong[1].dma_addr;
+	addr = (vin_dma_addr_t)isp->d3d_pingpong[1].dma_addr;
 	bsp_isp_set_d3d_k0_addr(isp->id, addr);
-	addr = (dma_addr_t)isp->d3d_pingpong[2].dma_addr;
+	addr = (vin_dma_addr_t)isp->d3d_pingpong[2].dma_addr;
 	bsp_isp_set_d3d_k1_addr(isp->id, addr);
-	addr = (dma_addr_t)isp->d3d_pingpong[3].dma_addr;
+	addr = (vin_dma_addr_t)isp->d3d_pingpong[3].dma_addr;
 	bsp_isp_set_d3d_status_addr(isp->id, addr);
 
 	bsp_isp_set_d3d_lbc_cfg(isp->id, isp->d3d_lbc);
@@ -572,9 +579,9 @@ static void isp_wdr_pingpong_free(struct isp_dev *isp)
 
 static int isp_wdr_pingpong_set(struct isp_dev *isp)
 {
-	dma_addr_t addr;
+	vin_dma_addr_t addr;
 #if IS_ENABLED(CONFIG_ARCH_SUN8IW19P1)
-	addr = (dma_addr_t)isp->wdr_pingpong[0].dma_addr;
+	addr = (vin_dma_addr_t)isp->wdr_pingpong[0].dma_addr;
 	bsp_isp_set_wdr_addr0(isp->id, addr);
 	if (WDR_RAW_LBC_MODE <= 10)
 		bsp_isp_set_wdr_raw_lbc_ctrl(isp->id, &isp->wdr_raw_lbc, 0);
@@ -583,9 +590,9 @@ static int isp_wdr_pingpong_set(struct isp_dev *isp)
 	bsp_isp_set_wdr_stride(isp->id, isp->wdr_raw_lbc.line_tar_bits / 32);
 	bsp_isp_wdr_fifo_en(isp->id, 1);
 #else
-	addr = (dma_addr_t)isp->wdr_pingpong[0].dma_addr;
+	addr = (vin_dma_addr_t)isp->wdr_pingpong[0].dma_addr;
 	bsp_isp_set_wdr_addr0(isp->id, addr);
-	addr = (dma_addr_t)isp->wdr_pingpong[1].dma_addr;
+	addr = (vin_dma_addr_t)isp->wdr_pingpong[1].dma_addr;
 	bsp_isp_set_wdr_addr1(isp->id, addr);
 #endif
 	return 0;
@@ -699,7 +706,7 @@ static void sunxi_isp_set_load_ddr(struct isp_dev *isp)
 	bsp_isp_set_last_blank_cycle(isp->id, 5);
 	bsp_isp_set_speed_mode(isp->id, 3);
 #if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN8IW21)
-	bsp_isp_set_save_load_addr(isp->id, (dma_addr_t)isp->isp_save_load.dma_addr);
+	bsp_isp_set_save_load_addr(isp->id, (vin_dma_addr_t)isp->isp_save_load.dma_addr);
 #endif
 	if (isp->wdr_mode == ISP_NORMAL_MODE) {
 		bsp_isp_set_ch_input_bit(isp->id, 0, isp->isp_fmt->input_bit);
@@ -715,6 +722,13 @@ static void sunxi_isp_set_load_ddr(struct isp_dev *isp)
 		bsp_isp_set_ch_input_bit(isp->id, 0, isp->isp_fmt->input_bit);
 		bsp_isp_set_ch_input_bit(isp->id, 1, isp->isp_fmt->input_bit);
 	}
+#if defined CONFIG_ARCH_SUN65IW1
+	bsp_isp_set_rec_rdma_fifo_low_limit(isp->id, TDM_RDMA_FIFO_LOW_LIMIT);
+	bsp_isp_set_rec_rdma_fifo_high_limit(isp->id, TDM_RDMA_FIFO_HIGH_LIMIT);
+	bsp_isp_set_rec_wdma_fifo_low_limit(isp->id, TDM_WDMA_FIFO_LOW_LIMIT);
+	bsp_isp_set_rec_wdma_fifo_high_limit(isp->id, TDM_WDMA_FIFO_HIGH_LIMIT);
+#endif
+
 }
 #endif
 
@@ -811,8 +825,8 @@ static int sunxi_isp_subdev_s_stream(struct v4l2_subdev *sd, int enable)
 		} else {
 			isp->load_select = false;
 			bsp_isp_set_saved_addr(isp->id, (unsigned long)isp->isp_save.dma_addr);
-			bsp_isp_set_load_addr(isp->id, (dma_addr_t)isp->load_para[0].dma_addr);
-			bsp_isp_set_save_load_addr(isp->id, (dma_addr_t)isp->isp_save_load.dma_addr);
+			bsp_isp_set_load_addr(isp->id, (vin_dma_addr_t)isp->load_para[0].dma_addr);
+			bsp_isp_set_save_load_addr(isp->id, (vin_dma_addr_t)isp->isp_save_load.dma_addr);
 			isp->first_init_server = 0;
 #if !IS_ENABLED(CONFIG_VIN_INIT_MELIS)
 			isp_reset_config_sensor_info(isp, VIN_SET_ISP_START);
@@ -1292,7 +1306,7 @@ int sunxi_isp_subdev_init(struct v4l2_subdev *sd, u32 val)
 		isp->h3a_stat.buf[0].state = ISPSTAT_LOAD_SET;
 		isp->h3a_stat.buf[0].dma_addr = isp->isp_stat.dma_addr;
 		isp->h3a_stat.buf[0].virt_addr = isp->isp_stat.vir_addr;
-		bsp_isp_set_statistics_addr(isp->id, (dma_addr_t)isp->isp_stat.dma_addr);
+		bsp_isp_set_statistics_addr(isp->id, (vin_dma_addr_t)isp->isp_stat.dma_addr);
 		bsp_isp_set_saved_addr(isp->id, (unsigned long)isp->isp_save.dma_addr);
 #if !defined ISP_600
 #if IS_ENABLED(CONFIG_ARCH_SUN8IW12P1) || IS_ENABLED(CONFIG_ARCH_SUN8IW17P1) || IS_ENABLED(CONFIG_ARCH_SUN8IW15P1)
@@ -1300,13 +1314,13 @@ int sunxi_isp_subdev_init(struct v4l2_subdev *sd, u32 val)
 		bsp_isp_set_table_addr(isp->id, LENS_GAMMA_TABLE, (unsigned long)(isp->isp_lut_tbl.dma_addr));
 		bsp_isp_set_table_addr(isp->id, DRC_TABLE, (unsigned long)(isp->isp_drc_tbl.dma_addr));
 #elif IS_ENABLED(CONFIG_ARCH_SUN8IW16P1) || IS_ENABLED(CONFIG_ARCH_SUN8IW19P1) || IS_ENABLED(CONFIG_ARCH_SUN50IW10)
-		bsp_isp_set_load_addr0(isp->id, (dma_addr_t)isp->isp_load.dma_addr);
-		bsp_isp_set_load_addr1(isp->id, (dma_addr_t)isp->isp_load.dma_addr);
+		bsp_isp_set_load_addr0(isp->id, (vin_dma_addr_t)isp->isp_load.dma_addr);
+		bsp_isp_set_load_addr1(isp->id, (vin_dma_addr_t)isp->isp_load.dma_addr);
 #endif
 #else /* isp600 */
 		isp->load_select = false;
-		bsp_isp_set_load_addr(isp->id, (dma_addr_t)isp->load_para[0].dma_addr);
-		bsp_isp_set_save_load_addr(isp->id, (dma_addr_t)isp->isp_save_load.dma_addr);
+		bsp_isp_set_load_addr(isp->id, (vin_dma_addr_t)isp->load_para[0].dma_addr);
+		bsp_isp_set_save_load_addr(isp->id, (vin_dma_addr_t)isp->isp_save_load.dma_addr);
 #endif
 		bsp_isp_set_para_ready(isp->id, PARA_NOT_READY);
 	}
@@ -1326,7 +1340,6 @@ static int __isp_set_load_reg(struct v4l2_subdev *sd, struct isp_table_reg_map *
 		vin_err("user ask for 0x%x data, it more than isp load_data 0x%x\n", reg->size, ISP_LOAD_DRAM_SIZE);
 		return -EINVAL;
 	}
-
 #if defined ISP_600
 	if (isp->large_image == 3 && glb_isp[0]) {
 		if (isp->id == 0) {
@@ -1678,6 +1691,9 @@ void sunxi_isp_reset(struct isp_dev *isp)
 				bsp_isp_enable(isp->id, 1);
 #if defined ISP_600
 				bsp_isp_top_capture_start(isp->id);
+				bsp_isp_set_input_fmt(isp->id, isp->isp_fmt->infmt); //update load&save_load input_fmt when flip
+				memcpy(isp->load_para[0].vir_addr, isp->isp_load.vir_addr, ISP_LOAD_DRAM_SIZE);
+				memcpy(isp->load_para[1].vir_addr, isp->isp_load.vir_addr, ISP_LOAD_DRAM_SIZE);
 #endif
 				bsp_isp_set_para_ready(isp->id, PARA_READY);
 				bsp_isp_capture_start(isp->id);
@@ -3225,22 +3241,46 @@ static int isp_enable_irq(void *dev, void *data, int len)
 		total_size = isp->reserved_len - 2 * (VIN_RESERVE_SIZE + VIN_THRESHOLD_PARAM_SIZE);
 
 		if ((phy_addr[0] == 0 && phy_addr[1] == 0) || (not_frame_loss_flag[1] == 1 && phy_addr[0] == 0) || (not_frame_loss_flag[0] == 1 && not_frame_loss_flag[1] == 1)) {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0)
 			memblock_free(isp->reserved_r.start, total_size);
+#else
+			memblock_free((void *)isp->reserved_r.start, total_size);
+#endif
 			free_reserved_area(__va(isp->reserved_r.start), __va(isp->reserved_r.start + total_size), -1, "isp_reserved");
 		} else if (phy_addr[0] == 0 && phy_addr[1] != 0) {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0)
 			memblock_free(isp->reserved_r.start, phy_addr[1] - isp->reserved_r.start);
+#else
+			memblock_free((void *)isp->reserved_r.start, phy_addr[1] - isp->reserved_r.start);
+#endif
 			free_reserved_area(__va(isp->reserved_r.start), __va(phy_addr[1]), -1, "isp_reserved");
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0)
 			memblock_free(phy_addr[1] + buf_size[1], total_size - (phy_addr[1] + buf_size[1] - isp->reserved_r.start));
+#else
+			memblock_free((void *)(phy_addr[1] + buf_size[1]), total_size - (phy_addr[1] + buf_size[1] - isp->reserved_r.start));
+#endif
 			free_reserved_area(__va(phy_addr[1] + buf_size[1]), __va(isp->reserved_r.start + total_size), -1, "isp_reserved");
 		} else if (phy_addr[0] != 0 && phy_addr[1] != 0) {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0)
 			memblock_free(isp->reserved_r.start, phy_addr[0] - isp->reserved_r.start);
+#else
+			memblock_free((void *)isp->reserved_r.start, phy_addr[0] - isp->reserved_r.start);
+#endif
 			free_reserved_area(__va(isp->reserved_r.start), __va(phy_addr[0]), -1, "isp_reserved");
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0)
 			memblock_free(phy_addr[0] + buf_size[0], phy_addr[1] - (phy_addr[0] + buf_size[0]));
+#else
+			memblock_free((void *)(phy_addr[0] + buf_size[0]), phy_addr[1] - (phy_addr[0] + buf_size[0]));
+#endif
 			free_reserved_area(__va(phy_addr[0] + buf_size[0]), __va(phy_addr[1]), -1, "isp_reserved");
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0)
 			memblock_free(phy_addr[1] + buf_size[1], total_size - (phy_addr[1] + buf_size[1] - isp->reserved_r.start));
+#else
+			memblock_free((void *)(phy_addr[1] + buf_size[1]), total_size - (phy_addr[1] + buf_size[1] - isp->reserved_r.start));
+#endif
 			free_reserved_area(__va(phy_addr[1] + buf_size[1]), __va(isp->reserved_r.start + total_size), -1, "isp_reserved");
 		}
 	}
@@ -3331,7 +3371,8 @@ static int isp_probe(struct platform_device *pdev)
 #endif
 
 #if !defined CONFIG_VIN_INIT_MELIS
-#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN55IW6) || IS_ENABLED(CONFIG_ARCH_SUN60IW2)
+#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN55IW6) ||\
+	 IS_ENABLED(CONFIG_ARCH_SUN60IW2) || IS_ENABLED(CONFIG_ARCH_SUN65IW1)
 		vin_iommu_en(ISP_IOMMU_MASTER, true);
 #endif
 #endif

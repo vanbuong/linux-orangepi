@@ -385,7 +385,11 @@ int kbase_mem_pool_init(struct kbase_mem_pool *pool,
 	 * struct shrinker does not define batch
 	 */
 	pool->reclaim.batch = 0;
+#if (KERNEL_VERSION(6, 6, 0) <= LINUX_VERSION_CODE)
+	register_shrinker(&pool->reclaim, "mali_mem_pool");
+#else
 	register_shrinker(&pool->reclaim);
+#endif
 
 	pool_dbg(pool, "initialized\n");
 

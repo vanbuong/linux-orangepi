@@ -1623,8 +1623,8 @@ static struct sensor_win_size sensor_win_sizes[] = {
 	.regs          = sensor_4k25_regs,
 	.regs_size     = ARRAY_SIZE(sensor_4k25_regs),
 	.set_size      = NULL,
-	.top_clk       = 336*1000*1000,
-	.isp_clk       = 326*1000*1000,
+	.top_clk       = 540*1000*1000,
+	.isp_clk       = 504*1000*1000,
 #if IS_ENABLED(CONFIG_SENSOR_CROP)
 	.vipp_hoff    = VIDEO_OFFSET_H,
 	.vipp_voff    = VIDEO_OFFSET_V,
@@ -1649,8 +1649,8 @@ static struct sensor_win_size sensor_win_sizes[] = {
 	.regs          = sensor_4k30_regs,
 	.regs_size     = ARRAY_SIZE(sensor_4k30_regs),
 	.set_size      = NULL,
-	.top_clk       = 336*1000*1000,
-	.isp_clk       = 326*1000*1000,
+	.top_clk       = 540*1000*1000,
+	.isp_clk       = 504*1000*1000,
 #if IS_ENABLED(CONFIG_SENSOR_CROP)
 	.vipp_hoff    = VIDEO_OFFSET_H,
 	.vipp_voff    = VIDEO_OFFSET_V,
@@ -1675,8 +1675,8 @@ static struct sensor_win_size sensor_win_sizes[] = {
 	.regs          = sensor_4k30_regs,
 	.regs_size     = ARRAY_SIZE(sensor_4k30_regs),
 	.set_size      = NULL,
-	.top_clk       = 336*1000*1000,
-	.isp_clk       = 326*1000*1000,
+	.top_clk       = 540*1000*1000,
+	.isp_clk       = 504*1000*1000,
 #if IS_ENABLED(CONFIG_SENSOR_CROP)
 	.vipp_hoff    = VIDEO_OFFSET_H,
 	.vipp_voff    = VIDEO_OFFSET_V,
@@ -1701,8 +1701,8 @@ static struct sensor_win_size sensor_win_sizes[] = {
 	.regs          = sensor_2160p25_regs,
 	.regs_size     = ARRAY_SIZE(sensor_2160p25_regs),
 	.set_size      = NULL,
-	.top_clk       = 310*1000*1000,
-	.isp_clk       = 286*1000*1000,
+	.top_clk       = 540*1000*1000,
+	.isp_clk       = 480*1000*1000,
 	 },
 	 {
 	.width         = 3840,
@@ -1722,8 +1722,8 @@ static struct sensor_win_size sensor_win_sizes[] = {
 	.regs          = sensor_2160p30_regs,
 	.regs_size     = ARRAY_SIZE(sensor_2160p30_regs),
 	.set_size      = NULL,
-	.top_clk       = 310*1000*1000,
-	.isp_clk       = 286*1000*1000,
+	.top_clk       = 540*1000*1000,
+	.isp_clk       = 480*1000*1000,
 	 },
 
 	 {
@@ -1810,8 +1810,8 @@ static struct sensor_win_size sensor_win_sizes[] = {
 	.regs          = sensor_1080p60_regs,
 	.regs_size     = ARRAY_SIZE(sensor_1080p60_regs),
 	.set_size      = NULL,
-	.top_clk       = 310*1000*1000,
-	.isp_clk       = 283*1000*1000,
+	.top_clk       = 400*1000*1000,
+	.isp_clk       = 380*1000*1000,
 	},
 
 	 {
@@ -1854,7 +1854,7 @@ static struct sensor_win_size sensor_win_sizes[] = {
 	.regs          = sensor_720p240_regs,
 	.regs_size     = ARRAY_SIZE(sensor_720p240_regs),
 	.set_size      = NULL,
-	.top_clk       = 327*1000*1000,
+	.top_clk       = 380*1000*1000,
 	.isp_clk       = 268*1000*1000,
 	 },
 };

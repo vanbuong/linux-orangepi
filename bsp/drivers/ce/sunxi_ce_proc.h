@@ -15,13 +15,6 @@
 #ifndef _SUNXI_SECURITY_SYSTEM_PROC_H_
 #define _SUNXI_SECURITY_SYSTEM_PROC_H_
 
-#include <crypto/aes.h>
-#include <crypto/sha1.h>
-#include <crypto/sha2.h>
-#include <crypto/sha3.h>
-//#include <crypto/algapi.h>
-#include <crypto/skcipher.h>
-#include <linux/scatterlist.h>
 #include "sunxi_ce_cdev.h"
 
 #define SRC_FLAG	(0x0)

@@ -22,6 +22,7 @@
 #endif
 
 #define CMD_BUF_MAX                 1536
+#define DATA_BUF_MAX                2048
 #define TXPKT_BLOCKSIZE             512
 #define MAX_AGGR_TXPKT_LEN          (1536*64)
 #define CMD_TX_TIMEOUT              5000
@@ -53,7 +54,7 @@ extern int aicwf_intf_dbg_level;
 #define usb_dbg(fmt, ...)
 #endif
 #if DBG_LEVEL >= DEBUG_INFO_LEVEL
-#define txrx_info(fmt, ...)         printk("aicsdio: " fmt, ##__VA_ARGS__)
+#define txrx_info(fmt, ...)         printk("txrx: " fmt, ##__VA_ARGS__)
 #define sdio_info(fmt, ...)         printk("aicsdio: " fmt, ##__VA_ARGS__)
 #define usb_info(fmt, ...)          printk("aicusb: " fmt, ##__VA_ARGS__)
 #else
@@ -144,8 +145,14 @@ struct aicwf_bus {
 	u8 *cmd_buf;
 	struct completion bustx_trgg;
 	struct completion busrx_trgg;
+#ifdef CONFIG_USB_MSG_IN_EP
+	struct completion msg_busrx_trgg;
+#endif
 	struct task_struct *bustx_thread;
 	struct task_struct *busrx_thread;
+#ifdef CONFIG_USB_MSG_IN_EP
+	struct task_struct *msg_busrx_thread;
+#endif
 };
 
 struct aicwf_tx_priv {
@@ -238,6 +245,12 @@ struct aicwf_rx_priv {
 	struct frame_queue rxq;
 #endif
 
+#ifdef CONFIG_USB_MSG_IN_EP
+	atomic_t msg_rx_cnt;
+	spinlock_t msg_rxqlock;
+	struct frame_queue msg_rxq;
+#endif
+
 #ifdef AICWF_RX_REORDER
 	spinlock_t freeq_lock;
 	struct list_head rxframes_freequeue;
@@ -287,6 +300,9 @@ static inline void aicwf_sched_timeout(u32 millisec)
 	}
 }
 
+#ifdef CONFIG_ALIGN_8BYTES
+void rwnx_skb_align_8bytes(struct sk_buff *skb);
+#endif
 int aicwf_bus_init(uint bus_hdrlen, struct device *dev);
 void aicwf_bus_deinit(struct device *dev);
 void aicwf_tx_deinit(struct aicwf_tx_priv *tx_priv);
@@ -303,7 +319,7 @@ void aicwf_dev_skb_free(struct sk_buff *skb);
 struct sk_buff *aicwf_frame_dequeue(struct frame_queue *pq);
 struct sk_buff *aicwf_frame_queue_peek_tail(struct frame_queue *pq, int *prio_out);
 #ifdef CONFIG_PREALLOC_RX_SKB
-void rxbuff_queue_flush(struct aicwf_rx_priv* rx_priv);
+void rxbuff_queue_flush(struct aicwf_rx_priv *rx_priv);
 void aicwf_rxframe_queue_init_2(struct rx_frame_queue *pq, int max_len);
 void rxbuff_free(struct rx_buff *rxbuff);
 struct rx_buff *rxbuff_dequeue(struct rx_frame_queue *pq);

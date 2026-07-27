@@ -28,6 +28,15 @@
 
 #include <linux/version.h>
 
+/*
+ * For Linux kernel >= 6.6, MIN/MAX are defined in <linux/minmax.h>
+ * which is included by <linux/kernel.h>. Include kernel.h first to
+ * avoid redefinition warnings.
+ */
+#if (KERNEL_VERSION(6, 6, 0) <= LINUX_VERSION_CODE)
+#include <linux/kernel.h>
+#endif
+
 /**
  * MIN - Return the lesser of two values.
  * @x: value1
@@ -36,7 +45,9 @@
  * As a macro it may evaluate its arguments more than once.
  * Refer to MAX macro for more details
  */
+#ifndef MIN
 #define MIN(x, y)	((x) < (y) ? (x) : (y))
+#endif
 
 /**
  * MAX - Return the greater of two values.
@@ -50,7 +61,9 @@
  * to retrieve the min and max of two values, consider using a conditional swap
  * instead.
  */
+#ifndef MAX
 #define MAX(x, y)	((x) < (y) ? (y) : (x))
+#endif
 
 /**
  * Function-like macro for suppressing unused variable warnings.

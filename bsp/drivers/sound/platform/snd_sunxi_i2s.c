@@ -39,7 +39,7 @@
 #define DRV_NAME	"sunxi-snd-plat-i2s"
 
 /* for reg debug */
-static unsigned int audio_reg_addrs[] = {
+static u32 audio_reg_addrs[] = {
 	SUNXI_I2S_CTL,
 	SUNXI_I2S_FMT0,
 	SUNXI_I2S_FMT1,
@@ -76,7 +76,7 @@ static unsigned int audio_reg_addrs[] = {
 	SUNXI_I2S_REV,
 };
 
-static unsigned int sun8iw11_reg_addrs[] = {
+static u32 sun8iw11_reg_addrs[] = {
 	SUNXI_I2S_CTL,
 	SUNXI_I2S_FMT0,
 	SUNXI_I2S_FMT1,
@@ -103,7 +103,7 @@ static unsigned int sun8iw11_reg_addrs[] = {
 	SUNXI_I2S_8SLOT_RXCHMAP,
 };
 
-static unsigned int sun8iw17_reg_addrs[] = {
+static u32 sun8iw17_reg_addrs[] = {
 	SUNXI_I2S_CTL,
 	SUNXI_I2S_FMT0,
 	SUNXI_I2S_FMT1,
@@ -126,6 +126,39 @@ static unsigned int sun8iw17_reg_addrs[] = {
 	SUNXI_I2S_RXCHMAP1,
 };
 
+struct sunxi_i2s_real_to_reg {
+	u32 real;
+	u32 reg;
+};
+
+static const struct sunxi_i2s_real_to_reg sunxi_i2s_mclk_bclk_div[] = {
+	{1, 1},
+	{2, 2},
+	{4, 3},
+	{6, 4},
+	{8, 5},
+	{12, 6},
+	{16, 7},
+	{24, 8},
+	{32, 9},
+	{48, 10},
+	{64, 11},
+	{96, 12},
+	{128, 13},
+	{176, 14},
+	{192, 15},
+};
+
+static const struct sunxi_i2s_real_to_reg sunxi_i2s_slot_width_map[] = {
+	{8, 1},
+	{12, 2},
+	{16, 3},
+	{20, 4},
+	{24, 5},
+	{28, 6},
+	{32, 7},
+};
+
 static struct regmap_config g_regmap_config = {
 	.reg_bits = 32,
 	.reg_stride = 4,
@@ -135,9 +168,9 @@ static struct regmap_config g_regmap_config = {
 };
 
 static int sunxi_get_i2s_dai_fmt(struct sunxi_i2s_dai_fmt *i2s_dai_fmt,
-				 enum SUNXI_I2S_DAI_FMT_SEL dai_fmt_sel, unsigned int *val);
+				 enum SUNXI_I2S_DAI_FMT_SEL dai_fmt_sel, u32 *val);
 static int sunxi_set_i2s_dai_fmt(struct sunxi_i2s_dai_fmt *i2s_dai_fmt,
-				 enum SUNXI_I2S_DAI_FMT_SEL dai_fmt_sel, unsigned int val);
+				 enum SUNXI_I2S_DAI_FMT_SEL dai_fmt_sel, u32 val);
 
 static void sunxi_rx_sync_enable(void *data, bool enable);
 
@@ -180,12 +213,12 @@ static void sunxi_i2s_get_hdmi_fmt(struct snd_notifier_block *snd_nb)
 	}
 }
 
-static int sunxi_i2s_set_ch_en(struct sunxi_i2s *i2s, int stream, unsigned int channels)
+static int sunxi_i2s_set_ch_en(struct sunxi_i2s *i2s, int stream, u32 channels)
 {
 	struct regmap *regmap = i2s->mem.regmap;
 	struct sunxi_i2s_dts *dts = &i2s->dts;
 	struct sunxi_i2s_dai_fmt *i2s_dai_fmt = &i2s->i2s_dai_fmt;
-	unsigned int slot_en_num;
+	u32 slot_en_num;
 	uint32_t channels_en_slot[16] = {
 		0x0001, 0x0003, 0x0007, 0x000f, 0x001f, 0x003f, 0x007f, 0x00ff,
 		0x01ff, 0x03ff, 0x07ff, 0x0fff, 0x1fff, 0x3fff, 0x7fff, 0xffff
@@ -237,12 +270,12 @@ static int sunxi_i2s_set_ch_en(struct sunxi_i2s *i2s, int stream, unsigned int c
 	return 0;
 }
 
-static int sun8iw11_i2s_set_ch_en(struct sunxi_i2s *i2s, int stream, unsigned int channels)
+static int sun8iw11_i2s_set_ch_en(struct sunxi_i2s *i2s, int stream, u32 channels)
 {
 	struct regmap *regmap = i2s->mem.regmap;
 	struct sunxi_i2s_dts *dts = &i2s->dts;
 	struct sunxi_i2s_dai_fmt *i2s_dai_fmt = &i2s->i2s_dai_fmt;
-	unsigned int slot_en_num;
+	u32 slot_en_num;
 	uint32_t channels_en_slot[8] = {
 		0x01, 0x03, 0x07, 0x0f, 0x1f, 0x3f, 0x7f, 0xff,
 	};
@@ -301,14 +334,14 @@ static int sun8iw11_i2s_set_ch_en(struct sunxi_i2s *i2s, int stream, unsigned in
 	return 0;
 }
 
-static int sun8iw17_i2s_set_ch_en(struct sunxi_i2s *i2s, int stream, unsigned int channels)
+static int sun8iw17_i2s_set_ch_en(struct sunxi_i2s *i2s, int stream, u32 channels)
 {
 	struct regmap *regmap = i2s->mem.regmap;
 	struct sunxi_i2s_dts *dts = &i2s->dts;
 	const struct sunxi_i2s_quirks *quirks = i2s->quirks;
 	struct sunxi_i2s_dai_fmt *i2s_dai_fmt = &i2s->i2s_dai_fmt;
-	unsigned int slot_en_num;
-	unsigned int i;
+	u32 slot_en_num;
+	u32 i;
 	uint32_t channels_en_slot[16] = {
 		0x0001, 0x0003, 0x0007, 0x000f, 0x001f, 0x003f, 0x007f, 0x00ff,
 		0x01ff, 0x03ff, 0x07ff, 0x0fff, 0x1fff, 0x3fff, 0x7fff, 0xffff
@@ -350,11 +383,11 @@ static int sun8iw17_i2s_set_ch_en(struct sunxi_i2s *i2s, int stream, unsigned in
 	return 0;
 }
 
-static int sunxi_i2s_set_daifmt_fmt(struct sunxi_i2s *i2s, unsigned int format)
+static int sunxi_i2s_set_daifmt_fmt(struct sunxi_i2s *i2s, u32 format)
 {
 	struct sunxi_i2s_dai_fmt *i2s_dai_fmt = &i2s->i2s_dai_fmt;
 	struct regmap *regmap = i2s->mem.regmap;
-	unsigned int mode;
+	u32 mode;
 
 	if (IS_ERR_OR_NULL(i2s))
 		return -EINVAL;
@@ -414,11 +447,11 @@ static int sunxi_i2s_set_daifmt_fmt(struct sunxi_i2s *i2s, unsigned int format)
 	return 0;
 }
 
-static int sun8iw11_i2s_set_daifmt_fmt(struct sunxi_i2s *i2s, unsigned int format)
+static int sun8iw11_i2s_set_daifmt_fmt(struct sunxi_i2s *i2s, u32 format)
 {
 	struct sunxi_i2s_dai_fmt *i2s_dai_fmt = &i2s->i2s_dai_fmt;
 	struct regmap *regmap = i2s->mem.regmap;
-	unsigned int mode;
+	u32 mode;
 
 	if (IS_ERR_OR_NULL(i2s))
 		return -EINVAL;
@@ -478,11 +511,11 @@ static int sun8iw11_i2s_set_daifmt_fmt(struct sunxi_i2s *i2s, unsigned int forma
 	return 0;
 }
 
-static int sun8iw17_i2s_set_daifmt_fmt(struct sunxi_i2s *i2s, unsigned int format)
+static int sun8iw17_i2s_set_daifmt_fmt(struct sunxi_i2s *i2s, u32 format)
 {
 	struct sunxi_i2s_dai_fmt *i2s_dai_fmt = &i2s->i2s_dai_fmt;
 	struct regmap *regmap = i2s->mem.regmap;
-	unsigned int mode;
+	u32 mode;
 
 	if (IS_ERR_OR_NULL(i2s))
 		return -EINVAL;
@@ -536,13 +569,13 @@ static int sun8iw17_i2s_set_daifmt_fmt(struct sunxi_i2s *i2s, unsigned int forma
 	return 0;
 }
 
-static int sunxi_i2s_set_ch_map(struct sunxi_i2s *i2s, unsigned int channels)
+static int sunxi_i2s_set_ch_map(struct sunxi_i2s *i2s, u32 channels)
 {
 	struct regmap *regmap = i2s->mem.regmap;
 	struct sunxi_i2s_dts *dts = &i2s->dts;
-	unsigned int reg_val_tx[8] = {0};
-	unsigned int reg_val_rx[4] = {0};
-	unsigned int i, j;
+	volatile u32 reg_val_tx[8] = {0};
+	volatile u32 reg_val_rx[4] = {0};
+	u32 i, j;
 
 	(void)channels;
 
@@ -607,13 +640,13 @@ static int sunxi_i2s_set_ch_map(struct sunxi_i2s *i2s, unsigned int channels)
 	return 0;
 }
 
-static int sun8iw11_i2s_set_ch_map(struct sunxi_i2s *i2s, unsigned int channels)
+static int sun8iw11_i2s_set_ch_map(struct sunxi_i2s *i2s, u32 channels)
 {
 	struct regmap *regmap = i2s->mem.regmap;
 	struct sunxi_i2s_dts *dts = &i2s->dts;
-	unsigned int reg_val_tx[4] = {0};
-	unsigned int reg_val_rx = 0;
-	unsigned int i, j;
+	u32 reg_val_tx[4] = {0};
+	u32 reg_val_rx = 0;
+	u32 i, j;
 
 	if (IS_ERR_OR_NULL(i2s))
 		return -EINVAL;
@@ -637,13 +670,13 @@ static int sun8iw11_i2s_set_ch_map(struct sunxi_i2s *i2s, unsigned int channels)
 	return 0;
 }
 
-static int sun8iw17_i2s_set_ch_map(struct sunxi_i2s *i2s, unsigned int channels)
+static int sun8iw17_i2s_set_ch_map(struct sunxi_i2s *i2s, u32 channels)
 {
 	struct regmap *regmap = i2s->mem.regmap;
 	struct sunxi_i2s_dts *dts = &i2s->dts;
-	unsigned int reg_val_tx[2] = {0};
-	unsigned int reg_val_rx[2] = {0};
-	unsigned int i;
+	u32 reg_val_tx[2] = {0};
+	u32 reg_val_rx[2] = {0};
+	u32 i;
 
 	(void)channels;
 
@@ -671,7 +704,7 @@ static int sun8iw17_i2s_set_ch_map(struct sunxi_i2s *i2s, unsigned int channels)
 
 static int sunxi_get_i2s_dai_fmt(struct sunxi_i2s_dai_fmt *i2s_dai_fmt,
 				 enum SUNXI_I2S_DAI_FMT_SEL dai_fmt_sel,
-				 unsigned int *val)
+				 u32 *val)
 {
 	switch (dai_fmt_sel) {
 	case SUNXI_I2S_DAI_PLL:
@@ -705,7 +738,7 @@ static int sunxi_get_i2s_dai_fmt(struct sunxi_i2s_dai_fmt *i2s_dai_fmt,
 
 static int sunxi_set_i2s_dai_fmt(struct sunxi_i2s_dai_fmt *i2s_dai_fmt,
 				 enum SUNXI_I2S_DAI_FMT_SEL dai_fmt_sel,
-				 unsigned int val)
+				 u32 val)
 {
 	switch (dai_fmt_sel) {
 	case SUNXI_I2S_DAI_PLL:
@@ -762,13 +795,22 @@ static void sunxi_sdout_disable(struct regmap *regmap)
 }
 
 static int sunxi_i2s_dai_set_pll(struct snd_soc_dai *dai, int pll_id, int source,
-				 unsigned int freq_in, unsigned int freq_out)
+				 u32 freq_in, u32 freq_out)
 {
 	struct sunxi_i2s *i2s = snd_soc_dai_get_drvdata(dai);
 	struct sunxi_i2s_dai_fmt *i2s_dai_fmt = &i2s->i2s_dai_fmt;
+	struct sunxi_i2s_dts *dts = &i2s->dts;
 	int ret;
 
 	SND_LOG_DEBUG("\n");
+
+	if (dts->clk_mode_mclk_freq) {
+		if (freq_in % dts->clk_mode_mclk_freq) {
+			SND_LOG_ERR("pll_clk(%d) and mclk(%d) not on the same freq_point\n",
+				freq_in, dts->clk_mode_mclk_freq);
+			return -1;
+		}
+	}
 
 	ret = sunxi_set_i2s_dai_fmt(i2s_dai_fmt, SUNXI_I2S_DAI_PLL, freq_in);
 	if (ret < 0)
@@ -780,15 +822,26 @@ static int sunxi_i2s_dai_set_pll(struct snd_soc_dai *dai, int pll_id, int source
 	return 0;
 }
 
-static int sunxi_i2s_dai_set_sysclk(struct snd_soc_dai *dai, int clk_id, unsigned int freq, int dir)
+static int sunxi_i2s_dai_set_sysclk(struct snd_soc_dai *dai, int clk_id, u32 freq, int dir)
 {
 	struct sunxi_i2s *i2s = snd_soc_dai_get_drvdata(dai);
 	struct regmap *regmap = i2s->mem.regmap;
 	struct sunxi_i2s_dai_fmt *i2s_dai_fmt = &i2s->i2s_dai_fmt;
-	unsigned int pllclk_freq, mclk_ratio, mclk_ratio_map;
+	struct sunxi_i2s_dts *dts = &i2s->dts;
+	u32 pllclk_freq, mclk_ratio, mclk_ratio_map;
 	int ret;
 
 	SND_LOG_DEBUG("\n");
+
+	if (dts->clk_mode_mclk_freq) {
+		if (freq != dts->clk_mode_mclk_freq) {
+			SND_LOG_ERR("freq(%d) not equal to pre_mclk(%d) in dts\n",
+				freq, dts->clk_mode_mclk_freq);
+			return -EINVAL;
+		}
+		SND_LOG_DEBUG("mclk is pre set before,so don't need set again\n");
+		return 0;
+	}
 
 	if (freq == 0) {
 		regmap_update_bits(regmap, SUNXI_I2S_CLKDIV, 1 << MCLKOUT_EN, 0 << MCLKOUT_EN);
@@ -864,13 +917,27 @@ static int sunxi_i2s_dai_set_sysclk(struct snd_soc_dai *dai, int clk_id, unsigne
 	return 0;
 }
 
-static int sunxi_i2s_dai_set_bclk_ratio(struct snd_soc_dai *dai, unsigned int ratio)
+static int sunxi_i2s_dai_set_bclk_ratio(struct snd_soc_dai *dai, u32 ratio)
 {
 	struct sunxi_i2s *i2s = snd_soc_dai_get_drvdata(dai);
+	struct sunxi_i2s_dts *dts = &i2s->dts;
 	struct regmap *regmap = i2s->mem.regmap;
-	unsigned int bclk_ratio;
+	u32 bclk_ratio;
+	u32 bclk_freq;
 
 	SND_LOG_DEBUG("\n");
+
+	if (dts->clk_mode_bclk_freq) {
+		bclk_freq = dts->clk_mode_lrck_freq * dts->clk_mode_slots * dts->clk_mode_slot_width;
+
+		if (bclk_freq != dts->clk_mode_bclk_freq) {
+			SND_LOG_ERR("bclk(%d) not equal to pre_bclk(%d) param\n",
+				    bclk_freq, dts->clk_mode_bclk_freq);
+			return -EINVAL;
+		}
+		SND_LOG_DEBUG("bclk is pre set before,so don't need set again\n");
+		return 0;
+	}
 
 	/* ratio -> cpudai pllclk / pcm rate */
 	switch (ratio) {
@@ -929,21 +996,27 @@ static int sunxi_i2s_dai_set_bclk_ratio(struct snd_soc_dai *dai, unsigned int ra
 	return 0;
 }
 
-static int sunxi_i2s_dai_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
+static int sunxi_i2s_dai_set_fmt(struct snd_soc_dai *dai, u32 fmt)
 {
 	struct sunxi_i2s *i2s = snd_soc_dai_get_drvdata(dai);
 	const struct sunxi_i2s_quirks *quirks = i2s->quirks;
 	struct regmap *regmap = i2s->mem.regmap;
 	struct sunxi_i2s_dai_fmt *i2s_dai_fmt = &i2s->i2s_dai_fmt;
-	unsigned int lrck_polarity, bclk_polarity;
+	struct sunxi_i2s_dts *dts = &i2s->dts;
+	u32 lrck_polarity, bclk_polarity;
 	/* dai mode of i2s format
 	 * I2S/RIGHT_J/LEFT_J	-> 0
 	 * DSP_A/DSP_B		-> 1
 	 */
-	unsigned int dai_mode;
+	u32 dai_mode;
 	int ret;
 
 	SND_LOG_DEBUG("dai fmt -> 0x%x\n", fmt);
+
+	if (dts->clk_mode && dts->clk_mode_bclk_freq && dts->clk_mode_daifmt && fmt != dts->clk_mode_daifmt) {
+		SND_LOG_INFO("new fmt(0x%x), pre_fmt(0x%x)\n", fmt, dts->clk_mode_daifmt);
+		fmt = dts->clk_mode_daifmt;
+	}
 
 	ret = sunxi_set_i2s_dai_fmt(i2s_dai_fmt, SUNXI_I2S_DAI_FMT, fmt);
 	if (ret < 0)
@@ -1046,17 +1119,26 @@ static int sunxi_i2s_dai_set_fmt(struct snd_soc_dai *dai, unsigned int fmt)
 }
 
 static int sunxi_i2s_dai_set_tdm_slot(struct snd_soc_dai *dai,
-				      unsigned int tx_mask, unsigned int rx_mask,
+				      u32 tx_mask, u32 rx_mask,
 				      int slots, int slot_width)
 {
 	struct sunxi_i2s *i2s = snd_soc_dai_get_drvdata(dai);
 	struct regmap *regmap = i2s->mem.regmap;
 	struct sunxi_i2s_dai_fmt *i2s_dai_fmt = &i2s->i2s_dai_fmt;
-	unsigned int slot_width_map, lrck_width_map;
-	unsigned int dai_fmt_get;
+	struct sunxi_i2s_dts *dts = &i2s->dts;
+	u32 slot_width_map, lrck_width_map;
+	u32 dai_fmt_get;
 	int ret;
 
 	SND_LOG_DEBUG("\n");
+
+	if (dts->clk_mode_bclk_freq) {
+		SND_LOG_INFO("slots(%d) or slot_width(%d), using old_slot(%d) or old_slot_width(%d)\n",
+			    slots, slot_width, dts->clk_mode_slots, dts->clk_mode_slot_width);
+		slots = dts->clk_mode_slots;
+		slot_width = dts->clk_mode_slot_width;
+		goto set_i2s_dai_fmt;
+	}
 
 	switch (slot_width) {
 	case 8:
@@ -1111,6 +1193,7 @@ static int sunxi_i2s_dai_set_tdm_slot(struct snd_soc_dai *dai,
 	regmap_update_bits(regmap, SUNXI_I2S_FMT0,
 			   0x3ff << LRCK_PERIOD, lrck_width_map << LRCK_PERIOD);
 
+set_i2s_dai_fmt:
 	ret = sunxi_set_i2s_dai_fmt(i2s_dai_fmt, SUNXI_I2S_DAI_SLOT_NUM, slots);
 	if (ret < 0)
 		return -EINVAL;
@@ -1145,7 +1228,8 @@ static int sunxi_i2s_clk_set_rate_en(struct sunxi_i2s *i2s)
 {
 	struct sunxi_i2s_dai_fmt *i2s_dai_fmt = &i2s->i2s_dai_fmt;
 	struct regmap *regmap = i2s->mem.regmap;
-	unsigned int freq_in, freq_out;
+	struct sunxi_i2s_dts *dts = &i2s->dts;
+	u32 freq_in, freq_out;
 	int ret;
 
 	ret = sunxi_get_i2s_dai_fmt(i2s_dai_fmt, SUNXI_I2S_DAI_PLL, &freq_in);
@@ -1155,6 +1239,13 @@ static int sunxi_i2s_clk_set_rate_en(struct sunxi_i2s *i2s)
 	ret = sunxi_get_i2s_dai_fmt(i2s_dai_fmt, SUNXI_I2S_DAI_MCLK, &freq_out);
 	if (ret < 0)
 		return -EINVAL;
+
+	if (dts->clk_mode) {
+		if (freq_out != dts->clk_mode_mclk_freq) {
+			SND_LOG_ERR("clk_mode_mclk_freq is not equal to old param\n");
+			return -EINVAL;
+		}
+	}
 
 	if (snd_i2s_clk_rate(i2s->clk, freq_in, freq_out)) {
 		SND_LOG_ERR("clk set rate failed\n");
@@ -1178,11 +1269,31 @@ static int sunxi_i2s_clk_open(struct snd_pcm_substream *substream,
 {
 	struct sunxi_i2s *i2s = snd_soc_dai_get_drvdata(dai);
 	struct sunxi_i2s_clk_sta *i2s_clk_sta = &i2s->i2s_clk_sta;
-	struct sunxi_i2s_dts *dts = &i2s->dts;
 	struct regmap *regmap = i2s->mem.regmap;
-	unsigned int sample_rate;
+	struct sunxi_i2s_dts *dts = &i2s->dts;
+	u32 sample_rate;
 
 	sample_rate = params_rate(params);
+	if (dts->clk_mode_lrck_freq && sample_rate != dts->clk_mode_lrck_freq) {
+		SND_LOG_INFO("sample_rate(%dHz) not same to pre_lrck(%dHz, using pre_lrck)\n",
+			     sample_rate, dts->clk_mode_lrck_freq);
+		return -1;
+	}
+
+	if (dts->clk_mode_mclk_freq || dts->clk_mode_lrck_freq) {
+		SND_LOG_INFO("clk has been opened in advance with mclk(%dHz), bclk(%dHz), lrck(%dHz)\n",
+			     dts->clk_mode_mclk_freq, dts->clk_mode_bclk_freq, dts->clk_mode_lrck_freq);
+		if (!dts->clk_mode_mclk_freq) {
+			regmap_update_bits(regmap, SUNXI_I2S_CLKDIV,
+				1 << MCLKOUT_EN, 1 << MCLKOUT_EN);
+		} else {
+			if (!dts->clk_mode_lrck_freq) {
+				regmap_update_bits(regmap, SUNXI_I2S_CTL,
+					1 << GLOBAL_EN, 1 << GLOBAL_EN);
+			}
+		}
+		return 0;
+	}
 
 	/* open clk */
 	if (!i2s_clk_sta->p_work && !i2s_clk_sta->c_work && !i2s_clk_sta->old_rate) {
@@ -1190,9 +1301,8 @@ static int sunxi_i2s_clk_open(struct snd_pcm_substream *substream,
 			return -1;
 	}
 
-	/* if clk_keep, need disable and then open clk for sample rate change */
 	if (!i2s_clk_sta->p_work && !i2s_clk_sta->c_work &&
-	    sample_rate != i2s_clk_sta->old_rate && dts->clk_keep) {
+	    sample_rate != i2s_clk_sta->old_rate) {
 		regmap_update_bits(regmap, SUNXI_I2S_CTL,
 				   1 << GLOBAL_EN, 0 << GLOBAL_EN);
 
@@ -1206,7 +1316,7 @@ static int sunxi_i2s_clk_open(struct snd_pcm_substream *substream,
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK &&
 	    !i2s_clk_sta->p_work && i2s_clk_sta->c_work &&
 	    sample_rate != i2s_clk_sta->old_rate) {
-		SND_LOG_ERR("i2s is capture in %dKHz, but new rate is %dKHz,"
+		SND_LOG_ERR("i2s is capture in %dHz, but new rate is %dHz,"
 			    "capture has wrong!!!\n",
 			    i2s_clk_sta->old_rate, sample_rate);
 		return -1;
@@ -1214,7 +1324,7 @@ static int sunxi_i2s_clk_open(struct snd_pcm_substream *substream,
 	if (substream->stream == SNDRV_PCM_STREAM_CAPTURE &&
 	    !i2s_clk_sta->c_work && i2s_clk_sta->p_work &&
 	    sample_rate != i2s_clk_sta->old_rate) {
-		SND_LOG_ERR("i2s is playing in %dKHz, but new rate is %dKHz,"
+		SND_LOG_ERR("i2s is playing in %dHz, but new rate is %dHz,"
 			    "playing has wrong!!!\n",
 			    i2s_clk_sta->old_rate, sample_rate);
 		return -1;
@@ -1325,18 +1435,30 @@ static int sunxi_i2s_dai_hw_params(struct snd_pcm_substream *substream,
 static int sunxi_i2s_dai_hw_free(struct snd_pcm_substream *substream, struct snd_soc_dai *dai)
 {
 	struct sunxi_i2s *i2s = snd_soc_dai_get_drvdata(dai);
-	struct sunxi_i2s_dts *dts = &i2s->dts;
 	struct regmap *regmap = i2s->mem.regmap;
 	struct sunxi_i2s_clk_sta *i2s_clk_sta = &i2s->i2s_clk_sta;
+	struct sunxi_i2s_dts *dts = &i2s->dts;
 
 	SND_LOG_DEBUG("\n");
+
+	if (dts->clk_mode) {
+		if (!dts->clk_mode_mclk_freq) {
+			regmap_update_bits(regmap, SUNXI_I2S_CLKDIV,
+				1 << MCLKOUT_EN, 0 << MCLKOUT_EN);
+		}
+		if (!dts->clk_mode_lrck_freq) {
+			regmap_update_bits(regmap, SUNXI_I2S_CTL,
+				1 << GLOBAL_EN, 0 << GLOBAL_EN);
+		}
+		return 0;
+	}
 
 	mutex_lock(&i2s->i2s_clk_sta.clk_mutex);
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
 		if (!i2s_clk_sta->p_work)
 			goto exit;
 
-		if ((!dts->clk_keep) && (!i2s_clk_sta->c_work)) {
+		if (!i2s_clk_sta->c_work) {
 			regmap_update_bits(regmap, SUNXI_I2S_CTL,
 					   1 << GLOBAL_EN, 0 << GLOBAL_EN);
 
@@ -1350,7 +1472,7 @@ static int sunxi_i2s_dai_hw_free(struct snd_pcm_substream *substream, struct snd
 		if (!i2s_clk_sta->c_work)
 			goto exit;
 
-		if ((!dts->clk_keep) && !(i2s_clk_sta->p_work)) {
+		if (!i2s_clk_sta->p_work) {
 			regmap_update_bits(regmap, SUNXI_I2S_CTL,
 					   1 << GLOBAL_EN, 0 << GLOBAL_EN);
 
@@ -1371,7 +1493,7 @@ static int sunxi_i2s_dai_prepare(struct snd_pcm_substream *substream, struct snd
 {
 	struct sunxi_i2s *i2s = snd_soc_dai_get_drvdata(dai);
 	struct regmap *regmap = i2s->mem.regmap;
-	unsigned int i;
+	u32 i;
 
 	SND_LOG_DEBUG("\n");
 
@@ -1395,7 +1517,7 @@ static void sunxi_i2s_dai_tx_route(struct sunxi_i2s *i2s, bool enable)
 {
 	struct sunxi_i2s_dts *dts = &i2s->dts;
 	struct regmap *regmap = i2s->mem.regmap;
-	unsigned int reg_val;
+	u32 reg_val;
 
 	if (enable) {
 		regmap_update_bits(regmap, SUNXI_I2S_INTCTL, 1 << TXDRQEN, 1 << TXDRQEN);
@@ -1606,35 +1728,6 @@ static int sunxi_put_i2s_delay_mode(struct snd_kcontrol *kcontrol, struct snd_ct
 	return 0;
 }
 
-static int sunxi_get_i2s_clk_keep_mode(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
-{
-	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
-	struct sunxi_i2s *i2s = snd_soc_component_get_drvdata(component);
-	struct sunxi_i2s_dts *dts = &i2s->dts;
-
-	ucontrol->value.integer.value[0] = dts->clk_keep;
-
-	return 0;
-}
-
-static int sunxi_put_i2s_clk_keep_mode(struct snd_kcontrol *kcontrol, struct snd_ctl_elem_value *ucontrol)
-{
-	struct snd_soc_component *component = snd_kcontrol_chip(kcontrol);
-	struct sunxi_i2s *i2s = snd_soc_component_get_drvdata(component);
-	struct sunxi_i2s_clk_sta *i2s_clk_sta = &i2s->i2s_clk_sta;
-	struct sunxi_i2s_dts *dts = &i2s->dts;
-
-	mutex_lock(&i2s_clk_sta->clk_mutex);
-	if (!i2s_clk_sta->p_work && !i2s_clk_sta->c_work) {
-		dts->clk_keep = ucontrol->value.integer.value[0];
-	} else {
-		SND_LOG_ERR("i2s is working, cannot change thie value");
-	}
-	mutex_unlock(&i2s_clk_sta->clk_mutex);
-
-	return 0;
-}
-
 /*******************************************************************************
  * *** sound card & component function source ***
  * @0 sound card probe
@@ -1663,7 +1756,7 @@ static int sunxi_get_tx_hub_mode(struct snd_kcontrol *kcontrol, struct snd_ctl_e
 	struct sunxi_i2s *i2s = snd_soc_component_get_drvdata(component);
 	struct regmap *regmap = i2s->mem.regmap;
 
-	unsigned int reg_val;
+	u32 reg_val;
 
 	regmap_read(regmap, SUNXI_I2S_FIFOCTL, &reg_val);
 
@@ -1787,12 +1880,6 @@ static const struct snd_kcontrol_new sunxi_i2s_delay_controls[] = {
 		       sunxi_put_i2s_delay_mode),
 };
 
-static const struct snd_kcontrol_new sunxi_i2s_clk_keep_controls[] = {
-	SOC_SINGLE_BOOL_EXT("clk keep", 0,
-			    sunxi_get_i2s_clk_keep_mode,
-			    sunxi_put_i2s_clk_keep_mode),
-};
-
 static int sunxi_spk_event(struct snd_soc_dapm_widget *w, struct snd_kcontrol *k, int event)
 {
 	struct snd_soc_component *component = snd_soc_dapm_to_component(w->dapm);
@@ -1838,7 +1925,7 @@ static int sunxi_i2s_component_probe(struct snd_soc_component *component)
 	struct audio_reg_label *reg_label = i2s->reg_group.label;
 	struct sunxi_i2s_dts *dts = &i2s->dts;
 	struct regmap *regmap = i2s->mem.regmap;
-	unsigned int i;
+	u32 i;
 	int ret;
 
 	SND_LOG_DEBUG("\n");
@@ -1914,11 +2001,6 @@ static int sunxi_i2s_component_probe(struct snd_soc_component *component)
 					     ARRAY_SIZE(sunxi_i2s_delay_controls));
 	if (ret)
 		SND_LOG_ERR_STD(E_I2S_SWSYS_COMP_PROBE, "add clk_en_post_delay kcontrols failed\n");
-
-	ret = snd_soc_add_component_controls(component, sunxi_i2s_clk_keep_controls,
-					     ARRAY_SIZE(sunxi_i2s_clk_keep_controls));
-	if (ret)
-		SND_LOG_ERR_STD(E_I2S_SWSYS_COMP_PROBE, "add clk_keep kcontrols failed\n");
 
 	return 0;
 }
@@ -2080,14 +2162,90 @@ static void snd_sunxi_mem_exit(struct platform_device *pdev, struct sunxi_i2s_me
 	devm_release_mem_region(&pdev->dev, mem->memregion->start, resource_size(mem->memregion));
 }
 
+static u32 snd_sunxi_dts_parse_daifmt(struct platform_device *pdev, struct sunxi_i2s *i2s)
+{
+	struct device_node *np = pdev->dev.of_node;
+	u32 format = 0;
+	int bit, frame;
+	int ret, i;
+	const char *str;
+	struct {
+		char *name;
+		u32 val;
+	} fmt_table[] = {
+		{ "i2s",	SND_SOC_DAIFMT_I2S },
+		{ "right_j",	SND_SOC_DAIFMT_RIGHT_J },
+		{ "left_j",	SND_SOC_DAIFMT_LEFT_J },
+		{ "dsp_a",	SND_SOC_DAIFMT_DSP_A },
+		{ "dsp_b",	SND_SOC_DAIFMT_DSP_B },
+		{ "ac97",	SND_SOC_DAIFMT_AC97 },
+		{ "pdm",	SND_SOC_DAIFMT_PDM},
+		{ "msb",	SND_SOC_DAIFMT_MSB },
+		{ "lsb",	SND_SOC_DAIFMT_LSB },
+	};
+
+	ret = of_property_read_string(np, "clk-mode-format", &str);
+	if (ret == 0) {
+		for (i = 0; i < ARRAY_SIZE(fmt_table); i++) {
+			if (strcmp(str, fmt_table[i].name) == 0) {
+				format |= fmt_table[i].val;
+				break;
+			}
+		}
+	}
+
+	if (of_property_read_bool(np, "clk-mode-continuous-clock"))
+		format |= SND_SOC_DAIFMT_CONT;
+	else
+		format |= SND_SOC_DAIFMT_GATED;
+
+	frame = !!of_get_property(np, "clk-mode-frame-inversion", NULL);
+	bit = !!of_get_property(np, "clk-mode-bitclock-inversion", NULL);
+
+	switch ((bit << 4) + frame) {
+	case 0x11:
+		format |= SND_SOC_DAIFMT_IB_IF;
+		break;
+	case 0x10:
+		format |= SND_SOC_DAIFMT_IB_NF;
+		break;
+	case 0x01:
+		format |= SND_SOC_DAIFMT_NB_IF;
+		break;
+	default:
+		/* SND_SOC_DAIFMT_NB_NF is default */
+		break;
+	}
+
+	frame = !!of_get_property(np, "clk-mode-frame-master", NULL);
+	bit = !!of_get_property(np, "clk-mode-bitclock-master", NULL);
+
+	switch ((bit << 4) + frame) {
+	case 0x11:
+		format |= SND_SOC_DAIFMT_CBS_CFS;
+		break;
+	case 0x10:
+		format |= SND_SOC_DAIFMT_CBS_CFM;
+		break;
+	case 0x01:
+		format |= SND_SOC_DAIFMT_CBM_CFS;
+		break;
+	default:
+		format |= SND_SOC_DAIFMT_CBM_CFM;
+		break;
+	}
+
+	return format;
+}
+
 static void snd_sunxi_dts_params_init(struct platform_device *pdev, struct sunxi_i2s *i2s)
 {
 	struct sunxi_i2s_dts *dts = &i2s->dts;
 	const struct sunxi_i2s_quirks *quirks = i2s->quirks;
-	unsigned int i, j, k;
+	u32 i, j, k;
 	int ret;
-	unsigned int tmp_val0, tmp_val1;
-	unsigned int tx_pin_cnt;
+	u32 tmp_val0, tmp_val1;
+	u32 tx_pin_cnt;
 	char tx_pin_chmap_str[32] = "";
 	struct device_node *np = pdev->dev.of_node;
 
@@ -2235,18 +2393,82 @@ static void snd_sunxi_dts_params_init(struct platform_device *pdev, struct sunxi
 
 	ret = of_property_read_u32(np, "clk-en-post-delay", &tmp_val0);
 	if (ret < 0) {
-		SND_LOG_DEBUG("clk-en-post-delay missing\n");
+		SND_LOG_WARN("clk-en-post-delay missing\n");
 		dts->clk_en_post_delay = 0;
 	} else {
 		dts->clk_en_post_delay = tmp_val0;
 	}
 
-	ret = of_property_read_u32(np, "clk-keep", &tmp_val0);
-	if (ret < 0) {
-		SND_LOG_DEBUG("clk-keep missing\n");
-		dts->clk_keep = 0;
+	ret = of_property_read_u32(np, "clk-mode", &tmp_val0);
+	if (!ret) {
+		dts->clk_mode = tmp_val0;
 	} else {
-		dts->clk_keep = tmp_val0;
+		SND_LOG_DEBUG("clk-mode missing, using default 0\n");
+		dts->clk_mode = 0;
+	}
+
+	if (dts->clk_mode) {
+		ret = of_property_read_u32(np, "clk-mode-mclk-freq", &tmp_val0);
+		if (!ret) {
+			dts->clk_mode_mclk_freq = tmp_val0;
+		} else {
+			SND_LOG_DEBUG("mclk-freq missing, using default 0\n");
+			dts->clk_mode_mclk_freq = 0;
+		}
+
+		ret = of_property_read_u32(np, "clk-mode-lrck-freq", &tmp_val0);
+		if (!ret) {
+			dts->clk_mode_lrck_freq = tmp_val0;
+		} else {
+			SND_LOG_DEBUG("clk-mode-lrck-freq missing, using default 0\n");
+			dts->clk_mode_lrck_freq = 0;
+		}
+
+		dts->clk_mode_daifmt = snd_sunxi_dts_parse_daifmt(pdev, i2s);
+
+		ret = of_property_read_u32(np, "clk-mode-slot-num", &tmp_val0);
+		if (!ret) {
+			dts->clk_mode_slots = tmp_val0;
+		} else {
+			SND_LOG_DEBUG("clk-mode-slot-num, using default 0\n");
+			dts->clk_mode_slots = 0;
+		}
+
+		ret = of_property_read_u32(np, "clk-mode-slot-width", &tmp_val0);
+		if (!ret) {
+			dts->clk_mode_slot_width = tmp_val0;
+		} else {
+			SND_LOG_DEBUG("clk-mode-slot-width, using default 0\n");
+			dts->clk_mode_slot_width = 0;
+		}
+
+		if (dts->clk_mode_slots == 0 || dts->clk_mode_slot_width == 0) {
+			SND_LOG_WARN("slots or slots_width is 0, and then bclk is 0 \n");
+			dts->clk_mode_slots = 0;
+			dts->clk_mode_slot_width = 0;
+			dts->clk_mode_bclk_freq = 0;
+		}
+
+		dts->clk_mode_bclk_freq = dts->clk_mode_lrck_freq
+					  * dts->clk_mode_slots
+					  * dts->clk_mode_slot_width;
+
+		if (!dts->clk_mode_bclk_freq) {
+			SND_LOG_WARN("bclk is 0, so lrck is set 0\n");
+			dts->clk_mode_lrck_freq = 0;
+		}
+
+		if (!dts->clk_mode_mclk_freq && !dts->clk_mode_bclk_freq) {
+			SND_LOG_WARN("no need pre-support clk\n");
+			dts->clk_mode = 0;
+		}
+
+		SND_LOG_DEBUG("clk-mode : %d\n", dts->clk_mode);
+		SND_LOG_DEBUG("clk-mode-mclk-freq  : %d\n", dts->clk_mode_mclk_freq);
+		SND_LOG_DEBUG("clk-mode-lrck-freq  : %d\n", dts->clk_mode_lrck_freq);
+		SND_LOG_DEBUG("daifmt : 0x%x\n", dts->clk_mode_daifmt);
+		SND_LOG_DEBUG("clk-mode-slots : %d\n", dts->clk_mode_slots);
+		SND_LOG_DEBUG("clk-mode-slot-width : %d\n", dts->clk_mode_slot_width);
 	}
 }
 
@@ -2369,8 +2591,8 @@ static int snd_sunxi_dump_show(void *priv, char *buf, size_t *count)
 	size_t count_tmp = 0;
 	struct sunxi_i2s *i2s = (struct sunxi_i2s *)priv;
 	struct audio_reg_group *reg_group = &i2s->reg_group;
-	unsigned int i = 0;
-	unsigned int output_reg_val;
+	u32 i = 0;
+	u32 output_reg_val;
 	struct regmap *regmap;
 
 	if (!i2s) {
@@ -2398,7 +2620,7 @@ static int snd_sunxi_dump_store(void *priv, const char *buf, size_t count)
 {
 	struct sunxi_i2s *i2s = (struct sunxi_i2s *)priv;
 	int scanf_cnt;
-	unsigned int input_reg_offset, input_reg_val, output_reg_val;
+	u32 input_reg_offset, input_reg_val, output_reg_val;
 	struct regmap *regmap;
 
 	if (count <= 1)	/* null or only "\n" */
@@ -2432,6 +2654,258 @@ static int snd_sunxi_dump_store(void *priv, const char *buf, size_t count)
 	return 0;
 }
 #endif
+
+static int sunxi_i2s_dai_set_fmt_pre(struct sunxi_i2s *i2s, u32 fmt)
+{
+	const struct sunxi_i2s_quirks *quirks = i2s->quirks;
+	struct regmap *regmap = i2s->mem.regmap;
+	u32 lrck_polarity, bclk_polarity;
+	/* dai mode of i2s format
+	 * I2S/RIGHT_J/LEFT_J	-> 0
+	 * DSP_A/DSP_B		-> 1
+	 */
+	u32 dai_mode;
+	int ret;
+
+	SND_LOG_DEBUG("pre dai fmt -> 0x%x\n", fmt);
+
+	/* get dai mode */
+	switch (fmt & SND_SOC_DAIFMT_FORMAT_MASK) {
+	case SND_SOC_DAIFMT_I2S:
+	case SND_SOC_DAIFMT_RIGHT_J:
+	case SND_SOC_DAIFMT_LEFT_J:
+		dai_mode = 0;
+		break;
+	case SND_SOC_DAIFMT_DSP_A:
+	case SND_SOC_DAIFMT_DSP_B:
+		dai_mode = 1;
+		break;
+	default:
+		SND_LOG_ERR_STD(E_I2S_SWARG_DAIFMT_SET, "dai_mode setting failed\n");
+		return -EINVAL;
+	}
+
+	/* set TDM format */
+	ret = quirks->set_daifmt_format(i2s, fmt & SND_SOC_DAIFMT_FORMAT_MASK);
+	if (ret < 0) {
+		SND_LOG_ERR("set daifmt format failed\n");
+		return -EINVAL;
+	}
+
+	/* set lrck & bclk polarity */
+	switch (fmt & SND_SOC_DAIFMT_INV_MASK) {
+	case SND_SOC_DAIFMT_NB_NF:
+		lrck_polarity = 0;
+		bclk_polarity = 0;
+		break;
+	case SND_SOC_DAIFMT_NB_IF:
+		lrck_polarity = 1;
+		bclk_polarity = 0;
+		break;
+	case SND_SOC_DAIFMT_IB_NF:
+		lrck_polarity = 0;
+		bclk_polarity = 1;
+		break;
+	case SND_SOC_DAIFMT_IB_IF:
+		lrck_polarity = 1;
+		bclk_polarity = 1;
+		break;
+	default:
+		SND_LOG_ERR_STD(E_I2S_SWARG_DAIFMT_SET, "invert clk setting failed\n");
+		return -EINVAL;
+	}
+
+	/* lrck polarity of i2s format
+	 * LRCK_POLARITY	-> 0
+	 * Left channel when LRCK is low(I2S/RIGHT_J/LEFT_J);
+	 * PCM LRCK asserted at the negative edge(DSP_A/DSP_B);
+	 * LRCK_POLARITY	-> 1
+	 * Left channel when LRCK is high(I2S/RIGHT_J/LEFT_J);
+	 * PCM LRCK asserted at the positive edge(DSP_A/DSP_B);
+	 */
+	lrck_polarity ^= dai_mode;
+
+	regmap_update_bits(regmap, SUNXI_I2S_FMT0,
+			   1 << LRCK_POLARITY,
+			   lrck_polarity << LRCK_POLARITY);
+	regmap_update_bits(regmap, SUNXI_I2S_FMT0,
+			   1 << BCLK_POLARITY,
+			   bclk_polarity << BCLK_POLARITY);
+
+	/* set master/slave */
+	switch (fmt & SND_SOC_DAIFMT_MASTER_MASK) {
+	/* bclk & lrck dir input */
+	case SND_SOC_DAIFMT_CBM_CFM:
+		regmap_update_bits(regmap, SUNXI_I2S_CTL, 1 << BCLK_OUT, 0 << BCLK_OUT);
+		regmap_update_bits(regmap, SUNXI_I2S_CTL, 1 << LRCK_OUT, 0 << LRCK_OUT);
+		break;
+	case SND_SOC_DAIFMT_CBS_CFM:
+		regmap_update_bits(regmap, SUNXI_I2S_CTL, 1 << BCLK_OUT, 1 << BCLK_OUT);
+		regmap_update_bits(regmap, SUNXI_I2S_CTL, 1 << LRCK_OUT, 0 << LRCK_OUT);
+		break;
+	case SND_SOC_DAIFMT_CBM_CFS:
+		regmap_update_bits(regmap, SUNXI_I2S_CTL, 1 << BCLK_OUT, 0 << BCLK_OUT);
+		regmap_update_bits(regmap, SUNXI_I2S_CTL, 1 << LRCK_OUT, 1 << LRCK_OUT);
+		break;
+	case SND_SOC_DAIFMT_CBS_CFS:
+		regmap_update_bits(regmap, SUNXI_I2S_CTL, 1 << BCLK_OUT, 1 << BCLK_OUT);
+		regmap_update_bits(regmap, SUNXI_I2S_CTL, 1 << LRCK_OUT, 1 << LRCK_OUT);
+		break;
+	default:
+		SND_LOG_ERR_STD(E_I2S_SWARG_DAIFMT_SET, "unknown master/slave format\n");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static int sunxi_i2s_pre_open_clk(struct sunxi_i2s *i2s)
+{
+	struct sunxi_i2s_dts *dts = &i2s->dts;
+	struct regmap *regmap = i2s->mem.regmap;
+	u32 freq;
+	u32 freq1 = 0;
+	u32 freq2 = 0;
+	u32 mclk_ratio, mclk_ratio_map;
+	u32 bclk_ratio, bclk_ratio_map;
+	u32 slot_width_map;
+	u32 lrck_width_map;
+	u32 i;
+	int ret;
+
+	SND_LOG_DEBUG("\n");
+
+	SND_LOG_DEBUG("pre_mclk_freq is %u, pre_lrck_freq is %u\n",
+			dts->clk_mode_mclk_freq, dts->clk_mode_lrck_freq);
+	if (dts->clk_mode_mclk_freq) {
+		if (22579200 % dts->clk_mode_mclk_freq)
+			freq1 = 24576000;
+		else
+			freq1 = 22579200;
+	}
+	switch (dts->clk_mode_lrck_freq) {
+	case 8000:
+	case 12000:
+	case 16000:
+	case 24000:
+	case 32000:
+	case 48000:
+	case 64000:
+	case 96000:
+	case 192000:
+		freq2 = 24576000;
+		break;
+	case 11025:
+	case 22050:
+	case 44100:
+	case 88200:
+	case 176400:
+		freq2 = 22579200;
+		break;
+	default:
+		SND_LOG_DEBUG("pre_lrck_freq is 0\n");
+		break;
+	}
+	if (freq1 && freq2) {
+		if (freq1 != freq2) {
+			SND_LOG_ERR("pre_lrck select freq_point is "
+				"not equal to pre_mclk select freq_point\n");
+			return -1;
+		}
+		freq = freq1;
+	} else {
+		if (!freq1 && !freq2) {
+			SND_LOG_ERR("pre_lrck select false!\n");
+			return -1;
+		}
+		freq = freq1 ? freq1 : freq2;
+	}
+	/* support mclk */
+	if (dts->clk_mode_mclk_freq) {
+		mclk_ratio = freq / dts->clk_mode_mclk_freq;
+		for (i = 0; i < ARRAY_SIZE(sunxi_i2s_mclk_bclk_div); i++) {
+			if (sunxi_i2s_mclk_bclk_div[i].real == mclk_ratio) {
+				mclk_ratio_map = sunxi_i2s_mclk_bclk_div[i].reg;
+				break;
+			}
+		}
+		if (i == ARRAY_SIZE(sunxi_i2s_mclk_bclk_div)) {
+			regmap_update_bits(regmap, SUNXI_I2S_CLKDIV, 1 << MCLKOUT_EN, 0 << MCLKOUT_EN);
+			SND_LOG_ERR_STD(E_I2S_SWARG_CLK_SET, "mclk freq div unsupport\n");
+			return -EINVAL;
+		}
+
+		regmap_update_bits(regmap, SUNXI_I2S_CLKDIV,
+				0xf << MCLK_DIV, mclk_ratio_map << MCLK_DIV);
+		regmap_update_bits(regmap, SUNXI_I2S_CLKDIV, 1 << MCLKOUT_EN, 1 << MCLKOUT_EN);
+	}
+
+	if (dts->clk_mode_bclk_freq) {
+		/* bclk */
+		bclk_ratio = freq / (dts->clk_mode_lrck_freq *
+				dts->clk_mode_slots * dts->clk_mode_slot_width);
+		for (i = 0; i < ARRAY_SIZE(sunxi_i2s_mclk_bclk_div); i++) {
+			if (sunxi_i2s_mclk_bclk_div[i].real == bclk_ratio) {
+				bclk_ratio_map = sunxi_i2s_mclk_bclk_div[i].reg;
+				break;
+			}
+		}
+		if (i == ARRAY_SIZE(sunxi_i2s_mclk_bclk_div)) {
+			SND_LOG_ERR_STD(E_I2S_SWARG_CLK_SET, "bclk freq div unsupport\n");
+			return -EINVAL;
+		}
+
+		regmap_update_bits(regmap, SUNXI_I2S_CLKDIV,
+				0xf << BCLK_DIV, bclk_ratio_map << BCLK_DIV);
+
+		/* daifmt */
+		sunxi_i2s_dai_set_fmt_pre(i2s, dts->clk_mode_daifmt);
+
+		/* tdm slot */
+		for (i = 0; i < ARRAY_SIZE(sunxi_i2s_slot_width_map); i++) {
+			if (sunxi_i2s_slot_width_map[i].real == dts->clk_mode_slot_width) {
+				slot_width_map = sunxi_i2s_slot_width_map[i].reg;
+				break;
+			}
+		}
+		if (i == ARRAY_SIZE(sunxi_i2s_slot_width_map)) {
+			SND_LOG_ERR_STD(E_I2S_SWARG_DAIFMT_SET, "unknown slot width\n");
+			return -EINVAL;
+		}
+		regmap_update_bits(regmap, SUNXI_I2S_FMT0,
+				   7 << SLOT_WIDTH, slot_width_map << SLOT_WIDTH);
+
+		switch (dts->clk_mode_daifmt & SND_SOC_DAIFMT_FORMAT_MASK) {
+		case SND_SOC_DAIFMT_I2S:
+		case SND_SOC_DAIFMT_RIGHT_J:
+		case SND_SOC_DAIFMT_LEFT_J:
+			lrck_width_map = (dts->clk_mode_slots / 2) * dts->clk_mode_slot_width - 1;
+			break;
+		case SND_SOC_DAIFMT_DSP_A:
+		case SND_SOC_DAIFMT_DSP_B:
+			lrck_width_map = dts->clk_mode_slots * dts->clk_mode_slot_width - 1;
+			break;
+		default:
+			SND_LOG_ERR_STD(E_I2S_SWARG_DAIFMT_SET, "unsupoort format\n");
+			return -EINVAL;
+		}
+		regmap_update_bits(regmap, SUNXI_I2S_FMT0,
+				   0x3ff << LRCK_PERIOD, lrck_width_map << LRCK_PERIOD);
+	}
+
+	if (snd_i2s_clk_rate(i2s->clk, freq, freq)) {
+		SND_LOG_ERR("clk set rate failed\n");
+		return -EINVAL;
+	}
+
+	ret = snd_i2s_clk_enable(i2s->clk);
+	if (ret < 0)
+		return -1;
+
+	regmap_update_bits(regmap, SUNXI_I2S_CTL, 1 << GLOBAL_EN, 1 << GLOBAL_EN);
+
+	return 0;
+}
 
 static int sunxi_i2s_dev_probe(struct platform_device *pdev)
 {
@@ -2540,6 +3014,15 @@ static int sunxi_i2s_dev_probe(struct platform_device *pdev)
 		goto err_snd_sunxi_platform_register;
 	}
 
+	/* pre support clk as needed */
+	if (dts->clk_mode) {
+		ret = sunxi_i2s_pre_open_clk(i2s);
+		if (ret) {
+			SND_LOG_ERR("pre_open_clk set failed\n");
+			goto err_pre_open_clk;
+		}
+	}
+
 #if IS_ENABLED(CONFIG_SND_SOC_SUNXI_DEBUG)
 	snprintf(i2s->module_name, 32, "%s%u", "I2S", dts->tdm_num);
 	dump->name = i2s->module_name;
@@ -2556,7 +3039,7 @@ static int sunxi_i2s_dev_probe(struct platform_device *pdev)
 	SND_LOG_DEBUG("register i2s platform success\n");
 
 	return 0;
-
+err_pre_open_clk:
 err_snd_sunxi_platform_register:
 	snd_soc_unregister_component(&pdev->dev);
 err_snd_soc_register_component:
@@ -2577,7 +3060,11 @@ err_devm_kzalloc:
 	return ret;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 11, 0)
+static void sunxi_i2s_dev_remove(struct platform_device *pdev)
+#else
 static int sunxi_i2s_dev_remove(struct platform_device *pdev)
+#endif
 {
 	struct device *dev = &pdev->dev;
 	struct device_node *np = pdev->dev.of_node;
@@ -2585,6 +3072,7 @@ static int sunxi_i2s_dev_remove(struct platform_device *pdev)
 	struct sunxi_i2s_mem *mem = &i2s->mem;
 	struct sunxi_i2s_pinctl *pin = &i2s->pin;
 	struct sunxi_i2s_dts *dts = &i2s->dts;
+	struct regmap *regmap = i2s->mem.regmap;
 
 #if IS_ENABLED(CONFIG_SND_SOC_SUNXI_DEBUG)
 	struct snd_sunxi_dump *dump = &i2s->dump;
@@ -2604,6 +3092,11 @@ static int sunxi_i2s_dev_remove(struct platform_device *pdev)
 
 	snd_soc_unregister_component(&pdev->dev);
 
+	if (dts->clk_mode) {
+		regmap_update_bits(regmap, SUNXI_I2S_CTL, 1 << GLOBAL_EN, 0 << GLOBAL_EN);
+		snd_i2s_clk_disable(i2s->clk);
+	}
+
 	snd_sunxi_pin_exit(pdev, pin);
 	snd_i2s_clk_bus_disable(i2s->clk);
 	snd_i2s_clk_exit(i2s->clk);
@@ -2616,8 +3109,11 @@ static int sunxi_i2s_dev_remove(struct platform_device *pdev)
 	of_node_put(np);
 
 	SND_LOG_DEBUG("unregister i2s platform success\n");
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 11, 0)
+	return;
+#else
 	return 0;
+#endif
 }
 
 static const struct sunxi_i2s_quirks sunxi_i2s_quirks = {
@@ -2680,7 +3176,7 @@ static struct platform_driver sunxi_i2s_driver = {
 	.remove	= sunxi_i2s_dev_remove,
 };
 
-int __init sunxi_i2s_dev_init(void)
+static int __init sunxi_i2s_dev_init(void)
 {
 	int ret;
 
@@ -2693,7 +3189,7 @@ int __init sunxi_i2s_dev_init(void)
 	return ret;
 }
 
-void __exit sunxi_i2s_dev_exit(void)
+static void __exit sunxi_i2s_dev_exit(void)
 {
 	platform_driver_unregister(&sunxi_i2s_driver);
 }
@@ -2703,5 +3199,5 @@ module_exit(sunxi_i2s_dev_exit);
 
 MODULE_AUTHOR("Dby@allwinnertech.com");
 MODULE_LICENSE("GPL");
-MODULE_VERSION("1.0.16");
+MODULE_VERSION("1.0.21");
 MODULE_DESCRIPTION("sunxi soundcard platform of i2s");

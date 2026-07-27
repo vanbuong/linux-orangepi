@@ -220,7 +220,7 @@ int vin_set_addr(struct vin_core *vinc, struct vb2_buffer *vb,
 	depth = frame->fmt.depth[0] + frame->fmt.depth[1] + frame->fmt.depth[2];
 
 	if (vinc->vid_cap.special_active == 1) {
-		paddr->y = (dma_addr_t)buf->paddr;
+		paddr->y = (vin_dma_addr_t)buf->paddr;
 		frame->fmt.memplanes = 1;
 	} else
 		paddr->y = vb2_dma_contig_plane_dma_addr(vb, 0);
@@ -898,7 +898,8 @@ static int vin_pipeline_try_format(struct vin_core *vinc,
 
 			/* find ch id to set for tvin*/
 			if (vinc->tvin.flag) {
-#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN60IW2)
+#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN60IW2) ||\
+	IS_ENABLED(CONFIG_ARCH_SUN65IW1)
 				if (vinc->id > TVIN_VIDEO_MAX)
 					ch_id = vinc->id / TVIN_VIDEO_STRIP + vinc->id % TVIN_VIDEO_STRIP;
 				else
@@ -3448,7 +3449,7 @@ static int vidioc_merge_int_ch_cfg(struct file *file, struct v4l2_fh *fh,
 						24, 25, 26, 27, 28, 29, 30, 31, 32, 36, 40};
 #elif IS_ENABLED(CONFIG_ARCH_SUN60IW2)
 	int bk_ch_intpool_sel[VIN_MAX_DEV] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17};
-#elif IS_ENABLED(CONFIG_ARCH_SUN55IW6)
+#elif IS_ENABLED(CONFIG_ARCH_SUN55IW6) || IS_ENABLED(CONFIG_ARCH_SUN65IW1)
 	int bk_ch_intpool_sel[VIN_MAX_DEV] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15};
 #endif
 	if (cfg->trig_level < 1) {
@@ -3549,7 +3550,7 @@ static int vidioc_set_bk_cache_invalid(struct file *file, struct v4l2_fh *fh,
 	struct vin_vid_cap *cap = &vinc->vid_cap;
 	struct vb2_queue *q = cap->vdev.queue;
 	struct vb2_buffer *vb;
-	dma_addr_t dma_addr;
+	vin_dma_addr_t dma_addr;
 
 	if (*index >= q->num_buffers) {
 		vin_err("buffer index out of range\n");
@@ -3696,7 +3697,7 @@ static int vin_open(struct file *file)
 		return -EBUSY;
 	}
 
-#if IS_ENABLED(CONFIG_RV_RUN_CAR_REVERSE) && !defined (CONFIG_ARCH_SUN60IW2)
+#if IS_ENABLED(CONFIG_RV_RUN_CAR_REVERSE) && (!IS_ENABLED(CONFIG_ARCH_SUN65IW1) || !IS_ENABLED(CONFIG_ARCH_SUN60IW2))
 	if (CONTROL_BY_RTOS == vinc->rpmsg.control) {
 		vin_err("video%d is controlling by rtos\n", vinc->id);
 		return -EBUSY;
@@ -3737,7 +3738,7 @@ static int vin_close(struct file *file)
 		return 0;
 	}
 
-#if IS_ENABLED(CONFIG_RV_RUN_CAR_REVERSE) && !defined (CONFIG_ARCH_SUN60IW2)
+#if IS_ENABLED(CONFIG_RV_RUN_CAR_REVERSE) && (!IS_ENABLED(CONFIG_ARCH_SUN65IW1) || !IS_ENABLED(CONFIG_ARCH_SUN60IW2))
 	vinc_status_rpmsg_send(ARM_VIN_STOP, &vinc->rpmsg);
 #endif
 
@@ -5892,7 +5893,8 @@ static int vin_subdev_s_stream(struct v4l2_subdev *sd, int enable)
 		}
 
 		if (vinc->tvin.flag) {
-#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN60IW2)
+#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN60IW2) ||\
+	IS_ENABLED(CONFIG_ARCH_SUN65IW1)
 			if (vinc->id > TVIN_VIDEO_MAX)
 				ch_id = vinc->id / TVIN_VIDEO_STRIP + vinc->id % TVIN_VIDEO_STRIP;
 			else

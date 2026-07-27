@@ -198,6 +198,19 @@ static int check_ecc_bit4_by_low2bits(unsigned char ecc)
 	return ECC_ERR;
 }
 
+static int check_ecc_bit4_limit5_7_err8_limit12(unsigned char ecc)
+{
+	if (ecc <= 4) {
+		return ECC_GOOD;
+	} else if ((ecc >= 5 && ecc <= 7) || (ecc >= 12)) {
+		sunxi_debug(NULL, "ecc limit 0x%x\n", ecc);
+		return ECC_LIMIT;
+	}
+
+	sunxi_err(NULL, "ecc err 0x%x\n", ecc);
+	return ECC_ERR;
+}
+
 static int aw_spinand_ecc_check_ecc(enum ecc_limit_err type, u8 status)
 {
 	unsigned char ecc;
@@ -245,6 +258,9 @@ static int aw_spinand_ecc_check_ecc(enum ecc_limit_err type, u8 status)
 	case BIT4_BY_LOW2BITS:
 		ecc = status & 0x0f;
 		return check_ecc_bit4_by_low2bits(ecc);
+	case BIT4_LIMIT5_TO_7_ERR8_LIMIT_12:
+		ecc = status & 0x0f;
+		return check_ecc_bit4_limit5_7_err8_limit12(ecc);
 	default:
 		return -EINVAL;
 	}

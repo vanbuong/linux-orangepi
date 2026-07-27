@@ -51,14 +51,22 @@ enum {
 enum {
 	VIN_CSI_RET = 0,
 	VIN_ISP_RET,
+	VIN_CSI_AHB_RET,
+	VIN_TVIN_MSI_LITE_RET,
+	VIN_TVIN_RET,
 	VIN_MAX_RET,
 };
 
 enum {
 	VIN_CSI_BUS_CLK = 0,
 	VIN_CSI_MBUS_CLK,
-	VIN_ISP_MBUS_CLK,
+	VIN_CSI_HBUS_CLK,
+	VIN_CSI_SBUS_CLK,
 	VIN_ISP_BUS_CLK,
+	VIN_ISP_MBUS_CLK,
+	VIN_ISP_SBUS_CLK,
+	VIN_AHB_CLK,
+	VIN_MBUS_CLK,
 	VIN_MAX_BUS_CLK,
 };
 
@@ -295,6 +303,7 @@ struct vin_md {
 	unsigned int dram_dfs_time;
 #endif
 	struct bk_intpool_cfg bk_intpool;
+	unsigned char mipi_top_stream_count;
 	bool sensor_power_on;
 	bool clk_en;
 };

@@ -6,10 +6,18 @@
 #include "net/wireless/core.h"
 
 bool rwnx_cfg80211_rx_spurious_frame(struct net_device *dev,
-				const u8 *addr, gfp_t gfp);
+				const u8 *addr
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 16, 0))
+				, int link_id
+#endif
+				, gfp_t gfp);
 
 bool rwnx_cfg80211_rx_unexpected_4addr_frame(struct net_device *dev,
-				const u8 *addr, gfp_t gfp);
+				const u8 *addr
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 16, 0))
+				, int link_id
+#endif
+				, gfp_t gfp);
 
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 0, 0))
 void rwnx_cfg80211_notify_new_peer_candidate(struct net_device *dev, const u8 *addr,
@@ -37,7 +45,7 @@ void rwnx_cfg80211_ch_switch_started_notify(struct net_device *dev
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 0))
 				, bool quiet
 #endif
-#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 94))
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 15, 94) && LINUX_VERSION_CODE < KERNEL_VERSION(6, 8, 0))
 				, u16 punct_bitmap
 #endif
 				);

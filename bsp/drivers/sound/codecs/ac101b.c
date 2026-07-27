@@ -19,7 +19,7 @@
 #include "snd_sunxi_jack.h"
 #include "snd_sunxi_common.h"
 #include "ac101b.h"
-
+#include "snd_sunxi_adapter.h"
 #define ADC1_OUTPUT	0
 #define ADC2_OUTPUT	1
 #define ADC3_OUTPUT	2
@@ -213,7 +213,7 @@ static void sunxi_jack_adv_det_scan_work(void *data, enum snd_jack_types *jack_t
 /* for jack slow plug in */
 static void sunxi_jack_sdbp_scan_work(void *data, enum snd_jack_types *jack_type);
 
-struct sunxi_jack_adv sunxi_jack_adv = {
+static struct sunxi_jack_adv sunxi_jack_adv = {
 	.jack_init	= sunxi_jack_adv_init,
 	.jack_exit	= sunxi_jack_adv_exit,
 	.jack_suspend	= sunxi_jack_adv_suspend,
@@ -1096,9 +1096,8 @@ static int ac101b_hw_params(struct snd_pcm_substream *substream,
 		regmap_update_bits(regmap, SYSCLK_CTRL, 0x1 << SYSCLK_EN, 0x1 << SYSCLK_EN);
 
 		regmap_update_bits(regmap, I2S_CTRL, 0x1 << I2S_GLOBE_EN, 0x1 << I2S_GLOBE_EN);
+		atomic_add(1, &clk_cnt);
 	}
-
-	atomic_add(1, &clk_cnt);
 
 	/* close hp auto mute */
 	regmap_update_bits(regmap, HP_LOUT_CTRL,
@@ -1116,12 +1115,11 @@ static int ac101b_hw_free(struct snd_pcm_substream *substream, struct snd_soc_da
 
 	SND_LOG_DEBUG("\n");
 
-	atomic_sub(1, &clk_cnt);
-
-	if (!atomic_read(&clk_cnt)) {
+	if (atomic_read(&clk_cnt)) {
 		regmap_update_bits(regmap, SYSCLK_CTRL, 0x1 << SYSCLK_EN, 0x0 << SYSCLK_EN);
 		regmap_update_bits(regmap, SYSCLK_CTRL, 0x1 << PLLCLK_EN, 0x0 << PLLCLK_EN);
 		regmap_update_bits(regmap, I2S_CTRL, 0x1 << I2S_GLOBE_EN, 0x0 << I2S_GLOBE_EN);
+		atomic_sub(1, &clk_cnt);
 	}
 
 	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK) {
@@ -1804,7 +1802,12 @@ static int ac101b_probe(struct snd_soc_component *component)
 	pdata->jack_adv_priv.dev = ac101b->dev;
 	sunxi_jack_adv.data = (void *)(&pdata->jack_adv_priv);
 	sunxi_jack_adv.dev = ac101b->dev;
-	snd_sunxi_jack_init(&sunxi_jack_port);
+
+	ret = snd_sunxi_jack_init(&sunxi_jack_port);
+	if (ret) {
+		SND_LOG_ERR("jack init failed\n");
+		return ret;
+	}
 
 	return 0;
 }
@@ -3636,4 +3639,4 @@ module_i2c_driver(ac101b_i2c_driver);
 MODULE_DESCRIPTION("ASoC ac101b driver");
 MODULE_AUTHOR("lijingpsw@allwinnertech.com");
 MODULE_LICENSE("GPL");
-MODULE_VERSION("1.0.6");
+MODULE_VERSION("1.0.10");

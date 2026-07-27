@@ -19,7 +19,7 @@
 #include <sound/pcm.h>
 #include <sound/soc.h>
 #include <sound/jack.h>
-
+#include <linux/hrtimer.h>
 #ifndef __SND_SUNXI_ADAPTER_H
 #define __SND_SUNXI_ADAPTER_H
 
@@ -28,7 +28,72 @@ struct sunxi_adapt_dai_ops_priv {
 	int (*remove)(struct snd_soc_dai *dai);
 };
 
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 18, 0)
+#define SND_SOC_DAIFMT_CBM_CFM		SND_SOC_DAIFMT_CBP_CFP
+#define SND_SOC_DAIFMT_CBS_CFM		SND_SOC_DAIFMT_CBC_CFP
+#define SND_SOC_DAIFMT_CBM_CFS		SND_SOC_DAIFMT_CBP_CFC
+#define SND_SOC_DAIFMT_CBS_CFS		SND_SOC_DAIFMT_CBC_CFC
+#define RTD_NUM(rtd) ((rtd)->id)
+#define HRTIMER_COMPAT_INIT(timer, callback, clock, mode) \
+hrtimer_setup((timer), (callback), (clock), (mode))
+#define SUNXI_ATTR_SHOW_CONVERT(func_ptr)	\
+	(ssize_t (*)(const struct class *class, const struct class_attribute *attr,	\
+		     char *buf))(func_ptr)
+
+#define SUNXI_ATTR_STORE_CONVERT(func_ptr)	\
+	(ssize_t (*)(const struct class *class, const struct class_attribute *attr,	\
+		     const char *buf, size_t count))(func_ptr)
+
+#define sunxi_adpt_rtd_codec_dai(rtd, i, dai)	for_each_rtd_codec_dais(rtd, i, dai)
+#define sunxi_adpt_rtd_cpu_dai(rtd)		snd_soc_rtd_to_cpu(rtd, 0)
+#define sunxi_adpt_of_get_dai_name(of_node, dai_name) snd_soc_of_get_dai_name(of_node, dai_name, 0)
+#define sunxi_adpt_class_create(owner, name)	class_create(name)
+static inline void sunxi_adpt_vm_flags_set(struct vm_area_struct *vma, vm_flags_t flags)
+{
+	vm_flags_set(vma, flags);
+}
+static inline void *sunxi_adpt_dai_dma_data_get(const struct snd_soc_dai *dai, int stream)
+{
+	return dai->stream[stream].dma_data;
+}
+static inline void sunxi_adpt_wait_time_conv(struct snd_pcm_substream *substream, long wait_time)
+{
+	substream->wait_time = wait_time;
+}
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(6, 12, 0)
+#define RTD_NUM(rtd) ((rtd)->num)
+#define sunxi_adpt_rtd_cpu_dai(rtd)		snd_soc_rtd_to_cpu(rtd, 0)
+#define sunxi_adpt_rtd_codec_dai(rtd, i, dai)	for_each_rtd_codec_dais(rtd, i, dai)
+#define sunxi_adpt_of_get_dai_name(of_node, dai_name) snd_soc_of_get_dai_name(of_node, dai_name, 0)
+#define sunxi_adpt_class_create(owner, name)	class_create(name)
+#define HRTIMER_COMPAT_INIT(timer, callback, clock, mode) \
+do { \
+	hrtimer_init((timer), (clock), (mode)); \
+	(timer)->function = (callback); \
+} while (0)
+#define SUNXI_ATTR_SHOW_CONVERT(func_ptr)	\
+	(ssize_t (*)(const struct class *class, const struct class_attribute *attr,	\
+		     char *buf))(func_ptr)
+
+#define SUNXI_ATTR_STORE_CONVERT(func_ptr)	\
+	(ssize_t (*)(const struct class *class, const struct class_attribute *attr,	\
+		     const char *buf, size_t count))(func_ptr)
+
+static inline void *sunxi_adpt_dai_dma_data_get(const struct snd_soc_dai *dai, int stream)
+{
+	return dai->stream[stream].dma_data;
+}
+static inline void sunxi_adpt_wait_time_conv(struct snd_pcm_substream *substream, long wait_time)
+{
+	substream->wait_time = wait_time;
+}
+#elif LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
+#define RTD_NUM(rtd) ((rtd)->num)
+#define HRTIMER_COMPAT_INIT(timer, callback, clock, mode) \
+do { \
+	hrtimer_init((timer), (clock), (mode)); \
+	(timer)->function = (callback); \
+} while (0)
 #define SUNXI_ATTR_SHOW_CONVERT(func_ptr)	\
 	(ssize_t (*)(const struct class *class, const struct class_attribute *attr,	\
 		     char *buf))(func_ptr)
@@ -54,6 +119,12 @@ static inline void sunxi_adpt_wait_time_conv(struct snd_pcm_substream *substream
 	substream->wait_time = wait_time;
 }
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 10, 0)
+#define RTD_NUM(rtd) ((rtd)->num)
+#define HRTIMER_COMPAT_INIT(timer, callback, clock, mode) \
+do { \
+	hrtimer_init((timer), (clock), (mode)); \
+	(timer)->function = (callback); \
+} while (0)
 #define SUNXI_ATTR_SHOW_CONVERT(func_ptr)	func_ptr
 #define SUNXI_ATTR_STORE_CONVERT(func_ptr)	func_ptr
 #define sunxi_adpt_rtd_codec_dai(rtd, i, dai)	for_each_rtd_codec_dais(rtd, i, dai)
@@ -77,6 +148,12 @@ static inline void sunxi_adpt_wait_time_conv(struct snd_pcm_substream *substream
 	substream->wait_time = msecs_to_jiffies(wait_time);
 }
 #elif LINUX_VERSION_CODE >= KERNEL_VERSION(5, 4, 0)
+#define RTD_NUM(rtd) ((rtd)->num)
+#define HRTIMER_COMPAT_INIT(timer, callback, clock, mode) \
+do { \
+	hrtimer_init((timer), (clock), (mode)); \
+	(timer)->function = (callback); \
+} while (0)
 #define SUNXI_ATTR_SHOW_CONVERT(func_ptr)	func_ptr
 #define SUNXI_ATTR_STORE_CONVERT(func_ptr)	func_ptr
 #define sunxi_adpt_rtd_codec_dai(rtd, i, dai)	for_each_rtd_codec_dai(rtd, i, dai)
@@ -100,6 +177,12 @@ static inline void sunxi_adpt_wait_time_conv(struct snd_pcm_substream *substream
 	substream->wait_time = msecs_to_jiffies(wait_time);
 }
 #else
+#define RTD_NUM(rtd) ((rtd)->num)
+#define HRTIMER_COMPAT_INIT(timer, callback, clock, mode) \
+do { \
+	hrtimer_init((timer), (clock), (mode)); \
+	(timer)->function = (callback); \
+} while (0)
 #define SUNXI_ATTR_SHOW_CONVERT(func_ptr)	func_ptr
 #define SUNXI_ATTR_STORE_CONVERT(func_ptr)	func_ptr
 #define sunxi_adpt_rtd_codec_dai(rtd, i, dai)	for_each_rtd_codec_dai(rtd, i, dai)

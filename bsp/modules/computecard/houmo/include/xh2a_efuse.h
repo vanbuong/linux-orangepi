@@ -22,4 +22,12 @@ int xh2a_pcie_get_efuse_data(void *handle, uint32_t row_offset,
 			     uint32_t bit_offset, uint32_t bit_length,
 			     uint32_t *efuse_data);
 
+/*
+ * xh2a_pcie_efuse_update_ddr_size() - update ddr size
+ * @handle: the pcie handle
+ * @size: the ddr size
+ * Return: 0 on success, negative error code on failure
+ */
+int xh2a_pcie_efuse_update_ddr_size(void *handle, uint64_t *size);
+
 #endif

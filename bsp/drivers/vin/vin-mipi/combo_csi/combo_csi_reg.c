@@ -32,6 +32,11 @@ static unsigned char cmb_phy_lane[3][4] = {
 	/* phyA */     /* phyB */    /* phyC */
 	{0, 1, 2, 3}, {4, 5, 6, 7}, {8, 9} /* ch */
 };
+#elif IS_ENABLED(CONFIG_ARCH_SUN65IW1)
+static unsigned char cmb_phy_lane[3][4] = {
+	/* phyA */     /* phyB */    /* phyC */
+	{0, 1, 2, 3}, {4, 5, 8, 9}, {8, 9} /* ch */
+};
 #endif
 
 volatile void *cmb_csi_top_base_addr;

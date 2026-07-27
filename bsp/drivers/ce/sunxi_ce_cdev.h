@@ -26,6 +26,10 @@
 #include <crypto/internal/skcipher.h>
 #include <crypto/internal/akcipher.h>
 
+#include <linux/scatterlist.h>
+#include <linux/interrupt.h>
+#include <linux/cdev.h>
+#include <linux/version.h>
 #if LINUX_VERSION_CODE < KERNEL_VERSION(5, 15, 0)
 #include <crypto/sha.h>
 #else
@@ -50,6 +54,33 @@
 #define SS_FLAG_AES			BIT(16)
 #define SS_FLAG_HASH			BIT(17)
 
+#define BITS_PER_BYTE		8
+#define BYTES_PER_WORD		4
+#define BITS_PER_WORD		(BITS_PER_BYTE * BYTES_PER_WORD)
+
+/* RSA params */
+#define CE_RSA_SRC_NUM		3
+
+/* ECC params */
+#define CE_ECC_WIDTH_521		521
+#define CE_ECC_521_WORD_NUM		17
+#define CE_ECC_ENC_SRC_NUM		8
+#define CE_ECC_ENC_DST_NUM		3
+#define CE_ECC_VERIFY_SRC_NUM		12
+
+/* SM2 params */
+#define CE_SM2_WIDTH		256
+#define CE_SM2_VERIFY_SRC_NUM		12
+#define CE_SM2_SUCCESS_FLAG		0X2
+
+/* define SS---->CE_DRIVER_V1 */
+#if IS_ENABLED(CONFIG_ARCH_SUN300IW1)
+#define SS_SUPPORT_CE_V1		1
+#define SS_SHA256_ENABLE		1
+#define SS_CTS_MODE_ENABLE		1
+#define SS_CTR_MODE_ENABLE		1
+#endif
+
 /* define CE_V1_X---->CE_DRIVER_V3_1 */
 #if IS_ENABLED(CONFIG_ARCH_SUN20IW1) || IS_ENABLED(CONFIG_ARCH_SUN8IW11)\
 	|| IS_ENABLED(CONFIG_ARCH_SUN50IW1) || IS_ENABLED(CONFIG_ARCH_SUN50IW2)\
@@ -58,6 +89,7 @@
 	|| IS_ENABLED(CONFIG_ARCH_SUN8IW17) || IS_ENABLED(CONFIG_ARCH_SUN8IW18)\
 	|| IS_ENABLED(CONFIG_ARCH_SUN8IW16) || IS_ENABLED(CONFIG_ARCH_SUN8IW19)\
 	|| IS_ENABLED(CONFIG_ARCH_SUN8IW20) || IS_ENABLED(CONFIG_ARCH_SUN50IW11)\
+	|| IS_ENABLED(CONFIG_ARCH_SUN251IW1)
 
 #define SS_SUPPORT_CE_V3_1		1
 #define SS_SCATTER_ENABLE		1
@@ -70,7 +102,7 @@
 #if IS_ENABLED(CONFIG_ARCH_SUN50IW3) || IS_ENABLED(CONFIG_ARCH_SUN50IW6) || \
 	IS_ENABLED(CONFIG_ARCH_SUN8IW15) || IS_ENABLED(CONFIG_ARCH_SUN50IW8) || \
 	IS_ENABLED(CONFIG_ARCH_SUN8IW16) || IS_ENABLED(CONFIG_ARCH_SUN50IW9) || \
-	IS_ENABLED(CONFIG_ARCH_SUN8IW19) || IS_ENABLED(CONFIG_ARCH_SUN50IW10)
+	IS_ENABLED(CONFIG_ARCH_SUN8IW19)
 
 #define SS_SUPPORT_CE_V3_2		1
 #define SS_SCATTER_ENABLE		1
@@ -78,9 +110,21 @@
 #define SS_SHA_SWAP_PRE_ENABLE		1 /* The initial IV need to be converted. */
 #endif
 
+/* define CE_V2.1---->CE_DRIVER_V4 */
+#if IS_ENABLED(CONFIG_ARCH_SUN50IW10)
+#define SS_SUPPORT_CE_V4		1
+#define SS_SCATTER_ENABLE		1
+#define	TASK_DMA_POOL			1
+#define SS_SHA_SWAP_PRE_ENABLE		1 /* The initial IV need to be converted. */
+#endif
+
 /* define CE_V2.3---->CE_DRIVER_V5 */
+/* define CE_V3_X---->CE_DRIVER_V5 */
 #if IS_ENABLED(CONFIG_ARCH_SUN50IW12) || IS_ENABLED(CONFIG_ARCH_SUN8IW21) || IS_ENABLED(CONFIG_ARCH_SUN55IW3) || \
-					IS_ENABLED(CONFIG_ARCH_SUN55IW6) || IS_ENABLED(CONFIG_ARCH_SUN60IW2)
+					IS_ENABLED(CONFIG_ARCH_SUN55IW6) || IS_ENABLED(CONFIG_ARCH_SUN65IW1) || \
+					IS_ENABLED(CONFIG_ARCH_SUN60IW2) || IS_ENABLED(CONFIG_ARCH_SUN8IW22) || \
+					IS_ENABLED(CONFIG_ARCH_SUN55IW7) || IS_ENABLED(CONFIG_ARCH_SUN252IW1) || \
+					IS_ENABLED(CONFIG_ARCH_SUN60IW3)
 
 #define SS_SUPPORT_CE_V5		1
 #define SS_GCM_MODE_ENABLE		1
@@ -100,7 +144,7 @@
 #define TASK_MAX_DATA_SIZE		(127 * 1024)
 #endif
 
-#if defined(SS_SUPPORT_CE_V3_1) || defined(SS_SUPPORT_CE_V3_2) || defined(SS_SUPPORT_CE_V5)
+#if defined(SS_SUPPORT_CE_V3_1) || defined(SS_SUPPORT_CE_V3_2) || defined(SS_SUPPORT_CE_V5) || defined(SS_SUPPORT_CE_V4)
 #define SS_SHA224_ENABLE		1
 #define SS_SHA256_ENABLE		1
 #define SS_SHA384_ENABLE		1
@@ -118,12 +162,12 @@
 #define SS_DH2048_ENABLE		1
 
 #define SS_ECC_ENABLE			1
-#endif	/* SS_SUPPORT_CE_V3_1 */
+#endif	/* defined(SS_SUPPORT_CE_V3_1) || defined(SS_SUPPORT_CE_V3_2) || defined(SS_SUPPORT_CE_V5) || defined(SS_SUPPORT_CE_V4) */
 
 #define SS_TRNG_ENABLE			1
 #define SS_TRNG_POSTPROCESS_ENABLE	1
 
-#if defined(SS_SUPPORT_CE_V3_2)
+#if defined(SS_SUPPORT_CE_V3_2) || defined(SS_SUPPORT_CE_V4)
 #if IS_ENABLED(CONFIG_ARCH_SUN50IW10)
 #define SS_GCM_MODE_ENABLE		1
 #define SS_DRBG_MODE_ENABLE             1
@@ -132,7 +176,7 @@
 #define SS_HASH_HW_PADDING_ALIGN_CASE	1
 #endif  /* SS_SUPPORT_CE_V3_2 */
 
-#if defined(SS_SUPPORT_CE_V3_2) || defined(SS_SUPPORT_CE_V5)
+#if defined(SS_SUPPORT_CE_V3_2) || defined(SS_SUPPORT_CE_V5) || defined(SS_SUPPORT_CE_V4)
 #define SS_RSA3072_ENABLE		1
 #define SS_RSA4096_ENABLE		1
 
@@ -144,7 +188,19 @@
 
 #define SS_RSA_MIN_SIZE			(512/8)  /* in Bytes. 512 bits */
 #define SS_RSA_MAX_SIZE			(4096/8) /* in Bytes. 4096 bits */
+
+/* CBC-MAC */
+#define SS_AES_CBC_MAC_LEN		128  /* 128 bits */
+#define SS_DES_CBC_MAC_LEN		64  /* 64 bits */
+#define SS_CBC_MAC_LEN_OFFSET		17
+#define SS_COMM_CTRL_ALG_TYPE_MASK	0x7f
+
+#if IS_ENABLED(CONFIG_ARCH_SUN65IW1) || IS_ENABLED(CONFIG_ARCH_SUN55IW7)\
+	|| defined(CONFIG_ARCH_SUN60IW3)
+#define SS_FLOW_NUM			3
+#else
 #define SS_FLOW_NUM			4
+#endif
 
 #define SS_XTS_MODE_ENABLE              1
 
@@ -166,14 +222,33 @@
 #undef SS_RSA_ENABLE
 #endif
 
+#if IS_ENABLED(CONFIG_ARCH_SUN65IW1) || IS_ENABLED(CONFIG_ARCH_SUN55IW7)
+/* Different from previous RAES_ XTS, this version uses AES_ XTS */
+#define SS_METHOD_AES_XTS	1
+#endif
+
+#if IS_ENABLED(CONFIG_ARCH_SUN65IW1) || IS_ENABLED(CONFIG_ARCH_SUN60IW2) \
+	|| IS_ENABLED(CONFIG_ARCH_SUN55IW7) || IS_ENABLED(CONFIG_ARCH_SUN60IW3)
+/* need total data len in ce_3.1 */
+#define SS_TOTAL_DATALEN_ENABLE	1
+#endif
+
 #if IS_ENABLED(CONFIG_ARCH_SUN55IW6) || IS_ENABLED(CONFIG_ARCH_SUN8IW21) \
-	|| IS_ENABLED(CONFIG_ARCH_SUN50IW9) || IS_ENABLED(CONFIG_ARCH_SUN50IW10)
+	|| IS_ENABLED(CONFIG_ARCH_SUN50IW9) || IS_ENABLED(CONFIG_ARCH_SUN50IW10)\
+	|| IS_ENABLED(CONFIG_ARCH_SUN65IW1) || IS_ENABLED(CONFIG_ARCH_SUN60IW2)\
+	|| IS_ENABLED(CONFIG_ARCH_SUN8IW22) || IS_ENABLED(CONFIG_ARCH_SUN55IW7)\
+	|| IS_ENABLED(CONFIG_ARCH_SUN252IW1) || IS_ENABLED(CONFIG_ARCH_SUN60IW3)
 #undef SS_RSA_ENABLE
 #endif
 
-#if IS_ENABLED(CONFIG_ARCH_SUN60IW2)
-#define SS_TOTAL_DATALEN_ENABLE	1
-#undef SS_RSA_ENABLE
+#if IS_ENABLED(CONFIG_ARCH_SUN251IW1)
+#undef SS_DH_ENABLE
+#undef SS_XTS_MODE_ENABLE
+#define HMAC_DATA_RREPROCE_ENABLE	1
+#endif
+
+#if IS_ENABLED(CONFIG_ARCH_SUN8IW20)
+#undef SS_XTS_MODE_ENABLE
 #endif
 
 #define SS_PRNG_SEED_LEN		(192/8) /* 192 bits */
@@ -203,7 +278,7 @@
 #endif
 
 /* For debug */
-/* #define SUNXI_CE_DEBUG */
+//#define SUNXI_CE_DEBUG
 #ifdef SUNXI_CE_DEBUG
 #define SS_DBG(fmt, arg...) 	pr_err("%s()%d - "fmt, __func__, __LINE__, ##arg)
 #else
@@ -317,6 +392,7 @@ typedef struct ce_new_task_desc {
 	ce_scatter_t dst[CE_SCATTERS_PER_TASK];
 	struct ce_new_task_desc *next;
 	u32 reserved[3];
+	dma_addr_t task_phy_addr;
 } ce_new_task_desc_t;
 #endif
 #endif
@@ -339,6 +415,30 @@ typedef struct {
 #endif
 } ss_dma_info_t;
 
+/* The common context of AES and HASH */
+typedef struct {
+	u32 flow;
+	u32 flags;
+} ss_comm_ctx_t;
+
+typedef struct {
+	ss_comm_ctx_t comm; /* must be in the front. */
+	u8  md[SS_DIGEST_SIZE]; /* message digest data which fixed-length output obtained by applying a hash function to the message */
+	u8  pad[SS_HASH_PAD_SIZE]; /* Padding data, adding this to a message to meet the requirements of a hash algorithm */
+	u8  key[SHA512_BLOCK_SIZE]; /* for hmac */
+	u32 tail_len;
+	u32 md_size;
+	u32 key_size;   /* for hmac */
+	u32 cnt;        /* in Byte */
+	u32 npackets;
+	u8 *update_buf;
+	struct scatterlist *update_sg;
+#if defined(SS_SUPPORT_CE_V3_1) && defined(SS_HMAC_ENABLE)
+	u8 *save_hmac_data;  /* used to save i_pad_key and original data */
+	u32 hmac_all_data_len;  /* in Byte */
+#endif
+} ss_hash_ctx_t;
+
 typedef struct {
 	u32 dir;
 	u32 type;
@@ -347,13 +447,8 @@ typedef struct {
 	struct completion done;
 	ss_dma_info_t dma_src;
 	ss_dma_info_t dma_dst;
+	ss_hash_ctx_t *ctx;
 } ss_aes_req_ctx_t;
-
-/* The common context of AES and HASH */
-typedef struct {
-	u32 flow;
-	u32 flags;
-} ss_comm_ctx_t;
 
 typedef struct {
 	ss_comm_ctx_t comm; /* must be in the front. */
@@ -418,19 +513,6 @@ typedef struct {
 } ss_aead_ctx_t;
 
 typedef struct {
-	ss_comm_ctx_t comm; /* must be in the front. */
-
-	u8  md[SS_DIGEST_SIZE]; /* message digest data which fixed-length output obtained by applying a hash function to the message */
-	u8  pad[SS_HASH_PAD_SIZE]; /* Padding data, adding this to a message to meet the requirements of a hash algorithm */
-	u8  key[SHA512_BLOCK_SIZE]; /* for hmac */
-	u32 tail_len;
-	u32 md_size;
-	u32 key_size;	/* for hmac */
-	u32 cnt;	/* in Byte */
-	u32 npackets;
-} ss_hash_ctx_t;
-
-typedef struct {
 #ifdef SS_SCATTER_ENABLE
 	ce_task_desc_t task;
 #endif
@@ -458,6 +540,9 @@ typedef struct {
 	struct device *pdevice;
 	struct device_node *pnode;
 	void __iomem *base_addr;
+#ifdef SS_SUPPORT_CE_V1
+	u32 phy_base_addr;
+#endif
 	ce_channel_t flows[SS_FLOW_NUM];
 	struct clk *ce_clk;
 	struct clk *ce_sys_clk;
@@ -473,6 +558,7 @@ typedef struct {
 	u32 irq;
 	s32 suspend;
 	struct dma_pool	*task_pool;
+	bool low_power_mode;  /* enable low power function */
 } sunxi_ce_cdev_t;
 
 extern sunxi_ce_cdev_t	*ce_cdev;
@@ -498,6 +584,17 @@ typedef struct {
 	unsigned long iv_phy;
 	unsigned long key_phy;
 	s32 channel_id;
+#if IS_ENABLED(CONFIG_AW_CE_SOCKET)
+#ifdef SS_SUPPORT_CE_V1
+	struct completion done;
+	ss_dma_info_t dma_src;
+	ss_dma_info_t dma_dst;
+#endif
+#endif
+#if IS_ENABLED(SS_SUPPORT_CE_V3_1) || IS_ENABLED(SS_SUPPORT_CE_V3_2)
+	u8 padding[AES_BLOCK_SIZE];
+	u32 padding_len;
+#endif
 } crypto_aes_req_ctx_t;
 
 /* define the ctx for rsa requtest */
@@ -581,6 +678,48 @@ typedef struct {
 	s32 channel_id;
 } crypto_ecc_req_ctx_t;
 
+typedef struct {
+	u8 *src_buffer;
+	u32 src_length;
+
+	u8 *dst_buffer;
+	u32 dst_length;
+
+	u8 *key_buffer;
+	u32 key_length;
+
+	u8 *iv_buffer;
+	u32 iv_length;
+
+	u8 *sk_buffer;
+	u32 sk_length;
+
+	u8 *p_buffer;
+	u32 p_length;
+
+	u32 mode;
+	u32 dir;
+	u32 flag;
+
+	s32 channel_id;
+} crypto_sm2_req_ctx_t;
+
+#ifdef SS_SUPPORT_CE_V1
+typedef struct {
+	u8 *src_buffer;
+	u32 src_length;
+	u32 *dst_buffer;
+	u32 dst_length;
+	u32 dir;
+	u32 width;
+	u32 poly;
+	u32 init;
+	u32 refin;
+	u32 refout;
+	u32 xorout;
+} crypto_crc_req_ctx_t;
+#endif
+
 enum alg_type {
 	ALG_TYPE_HASH,
 	ALG_TYPE_CIPHER,
@@ -607,6 +746,8 @@ struct sunxi_crypto_tmp {
 #define CE_IOC_HASH_CRYPTO		_IOW(CE_IOC_MAGIC, 4, crypto_hash_req_ctx_t)
 #define CE_IOC_RNG_CRYPTO		_IOW(CE_IOC_MAGIC, 5, crypto_rng_req_ctx_t)
 #define CE_IOC_ECC_CRYPTO		_IOW(CE_IOC_MAGIC, 6, crypto_ecc_req_ctx_t)
+#define CE_IOC_CRC_CRYPTO		_IOW(CE_IOC_MAGIC, 7, crypto_crc_req_ctx_t)
+#define CE_IOC_SM2_CRYPTO		_IOW(CE_IOC_MAGIC, 8, crypto_sm2_req_ctx_t)
 
 /* Inner functions declaration */
 void ce_dev_lock(void);
@@ -623,6 +764,10 @@ int do_rsa_crypto(crypto_rsa_req_ctx_t *req);
 int do_hash_crypto(crypto_hash_req_ctx_t *req_ctx);
 int do_rng_crypto(crypto_rng_req_ctx_t *req_ctx);
 int do_ecc_crypto(crypto_ecc_req_ctx_t *req_ctx);
+int do_sm2_crypto(crypto_sm2_req_ctx_t *req);
+#ifdef SS_SUPPORT_CE_V1
+int do_crc_crypto(crypto_crc_req_ctx_t *req_ctx);
+#endif
 irqreturn_t sunxi_ce_irq_handler(int irq, void *dev_id);
 
 #if IS_ENABLED(CONFIG_AW_HWRNG_DRIVER)

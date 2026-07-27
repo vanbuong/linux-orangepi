@@ -379,8 +379,15 @@ enum mm_msg_tag {
 
 	MM_APM_STALOSS_IND,
 
+#ifdef AICWF_SDIO_SUPPORT
 	MM_SET_VENDOR_HWCONFIG_REQ,
 	MM_SET_VENDOR_HWCONFIG_CFM,
+#endif
+
+#ifdef AICWF_USB_SUPPORT
+	MM_SET_TXOP_REQ,
+	MM_SET_TXOP_CFM,
+#endif
 
 	MM_GET_FW_VERSION_REQ,
 	MM_GET_FW_VERSION_CFM,
@@ -407,6 +414,66 @@ enum mm_msg_tag {
 	MM_GET_APF_PROG_REQ,
 	MM_GET_APF_PROG_CFM,
 
+	MM_SET_TXPWR_PER_STA_REQ,
+	MM_SET_TXPWR_PER_STA_CFM,
+
+	MM_GET_STATISTIC_REQ,
+	MM_GET_STATISTIC_CFM,
+
+	MM_VENDOR_SWCONFIG_IND,
+	MM_FW_PANIC_IND,
+	MM_FW_ASSERT_IND,
+
+	MM_NAN_PUBLISH_REQ,
+	MM_NAN_PUBLISH_CFM,
+
+	MM_NAN_SUBSCRIBE_REQ,
+	MM_NAN_SUBSCRIBE_CFM,
+
+	MM_NAN_FOLLOWUP_REQ,
+	MM_NAN_FOLLOWUP_CFM,
+
+	MM_NAN_START_REQ,
+	MM_NAN_START_CFM,
+
+	MM_NAN_ADD_SKDA_REQ,
+	MM_NAN_ADD_SKDA_CFM,
+
+	MM_NAN_ADD_NM_TK_REQ,
+	MM_NAN_ADD_NM_TK_CFM,
+
+	MM_NAN_NDP_REQ,
+	MM_NAN_NDP_CFM,
+
+	MM_NAN_ADD_NAN_PMK_REQ,
+	MM_NAN_ADD_NAN_PMK_CFM,
+
+	MM_NAN_BOOTSTRAPPING_IND,
+
+	MM_NAN_ADD_NAN_KEK_REQ,
+	MM_NAN_ADD_NAN_KEK_CFM,
+
+	MM_NAN_NDP_STATUS_IND,
+
+	MM_NAN_PAIRING_CFM_IND,
+
+	MM_NAN_ADD_PMKSA_REQ,
+	MM_NAN_ADD_PMKSA_CFM,
+
+	MM_NAN_NDP_TERMINATED_IND,
+
+	MM_NAN_SELF_NIK_SET_REQ,
+	MM_NAN_SELF_NIK_SET_CFM,
+
+	MM_NAN_START_BOOTSTRAPPING_REQ,
+	MM_NAN_START_BOOTSTRAPPING_CFM,
+
+	MM_NAN_RX_NDP_REQ_IND, //For debug
+	MM_NAN_RX_NDP_CONFIRM_IND, //For debug
+
+	MM_NAN_SET_COUNTRY_REQ,
+	MM_NAN_SET_COUNTRY_CFM,
+
 	/// MAX number of messages
 	MM_MAX,
 };
@@ -423,6 +490,8 @@ enum {
 	MM_MESH_POINT,
 	// Monitor interface
 	MM_MONITOR,
+	// NAN interface
+	MM_NAN,
 };
 
 ///BA agreement types
@@ -827,6 +896,7 @@ struct mm_key_add_cfm {
 	u8_l status;
 	/// HW index of the key just added
 	u8_l hw_key_idx;
+	u8_l alligned[2];
 };
 
 /// Structure containing the parameters of the @ref MM_KEY_DEL_REQ message.
@@ -834,6 +904,160 @@ struct mm_key_del_req {
 	/// HW index of the key to be deleted
 	u8_l hw_key_idx;
 };
+
+
+enum nan_flow_type {
+	NAN_TYPE_INVALID,
+	NAN_TYPE_SETUP = 1,
+	NAN_TYPE_VERIFICATION = 2,
+};
+
+struct mm_nan_start {
+	u8_l master_pref;
+	u8_l band;
+};
+
+struct mm_nan_publish_req {
+	u8_l service_id[6];
+	u16_l port;
+	u8_l protocol;
+	u8_l ssi_len;
+	u8_l ssi[256];
+};
+
+struct mm_nan_subscribe_req {
+	u8_l service_id[6];
+};
+
+struct mm_nan_followup_req {
+	u8_l service_id[6];
+	u8_l peer_mac_addr[6];
+	u8_l instance_id;
+	u8_l remote_instance_id;
+	u8_l info[128];
+};
+
+struct fw_bootstrapping_ind_info {
+	u16_l vif_index;
+	u16_l bootstrapping_method;
+	u8_l mac_addr[6];
+	u8_l instance_id;
+	u8_l request_instance_id;
+	u8_l nira[32];
+	u8_l nounce[8];
+};
+
+/* ndp confirm */
+struct fw_nan_ndp_status_ind_info {
+	u8_l vif_idx;
+	u8_l status;
+	u8_l mac_addr[6];
+	u8_l ndp_id;
+};
+
+struct fw_nan_ndp_terminated_ind_info {
+	u8_l vif_idx;
+	u8_l ndp_id;
+	u8_l mac_addr[6];
+	u8_l service_id[6];
+};
+
+struct fw_nan_pairing_cfm_ind_info {
+	u16_l vif_idx;
+	u8_l peer_addr[6];
+	u8_l peer_nik[16];
+	u8_l pmksa[32];
+};
+
+struct fw_nan_rx_ndp_req_ind_info {
+	u8_l vif_idx;
+	u8_l ndp_id;
+};
+
+struct fw_nan_rx_ndp_confirm_ind_info {
+	u8_l vif_idx;
+	u8_l ndp_id;
+};
+
+struct mm_nan_service_info {
+	u8_l protocol;
+	u16_l port;
+};
+
+struct mm_nan_pairing_initiate_info {
+	u8 peer_handle;
+	/* 1 = setup, 2 = verification */
+	u8 type;
+	u16 bootstrapping_method;
+	char pin[7];
+	u8 da[6];
+};
+
+/**
+ * struct nan_dp_request_info - for AIC_NL80211_VENDOR_SUBCMD_NDP_REQUEST
+ */
+struct mm_nan_dp_request_info {
+	u8 peer_handle;
+	char service_name[128];
+};
+
+/**
+ * struct nan_pairing_confirm_info
+ */
+struct nan_pairing_confirm_info {
+	/** 0 = success, non-zero = failure */
+	u8_l status;
+	/** Peer NIK (16 bytes) - only valid on success */
+	u8_l peer_nik[16];
+	/** PMK-SA (32 bytes) - only valid on success */
+	u8_l pmk_sa[32];
+};
+
+/**
+ * struct nan_dp_request_ind - for AIC_VENDOR_EVENT_NAN_DP_REQUEST
+ */
+struct nan_dp_request_ind {
+	/** NDP ID */
+	u8_l ndp_id;
+};
+
+#if 0
+/**
+ * struct nan_dp_confirm_info
+ */
+struct nan_dp_confirm_info {
+	/** 0 = success, non-zero = failure */
+	u8_l status;
+	/** NDP ID */
+	u8_l ndp_id;
+	/** Interface name for NDP (e.g., "nan0") */
+	char ifname[16];
+};
+#endif
+
+
+/**
+ * struct nan_dp_terminated_info
+ */
+struct nan_dp_terminated_info {
+	/** NDP ID */
+	u8_l ndp_id;
+};
+
+/**
+ * struct nan_disabled_info
+ */
+struct nan_disabled_info {
+	/** Reason code */
+	u8_l reason;
+};
+
+struct nan_rx_ndp_info {
+	u8_l vif_idx;
+	/** NDP ID */
+	u8_l ndp_id;
+};
+
 
 /// Structure containing the parameters of the @ref MM_BA_ADD_REQ message.
 struct mm_ba_add_req {
@@ -1226,6 +1450,7 @@ struct mm_get_sta_info_cfm {
 	u32_l rate_info;
 	u32_l txfailed;
 	u8    rssi;
+	u8    alligned[3];
 };
 
 typedef struct {
@@ -1279,7 +1504,7 @@ struct mm_set_txpwr_lvl_req {
 
 struct mm_set_txpwr_lvl_adj_req
 {
-    txpwr_lvl_adj_conf_t txpwr_lvl_adj;
+	txpwr_lvl_adj_conf_t txpwr_lvl_adj;
 };
 
 typedef struct {
@@ -1298,6 +1523,63 @@ typedef struct {
 	u8_l xtal_cap;
 	u8_l xtal_cap_fine;
 } xtal_cap_conf_t;
+
+struct mm_nan_add_skda_req {
+	u16 skda_len;
+	u8 skda[256];
+};
+
+struct mm_nan_nm_tk_add_req {
+	/// Key index (valid only for default keys)
+	u8_l key_idx;
+	/// STA index (valid only for pairwise or mesh group keys)
+	u8_l sta_idx;
+	/// Key material
+	struct mac_sec_key key;
+	/// Cipher suite (WEP64, WEP128, TKIP, CCMP)
+	u8_l cipher_suite;
+	/// Index of the interface for which the key is set (valid only for default keys or mesh group keys)
+	u8_l inst_nbr;
+	/// A-MSDU SPP parameter
+	u8_l spp;
+	/// Indicate if provided key is a pairwise key or not
+	bool_l pairwise;
+
+	u8_l mac_addr[6];
+	u8_l pmkid[16];
+	u32_l flag;
+};
+
+struct mm_nan_nd_pmk_req {
+	u8_l nd_pmk[32];
+};
+
+struct mm_nan_kek_req {
+	u16_l kek_len;
+	u8_l kek[32];
+};
+
+struct mm_nan_pmksa_req {
+	u8_l peer_addr[6];
+	u8_l pmksa[32];
+};
+
+struct mm_nan_self_nik_nounce_req {
+	u8_l nik[16];
+	u8_l nounce[8];
+};
+
+struct mm_nan_start_bootstrapping_req {
+	u8_l da[6];
+	u8_l service_id[6];
+	u8_l request_instance_id;
+};
+
+struct mm_nan_set_country_req {
+	u32_l pri20_freq_5g;
+	u8_l country_code[2];
+	u8_l reserved[2];
+};
 
 /*
  * pwrofst2x_tbl_2g4[3][3]:
@@ -1788,6 +2070,7 @@ struct me_sta_add_cfm {
 	u8_l status;
 	/// PM state of the station
 	u8_l pm_state;
+	u8_l alligned;
 };
 
 /// Structure containing the parameters of the @ref ME_STA_DEL_REQ message.
@@ -2737,11 +3020,17 @@ struct dbg_get_sys_stat_cfm {
 	u32_l stats_time;
 };
 
+#ifdef AICWF_USB_SUPPORT
+#define MEM_BLOCK_SIZE   512
+#else
+#define MEM_BLOCK_SIZE   1024
+#endif
+
 /// Structure containing the parameters of the @ref DBG_MEM_BLOCK_WRITE_REQ message.
 struct dbg_mem_block_write_req {
 	u32_l memaddr;
 	u32_l memsize;
-	u32_l memdata[1024 / sizeof(u32_l)];
+	u32_l memdata[MEM_BLOCK_SIZE / sizeof(u32_l)];
 };
 
 /// Structure containing the parameters of the @ref DBG_MEM_BLOCK_WRITE_CFM message.
@@ -2766,6 +3055,8 @@ enum {
 #ifdef CONFIG_USB_BT
 	HOST_START_APP_REBOOT,
 #endif // (CONFIG_USB_BT)
+	HOST_START_APP_FNCALL = 4,
+	HOST_START_APP_DUMMY  = 5,
 };
 
 ///////////////////////////////////////////////////////////////////////////////

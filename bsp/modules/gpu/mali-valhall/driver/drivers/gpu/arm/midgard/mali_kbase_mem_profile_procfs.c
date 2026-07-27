@@ -26,7 +26,7 @@
 #include <mali_kbase.h>
 #include "mali_kbase_mem_profile_procfs.h"
 
-#if IS_ENABLED(CONFIG_PROC_FS)
+#if IS_ENABLED(CONFIG_PROC_FS) && IS_ENABLED(CONFIG_DEBUG_FS)
 
 int kbase_procfs_init(struct kbase_device *kbdev)
 {

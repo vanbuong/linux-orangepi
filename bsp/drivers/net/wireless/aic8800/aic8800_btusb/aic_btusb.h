@@ -31,6 +31,9 @@
 #include <linux/firmware.h>
 #include <linux/suspend.h>
 
+#include "aic_bsp_driver.h"
+#include "aic_bsp_export.h"
+
 #define CONFIG_BLUEDROID        1 /* bleuz 0, bluedroid 1 */
 
 
@@ -49,6 +52,20 @@
 #include <net/bluetooth/hci.h>
 #endif
 
+#define USB_VENDOR_ID_AIC               0xA69C
+#define USB_VENDOR_ID_AIC_V2            0x368B
+
+#define USB_DEVICE_ID_AIC_8800          0x8800
+#define USB_DEVICE_ID_AIC_8801          0x8801
+
+#define USB_DEVICE_ID_AIC_8800D80       0x8D80
+#define USB_DEVICE_ID_AIC_8800D81       0x8D81
+#define USB_DEVICE_ID_AIC_8800DC        0x88DC
+#define USB_DEVICE_ID_AIC_8800D40       0x8D40
+#define USB_DEVICE_ID_AIC_8800D41       0x8D41
+
+#define USB_DEVICE_ID_AIC_8800D80X2     0x8D90
+#define USB_DEVICE_ID_AIC_8800D81X2     0x8D91
 
 /***********************************
 ** AicSemi - For aic_btusb driver **
@@ -105,6 +122,7 @@
 #define BTUSB_DID_ISO_RESUME    4
 
 #define HCI_VENDOR_USB_DISC_HARDWARE_ERROR   0xFF
+#define HCI_VENDOR_USB_RESUME_HARDWARE_ERROR 0xFE
 
 #define HCI_CMD_READ_BD_ADDR                 0x1009
 #define HCI_VENDOR_READ_LMP_VERISION         0x1001
@@ -500,7 +518,7 @@ static inline void hci_set_drvdata(struct hci_dev *hdev, void *data)
 #define MSG_TO                         1000
 #define PATCH_SEG_MAX                  252
 #define DATA_END                       0x80
-#define DOWNLOAD_OPCODE                0xfc20
+#define DOWNLOAD_OPCODE                0xfc02
 #define BTOFF_OPCODE                   0xfc28
 #define TRUE                           1
 #define FALSE                          0
@@ -509,6 +527,94 @@ static inline void hci_set_drvdata(struct hci_dev *hdev, void *data)
 #define CMD_CMP_LEN                    sizeof(struct hci_ev_cmd_complete)
 #define MAX_PATCH_SIZE_24K             (1024*24)
 #define MAX_PATCH_SIZE_40K             (1024*40)
+
+#define HCI_VSC_FW_STATUS_GET_CMD      0xFC78
+#define HCI_VSC_DBG_RD_MEM_CMD         0xFC01
+#define HCI_VSC_UPDATE_PT_CMD          0xFC75
+#define HCI_VSC_UPDATE_PT_SIZE         249
+#define HCI_VSC_MEM_WR_SIZE            240
+#define HCI_VSC_MEM_RD_SIZE            128
+#define HCI_PT_MAX_LEN                 31
+
+#define FW_RAM_ADID_BASE_ADDR          0x101788
+#define FW_RAM_PATCH_BASE_ADDR         0x184000
+
+#define AICBT_TXPWR_DFT                0x6F2F
+#define FW_RESET_START_ADDR            0x40500128
+#define FW_RESET_START_VAL             0x40
+#define FW_ADID_FLAG_ADDR              0x40500150
+#define FW_ADID_FLAG_VAL               0x01
+
+enum AIC_DC_SUBID {
+	DC_U01 = 0,
+	DC_U02,
+	DC_U02H,
+};
+
+struct aicbt_firmware {
+	const char *desc;
+	const char *bt_adid;
+	const char *bt_patch;
+	const char *bt_table;
+	const char *bt_ext_patch;
+	const char *hw_config;
+};
+
+const struct aicbt_firmware fw_8800dc[] = {
+	[DC_U01] = {
+		.desc          = "aic8800dc/aic8800dc u01 bt patch",
+		.bt_adid       = "aic8800dc/fw_adid_8800dc.bin",
+		.bt_patch      = "aic8800dc/fw_patch_8800dc.bin",
+		.bt_table      = "aic8800dc/fw_patch_table_8800dc.bin",
+		.bt_ext_patch  = "aic8800dc/fw_patch_8800dc_ext",
+		.hw_config     = "aic8800dc/usb/aichw.conf",
+	},
+	[DC_U02] = {
+		.desc          = "aic8800dc/aic8800dc u02 bt patch",
+		.bt_adid       = "aic8800dc/fw_adid_8800dc_u02.bin",
+		.bt_patch      = "aic8800dc/fw_patch_8800dc_u02.bin",
+		.bt_table      = "aic8800dc/fw_patch_table_8800dc_u02.bin",
+		.bt_ext_patch  = "aic8800dc/fw_patch_8800dc_u02_ext",
+		.hw_config     = "aic8800dc/usb/aichw.conf",
+	},
+	[DC_U02H] = {
+		.desc          = "aic8800dc/aic8800dch u02 bt patch",
+		.bt_adid       = "aic8800dc/fw_adid_8800dc_u02h.bin",
+		.bt_patch      = "aic8800dc/fw_patch_8800dc_u02h.bin",
+		.bt_table      = "aic8800dc/fw_patch_table_8800dc_u02h.bin",
+		.bt_ext_patch  = "aic8800dc/fw_patch_8800dc_u02h_ext",
+		.hw_config     = "aic8800dc/usb/aichw.conf",
+	},
+};
+
+struct fw_status {
+	u8 status;
+} __packed;
+
+struct hci_dbg_wr_mem_cmd {
+	__le32 start_addr;
+	__u8 type;
+	__u8 length;
+	__u8 data[HCI_VSC_MEM_WR_SIZE];
+};
+
+struct hci_patch_table_cmd {
+	uint8_t patch_num;
+	uint32_t patch_table_addr[31];
+	uint32_t patch_table_data[31];
+} __attribute__ ((packed));
+
+struct hci_dbg_rd_mem_cmd {
+	__le32 start_addr;
+	__u8 type;
+	__u8 length;
+} __attribute__ ((packed));
+
+struct hci_dbg_rd_mem_cmd_evt {
+	__u8 status;
+	__u8 length;
+	__u8 data[HCI_VSC_MEM_RD_SIZE];
+} __attribute__ ((packed));
 
 enum aic_endpoit {
 	CTRL_EP = 0,
@@ -621,5 +727,8 @@ static inline int getmacaddr(uint8_t *vnd_local_bd_addr)
 		vnd_local_bd_addr[5 - i] = mac_addr[i];
 	return 0;
 }
+
+int send_hci_cmd(firmware_info *fw_info);
+int rcv_hci_evt(firmware_info *fw_info);
 
 #endif /* CONFIG_BLUEDROID */

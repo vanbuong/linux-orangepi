@@ -42,17 +42,41 @@ static inline bool is_address_valid(uint64_t addr, uint64_t size)
 {
 	int i;
 
+	if (addr > ((uint64_t)-1) - size)
+		return false;
+
 	for (i = 0; i < VALID_ADDRESS_TABLE_SIZE; i++) {
-		if (addr >= valid_address_tbl[i].start_addr &&
-		    addr + size <= valid_address_tbl[i].start_addr +
-					   valid_address_tbl[i].total_size)
+		if (valid_address_tbl[i].start_addr >
+		    ((uint64_t)-1) - valid_address_tbl[i].total_size)
+			continue;
+		if (addr < valid_address_tbl[i].start_addr)
+			continue;
+		if (size > valid_address_tbl[i].total_size)
+			continue;
+		if (addr - valid_address_tbl[i].start_addr <=
+		    valid_address_tbl[i].total_size - size)
 			return true;
 	}
 
-	pr_err("address 0x%llx size 0x%llx is not valid device address.\n",
-	       addr, size);
-
 	return false;
+}
+
+static inline bool is_address_overlapped(uint64_t src, uint64_t dst,
+					 uint64_t size)
+{
+	if (size == 0)
+		return false;
+
+	if (src > ((uint64_t)-1) - size)
+		return true;
+
+	if (dst > ((uint64_t)-1) - size)
+		return true;
+
+	if (src >= dst)
+		return (src - dst) < size;
+
+	return (dst - src) < size;
 }
 
 static void xh2a_memory_transfer_device_safe_release(struct kref *kref)
@@ -193,6 +217,17 @@ static int xh2a_memory_transfer_ioctl_core_transfer(
 		if (!is_address_valid(ioc_request.src_addr, ioc_request.size)) {
 			dev_err(transfer_dev->miscdev.this_device,
 				"%s: device src address/size invalid\n",
+				__func__);
+			return -EINVAL;
+		}
+	}
+
+	if (ioc_request.type == DRIVER_MEMORY_TRANSFER_TYPE_INNER_DEVICE) {
+		if (is_address_overlapped(ioc_request.src_addr,
+					  ioc_request.dst_addr,
+					  ioc_request.size)) {
+			dev_err(transfer_dev->miscdev.this_device,
+				"%s: device src/dst address overlapped\n",
 				__func__);
 			return -EINVAL;
 		}
@@ -658,51 +693,6 @@ static int xh2a_memory_transfer_pm_complete(void *handle, bool is_compatible)
 	return 0;
 }
 
-static int xh2a_memory_transfer_update_ddr_size(void *handle, uint64_t *size)
-{
-	int ret;
-	uint32_t ddr_chip_quantity, ddr_chip_capacity;
-
-	ret = xh2a_pcie_get_efuse_data(handle, XH2A_EFUSE_SUBTYPE_DDR_0_ROW,
-				       XH2A_EFUSE_SUBTYPE_DDR_0_BIT,
-				       XH2A_EFUSE_SUBTYPE_DDR_0_LENGTH,
-				       &ddr_chip_quantity);
-
-	if (ret != 0) {
-		pr_err("%s: get efuse data failed\n", __func__);
-		*size = 0;
-		return ret;
-	}
-
-	if (ddr_chip_quantity > 6) {
-		pr_err("%s: get invalid ddr chip quantity %d\n", __func__,
-		       ddr_chip_quantity);
-		*size = 0;
-		return -1;
-	}
-
-	ret = xh2a_pcie_get_efuse_data(handle, XH2A_EFUSE_SUBTYPE_DDR_1_ROW,
-				       XH2A_EFUSE_SUBTYPE_DDR_1_BIT,
-				       XH2A_EFUSE_SUBTYPE_DDR_1_LENGTH,
-				       &ddr_chip_capacity);
-
-	if (ret != 0) {
-		pr_err("%s: get efuse data failed\n", __func__);
-		*size = 0;
-		return ret;
-	}
-
-	if (ddr_chip_capacity > 16) {
-		pr_err("%s: get invalid ddr chip capacity %d\n", __func__,
-		       ddr_chip_capacity);
-		*size = 0;
-		return -1;
-	}
-
-	*size = ddr_chip_quantity * ddr_chip_capacity * 0x40000000ULL;
-	return 0;
-}
-
 /*
  * xh2a_memory_transfer_probe()
  *     - probe function for memory_transfer device
@@ -796,7 +786,7 @@ static int xh2a_memory_transfer_probe(void *handle)
 		goto err_misc_register;
 	}
 
-	ret = xh2a_memory_transfer_update_ddr_size(handle, &size);
+	ret = xh2a_pcie_efuse_update_ddr_size(handle, &size);
 	if ((ret == 0) && (size != 0)) {
 		size -= XH2A_DEVICE_SYSTEM_SIZE;
 		valid_address_tbl[0].total_size = size;

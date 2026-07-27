@@ -230,7 +230,7 @@ err_alloc:
 	return ret;
 #else
 	mem_man->vir_addr = dma_alloc_coherent(dev, (size_t) mem_man->size,
-					(dma_addr_t *)&mem_man->phy_addr,
+					(vin_dma_addr_t *)&mem_man->phy_addr,
 					GFP_KERNEL);
 	if (!mem_man->vir_addr) {
 		vin_err("dma_alloc_coherent memory alloc failed\n");
@@ -271,7 +271,7 @@ void os_mem_free(struct device *dev, struct vin_mm *mem_man)
 #else
 	if (mem_man->vir_addr)
 		dma_free_coherent(dev, mem_man->size, mem_man->vir_addr,
-				  (dma_addr_t) mem_man->phy_addr);
+				  (vin_dma_addr_t) mem_man->phy_addr);
 #endif
 	mem_man->phy_addr = NULL;
 	mem_man->dma_addr = NULL;

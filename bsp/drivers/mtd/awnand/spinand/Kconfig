@@ -42,11 +42,11 @@ config AW_SPINAND_PSTORE_MTD_PART
 config AW_SPINAND_PSTORE_PANIC_WRITE
 	bool "support pstore panic write message"
 	depends on AW_SPINAND_PSTORE_MTD_PART
-	select SPI_SUNXI_ATOMIC_XFER
+	select AW_SPI_NG_ATOMIC_XFER
 	help
 	  In order to ensure that the data is written down in panic context when
 	  use mtdpstore. This need spi controller driver support by select
-	  SPI_SUNXI_ATOMIC_XFER.
+	  AW_SPI_NG_ATOMIC_XFER.
 
 	  If unsure, say Y.
 

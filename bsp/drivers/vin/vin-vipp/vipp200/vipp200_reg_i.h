@@ -116,19 +116,15 @@
 #define VIPP_CHN3_VSHORT_PD			31
 #define VIPP_CHN3_VSHORT_PD_MASK	(0X1 << VIPP_CHN3_VSHORT_PD)
 
-#if !defined CONFIG_ARCH_SUN55IW3
+#if !IS_ENABLED(CONFIG_ARCH_SUN55IW3)
 #define VIPP_INT_STATUS1_REG_OFF		0X034
 #define VIPP_CHN0_FRM_DONE_PD			1
 #define VIPP_CHN0_FRM_DONE_PD_MASK	(0X1 << VIPP_CHN0_FRM_DONE_PD)
 #endif
 
-#if IS_ENABLED(CONFIG_ARCH_SUN55IW3)
-#define VIPP_RETURN_INF_REG_OFF		0X034
-#else
 #define VIPP_RETURN_INF_REG_OFF		0X038
-#endif
-#define VIPP_AHB_MBUS_W_ADDR		0
-#define VIPP_AHB_MBUS_W_ADDR_MASK	(0X1FFF << VIPP_AHB_MBUS_W_ADDR)
+#define VIPP_SUB_ST			0
+#define VIPP_SUB_ST_MASK		(0XFFFF << VIPP_SUB_ST)
 #define VIPP_SUB_ID			16
 #define VIPP_SUB_ID_MASK		(0X3 << VIPP_SUB_ID)
 
@@ -156,6 +152,9 @@
 #define VIPP_MODULE_EN_REG_OFF		0X000
 #define VIPP_SC_CFG_REG_OFF		0X004
 #define VIPP_SC_SIZE_REG_OFF		0X008
+#define VIPP_SC_CFG1_REG_OFF		0X00C
+#define VIPP_DS_CFG_REG_OFF		0X010
+#define VIPP_DS_SIZE_REG_OFF		0X014
 #define VIPP_MODE_REG_OFF		0X020
 #define VIPP_CROP_START_REG_OFF		0X030
 #define VIPP_CROP_SIZE_REG_OFF		0X034
@@ -184,7 +183,9 @@ typedef union {
 		unsigned int chroma_ds_en:1;
 		unsigned int yuv2rgb_en:1;
 		unsigned int cgc_f2l_en:1;
-		unsigned int res1:27;
+		unsigned int res1:1;
+		unsigned int ds_en:1;
+		unsigned int res2:25;
 	} bits;
 } VIPP_MODULE_EN_REG_t;
 
@@ -207,6 +208,36 @@ typedef union {
 		unsigned int res1:3;
 	} bits;
 } VIPP_SCALER_OUTPUT_SIZE_REG_t;
+
+typedef union {
+	unsigned int dwval;
+	struct {
+		unsigned int sc_ratio_precision:2;
+		unsigned int res0:30;
+	} bits;
+} VIPP_SCALER_CFG1_REG_t;
+
+typedef union {
+	unsigned int dwval;
+	struct {
+		unsigned int ds_w_num:3;
+		unsigned int res0:1;
+		unsigned int ds_h_num:3;
+		unsigned int res1:1;
+		unsigned int ds_phase:3;
+		unsigned int res2:21;
+	} bits;
+} VIPP_DS_CFG_REG_t;
+
+typedef union {
+	unsigned int dwval;
+	struct {
+		unsigned int ds_width:13;
+		unsigned int res0:3;
+		unsigned int ds_height:13;
+		unsigned int res1:3;
+	} bits;
+} VIPP_DS_OUTPUT_SIZE_REG_t;
 
 #if IS_ENABLED(CONFIG_ARCH_SUN55IW3)
 typedef union {

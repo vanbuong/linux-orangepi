@@ -422,7 +422,7 @@ static struct sensor_win_size sensor_win_sizes[] = {
 	.fps_fixed = 25,
 	.regs = sensor_regs,
 	.regs_size = ARRAY_SIZE(sensor_regs),
-	.pclk_dly = 0x06, // should not larger than 0x1f
+	.pclk_dly = 0x01, // change 0x06 to 0x01
 	.set_size = NULL,
 	},
 	{

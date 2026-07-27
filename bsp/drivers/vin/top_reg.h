@@ -19,7 +19,7 @@
 #define __CSIC__TOP__REG__H__
 
 #include <linux/types.h>
-
+#include "platform/platform_cfg.h"
 #define MAX_CSIC_TOP_NUM 2
 
 /* register value */
@@ -111,7 +111,7 @@ struct csic_chfreq_obs_value {
 /*
  * functions about top register
  */
-int csic_top_set_base_addr(unsigned int sel, unsigned long addr);
+int csic_top_set_base_addr(unsigned int sel, vin_dma_addr_t addr);
 void csic_bk_intpool_get_fifo_reg(unsigned int sel, struct cisc_bk_intpool_reg *reg);
 void csic_bk_intpool_get_obs_reg(unsigned int sel, struct cisc_bk_intpool_obs *reg);
 void csic_bk_intpool_clear_status(unsigned int sel, enum csis_bk_intpool interrupt);
@@ -129,13 +129,16 @@ void csic_top_f2s0_bridge_en(unsigned int sel, unsigned int en, unsigned int id)
 void csic_top_s2f0_bridge_en(unsigned int sel, unsigned int en, unsigned int id);
 void csic_top_isp_bridge_ch_enable(unsigned int sel);
 void csic_top_isp_bridge_ch_disable(unsigned int sel);
+void csic_top_isp1_bridge_ch_enable(unsigned int sel);
+void csic_top_isp1_bridge_ch_disable(unsigned int sel);
+void csic_top_f2s1_bridge_en(unsigned int sel, unsigned int en, unsigned int id);
+void csic_top_s2f1_bridge_en(unsigned int sel, unsigned int en, unsigned int id);
 void csic_top_version_read_en(unsigned int sel, unsigned int en);
 void csic_isp_input_select(unsigned int sel, unsigned int isp, unsigned int in,
 				unsigned int psr, unsigned int ch);
 void csic_vipp_input_select(unsigned int sel, unsigned int vipp,
 				unsigned int isp, unsigned int ch);
-void csic_dma_input_select(unsigned int sel, unsigned int dma,
-				unsigned int parser, unsigned int ch);
+
 void csic_feature_list_get(unsigned int sel, struct csic_feature_list *fl);
 void csic_version_get(unsigned int sel, struct csic_version *v);
 void csic_mbus_req_mex_set(unsigned int sel, unsigned int data);
@@ -148,7 +151,7 @@ void csic_mulp_int_clear_status(unsigned int sel, enum csis_mulp_int interrupt);
 void csic_ptn_generation_en(unsigned int sel, unsigned int en);
 void csic_ptn_control(unsigned int sel, int mode, int dw, enum ptn_port_sel port, int gen_dly);
 void csic_ptn_length(unsigned int sel, unsigned int len);
-void csic_ptn_addr(unsigned int sel, unsigned long dma_addr);
+void csic_ptn_addr(unsigned int sel, vin_dma_addr_t dma_addr);
 void csic_ptn_size(unsigned int sel, unsigned int w, unsigned int h);
 void csic_chfreq_enable(unsigned int sel);
 void csic_chfreq_disable(unsigned int sel);
@@ -162,20 +165,27 @@ void csic_chfreq_obs_read(unsigned int sel, struct csic_chfreq_obs_value *value)
 /*
  * functions about ccu register
  */
-int csic_ccu_set_base_addr(unsigned long addr);
+int csic_ccu_set_base_addr(vin_dma_addr_t addr);
 void csic_ccu_bk_intpool_clk_gating_en(unsigned int en);
 void csic_ccu_bk_intpool_clock_control(unsigned int m, unsigned int n);
 void csic_ccu_clk_gating_enable(void);
 void csic_ccu_clk_gating_disable(void);
 void csic_ccu_mcsi_clk_mode(unsigned int mode);
+void csic_ccu_mcsi_hclk_autogate_enable(void);
+void csic_ccu_mcsi_hclk_autogate_disable(void);
+void csic_ccu_mcsi_hclk_autogate_cycle_set(unsigned int cycle);
 void csic_ccu_mcsi_combo_clk_en(unsigned int sel, unsigned int en);
 void csic_ccu_mcsi_mipi_clk_en(unsigned int sel, unsigned int en);
 void csic_ccu_mcsi_parser_clk_en(unsigned int sel, unsigned int en);
 void csic_ccu_misp_isp_clk_en(unsigned int sel, unsigned int en);
 void csic_ccu_misp_bridge_clk_gating_enable(void);
 void csic_ccu_misp_bridge_clk_gating_disable(void);
+void csic_ccu_misp1_bridge_clk_gating_enable(void);
+void csic_ccu_misp1_bridge_clk_gating_disable(void);
 void csic_ccu_f2s0_bridge_clk_en(unsigned int en, unsigned int id);
 void csic_ccu_s2f0_bridge_clk_en(unsigned int en, unsigned int id);
+void csic_ccu_f2s1_bridge_clk_en(unsigned int en, unsigned int id);
+void csic_ccu_s2f1_bridge_clk_en(unsigned int en, unsigned int id);
 void csic_ccu_mcsi_post_clk_enable(unsigned int sel);
 void csic_ccu_mcsi_post_clk_disable(unsigned int sel);
 void csic_ccu_bk_clk_en(unsigned int sel, unsigned int en);

@@ -19,4 +19,10 @@ config SND_SOC_SUNXI_LOOPBACK
 	help
 	  Select Y or M to support loopback.
 
+# REPORT
+config SND_SOC_SUNXI_REPORT
+	tristate "Allwinner report support"
+	help
+	  Select Y or M to support report.
+
 endmenu

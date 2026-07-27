@@ -78,10 +78,24 @@ void xh2a_ipu_group_done_handler(struct xh2a_ipu_device *ipu_dev,
 				"group %u %p not done\n", group->id, group);
 			break; /* No need to check further groups */
 		}
+
+		if (cancel_delayed_work_sync(&group->timeout_work))
+			xh2a_ipu_group_put(group);
+
 		dev_dbg(ipu_dev->miscdev.this_device, "group %u %p is done\n",
 			group->id, group);
 
 		group->load_end = ktime_to_us(ktime_get());
+
+		dev_dbg(ipu_dev->miscdev.this_device,
+			"ipu dev_group before done: %u\n",
+			atomic_read(&ipu_dev->sync_cnt));
+		if (atomic_dec_and_test(&ipu_dev->sync_cnt)) {
+			dev_dbg(ipu_dev->miscdev.this_device,
+				"ipu dev_group after done: %u\n",
+				atomic_read(&ipu_dev->sync_cnt));
+			wake_up_all(&ipu_dev->group_sync_wq);
+		}
 
 		/* record ipu load from group */
 		for (core_id = 0; core_id < group->core_num; core_id++) {
@@ -99,15 +113,20 @@ void xh2a_ipu_group_done_handler(struct xh2a_ipu_device *ipu_dev,
 		if (update_other_queues)
 			xh2a_booter_update_other_queues_rptr(ipu_dev, group);
 
-		if (!list_empty(&group->tile_list_node))
+		if (!list_empty(&group->tile_list_node)) {
 			list_del_init(&group->tile_list_node);
-
-		xh2a_group_host_param_free(ipu_dev, group);
+			xh2a_ipu_group_put(group);
+		}
 
 		old_status = atomic_xchg(&group->status, GROUP_DONE);
 		if (old_status == GROUP_CANCEL) {
-			complete(&group->launch_completion);
-			xh2a_ipu_group_destroy(group);
+			mutex_lock(&group->mutex);
+			xh2a_group_host_param_free(ipu_dev, group);
+			if (group->param_type == XH2A_GROUP_PARAM_SPM)
+				xh2a_ipu_group_free_spm(group);
+			mutex_unlock(&group->mutex);
+
+			complete(&group->sync_completion);
 			dev_dbg(ipu_dev->miscdev.this_device,
 				"group %u %p cancel done\n", group_id, group);
 			continue;
@@ -115,12 +134,14 @@ void xh2a_ipu_group_done_handler(struct xh2a_ipu_device *ipu_dev,
 
 		mutex_lock(&group->mutex);
 
+		xh2a_group_host_param_free(ipu_dev, group);
+
 		if (group->param_type == XH2A_GROUP_PARAM_SPM)
 			xh2a_ipu_group_free_spm(group);
 
 		mutex_unlock(&group->mutex);
 
-		complete(&group->launch_completion);
+		complete(&group->sync_completion);
 	}
 }
 

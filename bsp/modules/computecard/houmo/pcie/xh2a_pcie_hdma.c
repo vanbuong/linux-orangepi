@@ -191,8 +191,8 @@ static void xh2a_pcie_hdma_work_handler(struct work_struct *work)
 			xh2a_pcie_hdma_chan_handle_err(chan);
 		} else {
 			/* supperess debug outputs */
-			/* dev_dbg(hdma->dev,
-				"%s: ignore wr channel %d", __func__, i); */
+			/* dev_dbg(hdma->dev, "%s: ignore wr channel %d",
+			   __func__, i); */
 		}
 	}
 
@@ -216,8 +216,9 @@ static void xh2a_pcie_hdma_work_handler(struct work_struct *work)
 			xh2a_pcie_hdma_chan_irq_clear(chan);
 			xh2a_pcie_hdma_chan_handle_err(chan);
 		} else {
-			dev_dbg(hdma->dev, "%s: ignore rd channel %d", __func__,
-				i);
+			/* supperess debug outputs */
+			/* dev_dbg(hdma->dev, "%s: ignore rd channel %d",
+			   __func__, i); */
 		}
 	}
 }
@@ -404,7 +405,7 @@ int hdma_init(struct xh2a_pcie_hdma *hdma, void __iomem *trgt0_mem,
 	atomic_set(&hdma->pcie_dma_xfer_complete, 0);
 	atomic_set(&hdma->pcie_dma_read, 0);
 	atomic_set(&hdma->pcie_dma_write, 0);
-	hdma->reg_base = trgt0_mem + PCIE_HDMA_REGS_OFFSET;
+	hdma->reg_base = (uint8_t *)trgt0_mem + PCIE_HDMA_REGS_OFFSET;
 	hdma->num_chans = XH2A_PCIE_HDMA_NWRCHAN + XH2A_PCIE_HDMA_NRDCHAN;
 	hdma->msi = msi;
 

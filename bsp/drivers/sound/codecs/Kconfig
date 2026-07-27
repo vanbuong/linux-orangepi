@@ -6,6 +6,43 @@
 
 menu "CODEC drivers"
 
+# HDMIAUDIO
+config SND_SOC_SUNXI_CODEC_HDMI
+	tristate "Allwinner HDMIAUDIO support"
+	depends on ARCH_SUN55IW3 \
+		|| ARCH_SUN8IW11 \
+		|| ARCH_SUN8IW20  \
+		|| ARCH_SUN20IW1  \
+		|| ARCH_SUN50IW9  \
+		|| ARCH_SUN55IW7  \
+		|| ARCH_SUN65IW1 \
+		|| ARCH_SUN60IW2
+	help
+	  Select Y or M to support hdmi audio in Allwinner SoCs.
+
+# HDMI2 AUDIO
+config SND_SOC_SUNXI_CODEC_HDMI_2
+	tristate "Allwinner NEW HDMIAUDIO support"
+	depends on ARCH_SUN60IW2
+	help
+	  Select Y or M to support hdmi audio in Allwinner SoCs.
+
+# EDPAUDIO
+config SND_SOC_SUNXI_CODEC_EDP
+	tristate "Allwinner EDPAUDIO support"
+	depends on ARCH_SUN55IW3 \
+		|| ARCH_SUN65IW1
+	help
+	  Select Y or M to support edp audio in Allwinner SoCs.
+
+# AVAUDIO
+config SND_SOC_SUNXI_CODEC_AV
+	tristate "Allwinner AVAUDIO support"
+	depends on ARCH_SUN60IW2 \
+		|| ARCH_SUN65IW1
+	help
+	  Select Y or M to support av audio in Allwinner SoCs.
+
 config SND_SOC_AC101
 	tristate "Allwinner AC101 CODEC"
 	depends on I2C

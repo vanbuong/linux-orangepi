@@ -365,7 +365,6 @@ int kbase_remove_va_region(struct kbase_va_region *reg)
 	struct rb_node *rbnext;
 	struct kbase_va_region *next = NULL;
 	struct rb_root *reg_rbtree = NULL;
-	struct kbase_va_region *orig_reg = reg;
 
 	int merged_front = 0;
 	int merged_back = 0;
@@ -428,13 +427,7 @@ int kbase_remove_va_region(struct kbase_va_region *reg)
 		rb_replace_node(&(reg->rblink), &(free_reg->rblink), reg_rbtree);
 	}
 
-	/* This operation is always safe because the function never frees
-	 * the region. If the region has been merged to both front and back,
-	 * then it's the previous region that is supposed to be freed.
-	 */
-	orig_reg->start_pfn = 0;
-
-out:
+ out:
 	return err;
 }
 
@@ -1510,7 +1503,7 @@ int kbase_gpu_mmap(struct kbase_context *kctx, struct kbase_va_region *reg, u64 
 						kctx->as_nr,
 						group_id);
 				if (err)
-					goto bad_aliased_insert;
+					goto bad_insert;
 
 				/* Note: mapping count is tracked at alias
 				 * creation time
@@ -1524,7 +1517,7 @@ int kbase_gpu_mmap(struct kbase_context *kctx, struct kbase_va_region *reg, u64 
 					group_id);
 
 				if (err)
-					goto bad_aliased_insert;
+					goto bad_insert;
 			}
 		}
 	} else {
@@ -1568,23 +1561,10 @@ int kbase_gpu_mmap(struct kbase_context *kctx, struct kbase_va_region *reg, u64 
 
 	return err;
 
-bad_aliased_insert:
-	while (i-- > 0) {
-		struct tagged_addr *phys_alloc = NULL;
-		u64 const stride = alloc->imported.alias.stride;
-
-		if (alloc->imported.alias.aliased[i].alloc != NULL)
-			phys_alloc = alloc->imported.alias.aliased[i].alloc->pages +
-				     alloc->imported.alias.aliased[i].offset;
-
-		kbase_mmu_teardown_pages(kctx->kbdev, &kctx->mmu, reg->start_pfn + (i * stride),
-					 alloc->imported.alias.aliased[i].length,
-					 kctx->as_nr);
-	}
 bad_insert:
-	/*kbase_mmu_teardown_pages(kctx->kbdev, &kctx->mmu,
+	kbase_mmu_teardown_pages(kctx->kbdev, &kctx->mmu,
 				 reg->start_pfn, reg->nr_pages,
-				 kctx->as_nr);*/
+				 kctx->as_nr);
 
 	kbase_remove_va_region(reg);
 
@@ -4543,6 +4523,12 @@ KERNEL_VERSION(4, 5, 0) > LINUX_VERSION_CODE
 			alloc->imported.user_buf.nr_pages,
 			reg->flags & KBASE_REG_GPU_WR ? FOLL_WRITE : 0,
 			pages, NULL, NULL);
+#elif KERNEL_VERSION(5, 15, 0) > LINUX_VERSION_CODE
+	pinned_pages = get_user_pages_remote(mm,
+			address,
+			alloc->imported.user_buf.nr_pages,
+			reg->flags & KBASE_REG_GPU_WR ? FOLL_WRITE : 0,
+			pages, NULL);
 #else
 	pinned_pages = get_user_pages_remote(mm,
 			address,

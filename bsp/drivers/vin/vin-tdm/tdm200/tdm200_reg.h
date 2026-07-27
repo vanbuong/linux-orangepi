@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-or-later */
+/* SPDX-License-Identifier: GPL-2.0 */
 /* Copyright(c) 2020 - 2023 Allwinner Technology Co.,Ltd. All rights reserved. */
 /*
  *
@@ -20,7 +20,7 @@
 #ifndef __CSIC__TDM200__REG__H__
 #define __CSIC__TDM200__REG__H__
 
-#include <media/sunxi_camera_v2.h>
+#include <uapi/media/sunxi_camera_v2.h>
 #include <linux/types.h>
 #include <media/v4l2-mediabus.h>
 #include "tdm200_reg_i.h"
@@ -28,16 +28,26 @@
 
 #define TDM_RX_NUM   4
 
-#if IS_ENABLED(CONFIG_ARCH_SUN60IW2)
-#define MAX_TX_HEAD_FIFO_DEPTH		64
-#define MAX_TX_DATA_FIFO_DEPTH		320
-#define MAX_RX_HEAD_FIFO_DEPTH		64
-#define MAX_RX_DATA_FIFO_DEPTH		880
-#elif IS_ENABLED(CONFIG_ARCH_SUN55IW6)
+#if IS_ENABLED(CONFIG_ARCH_SUN55IW6)
 #define MAX_TX_HEAD_FIFO_DEPTH		64
 #define MAX_TX_DATA_FIFO_DEPTH		160
 #define MAX_RX_HEAD_FIFO_DEPTH		64
 #define MAX_RX_DATA_FIFO_DEPTH		448
+#elif IS_ENABLED(CONFIG_ARCH_SUN60IW2)
+#define MAX_TX_HEAD_FIFO_DEPTH		64
+#define MAX_TX_DATA_FIFO_DEPTH		320
+#define MAX_RX_HEAD_FIFO_DEPTH		64
+#define MAX_RX_DATA_FIFO_DEPTH		880
+#elif IS_ENABLED(CONFIG_ARCH_SUN300IW1)
+#define MAX_TX_HEAD_FIFO_DEPTH		64
+#define MAX_TX_DATA_FIFO_DEPTH		32
+#define MAX_RX_HEAD_FIFO_DEPTH		64
+#define MAX_RX_DATA_FIFO_DEPTH		64
+#elif IS_ENABLED(CONFIG_ARCH_SUN65IW1)
+#define MAX_TX_HEAD_FIFO_DEPTH		64
+#define MAX_TX_DATA_FIFO_DEPTH		288
+#define MAX_RX_HEAD_FIFO_DEPTH		64
+#define MAX_RX_DATA_FIFO_DEPTH		720
 #else /* CONFIG_ARCH_SUN55IW3 && CONFIG_ARCH_SUN60IW1 && CONFIG_ARCH_SUN8IW21 */
 #define MAX_TX_HEAD_FIFO_DEPTH		32
 #define MAX_TX_DATA_FIFO_DEPTH		512
@@ -61,6 +71,34 @@ enum  rx_chn_cfg_mode {
 	WDR_3F_AND_LINEAR,
 };
 
+#if IS_ENABLED(CONFIG_ARCH_SUN65IW1)
+enum tdm_int_sel {
+	RX_FRM_LOST_INT_EN = 0X1 << 0,
+	RX_FRM_ERR_INT_EN = 0X1 << 1,
+	RX_BTYPE_ERR_INT_EN = 0X1 << 2,
+	RX_BUF_FULL_INT_EN = 0X1 << 3,
+	RX_HB_SHORT_INT_EN = 0X1 << 5,
+	RX_FIFO_FULL_INT_EN = 0X1 << 6,
+	TDM_LBC_ERR_INT_EN = 0X1 << 8,
+	TDM_FIFO_UNDER_INT_EN = 0X1 << 9,
+	TX_FRM_DONE_INT_EN = 0X1 << 10,
+	RX0_FRM_START_INT_EN = 0X1 << 12,
+	RX1_FRM_START_INT_EN = 0X1 << 13,
+	RX2_FRM_START_INT_EN = 0X1 << 14,
+	RX3_FRM_START_INT_EN = 0X1 << 15,
+	RX0_FRM_DONE_INT_EN = 0X1 << 16,
+	RX1_FRM_DONE_INT_EN = 0X1 << 17,
+	RX2_FRM_DONE_INT_EN = 0X1 << 18,
+	RX3_FRM_DONE_INT_EN = 0X1 << 19,
+	RX0_N_LINE_START_INT_EN = 0X1 << 20,
+	RX1_N_LINE_START_INT_EN = 0X1 << 21,
+	RX2_N_LINE_START_INT_EN = 0X1 << 22,
+	RX3_N_LINE_START_INT_EN = 0X1 << 23,
+	RX_CHN_CFG_MODE_INT_EN = 0X1 << 24,
+	TX_CHN_CFG_MODE_INT_EN = 0X1 << 25,
+	TDM_INT_ALL = 0x3FFF76F,
+};
+#else
 enum tdm_int_sel {
 	RX_FRM_LOST_INT_EN = 0X1 << 0,
 	RX_FRM_ERR_INT_EN = 0X1 << 1,
@@ -82,6 +120,7 @@ enum tdm_int_sel {
 	RDM_LBC_FIFO_FULL_INT_EN = 0X1 << 26,
 	TDM_INT_ALL = 0X7DF036F,
 };
+#endif
 
 enum vgm_smode {
 	TRANSF_1F = 0x0,
@@ -133,6 +172,47 @@ enum tdm_work_mode {
 	TDM_OFFLINE = 1,
 };
 
+enum tdm_tx_status {
+	TX_IDLE       = 0x000,
+	TX_WAIT       = 0x001,
+	TX_ID_REF     = 0x002,
+	TX_INIT_PRE   = 0x004,
+	TX_INIT       = 0x008,
+	TX_FRM_START  = 0x010,
+	TX_FRM_RD     = 0x020,
+	TX_FEND_WAIT  = 0x040,
+	TX_FEND       = 0x080,
+	TX_VB_GEN     = 0x100,
+};
+
+#if IS_ENABLED(CONFIG_ARCH_SUN65IW1)
+struct tdm_int_status {
+	bool rx_frm_lost;
+	bool rx_frm_err;
+	bool rx_btype_err;
+	bool rx_buf_full;
+	bool rx_hb_short;
+	bool rx_fifo_full;
+	bool tdm_lbc_err;
+	bool tx_fifo_under;
+	bool tx_frm_done;
+	bool rx0_frm_start;
+	bool rx1_frm_start;
+	bool rx2_frm_start;
+	bool rx3_frm_start;
+	bool rx0_frm_done;
+	bool rx1_frm_done;
+	bool rx2_frm_done;
+	bool rx3_frm_done;
+	bool rx0_n_line_start;
+	bool rx1_n_line_start;
+	bool rx2_n_line_start;
+	bool rx3_n_line_start;
+	bool rx_chn_cfg_mode;
+	bool tx_chn_cfg_mode;
+	bool rx_comp_err;
+};
+#else
 struct tdm_int_status {
 	bool rx_frm_lost;
 	bool rx_frm_err;
@@ -154,6 +234,7 @@ struct tdm_int_status {
 	bool tdm_lbc_fifo_full;
 	bool rx_comp_err;
 };
+#endif
 
 struct tdm_tx_cfg {
 	bool en;
@@ -189,7 +270,7 @@ struct tdm_lbc_status {
 	bool lbc_qp;
 };
 
-int csic_tdm_set_base_addr(unsigned int sel, unsigned long addr);
+int csic_tdm_set_base_addr(unsigned int sel, vin_dma_addr_t addr);
 void csic_tdm_top_enable(unsigned int sel);
 void csic_tdm_top_disable(unsigned int sel);
 void csic_tdm_enable(unsigned int sel);
@@ -200,12 +281,14 @@ void csic_tdm_set_speed_dn(unsigned int sel, unsigned int en);
 void csic_tdm_fifo_max_layer_en(unsigned int sel, unsigned int en);
 void csic_tdm_set_rx_chn_cfg_mode(unsigned int sel, enum  rx_chn_cfg_mode mode);
 void csic_tdm_set_tx_chn_cfg_mode(unsigned int sel, enum  tx_chn_cfg_mode mode);
+unsigned char csic_tdm_get_tx_chn_cfg_mode(unsigned int sel);
 void csic_tdm_set_work_mode(unsigned int sel, enum tdm_work_mode mode);
 void csic_tdm_set_mod_clk_back_door(unsigned int sel, unsigned int en);
 void csic_tdm_set_line_fresh(unsigned int sel, unsigned int en);
 void csic_tdm_int_enable(unsigned int sel,	enum tdm_int_sel interrupt);
 void csic_tdm_int_disable(unsigned int sel, enum tdm_int_sel interrupt);
 void csic_tdm_int_get_status(unsigned int sel, struct tdm_int_status *status);
+bool csic_tdm_int_sel_get_status(unsigned int sel, enum tdm_int_sel interrupt);
 void csic_tdm_int_clear_status(unsigned int sel, enum tdm_int_sel interrupt);
 unsigned int csic_tdm_internal_get_status0(unsigned int sel, unsigned int status);
 void csic_tdm_internal_clear_status0(unsigned int sel, unsigned int status);
@@ -267,7 +350,8 @@ void csic_tdm_rx_data_fifo_depth(unsigned int sel, unsigned int ch, unsigned int
 void csic_tdm_rx_head_fifo_depth(unsigned int sel, unsigned int ch, unsigned int depth);
 void csic_tdm_rx_data_fifo_clear(unsigned int sel);
 void csic_tdm_rx_pkg_line_words(unsigned int sel, unsigned int ch, unsigned int words);
-void csic_tdm_rx_set_address(unsigned int sel, unsigned int ch, unsigned long address);
+void csic_tdm_set_line_int_num(unsigned int sel, unsigned int ch, unsigned int line_num);
+void csic_tdm_rx_set_address(unsigned int sel, unsigned int ch, vin_dma_addr_t address);
 void csic_tdm_rx_get_size(unsigned int sel, unsigned int ch, unsigned int *width, unsigned int *heigth);
 void csic_tdm_rx_get_hblank(unsigned int sel, unsigned int ch, unsigned int *hb_min, unsigned int *hb_max);
 void csic_tdm_rx_get_layer(unsigned int sel, unsigned int ch, unsigned int *head_fifo, unsigned int *fifo);
@@ -275,4 +359,5 @@ unsigned int csic_tdm_rx_get_proc_num(unsigned int sel, unsigned int ch);
 unsigned int csic_tdm_rx_get_ctrl_st(unsigned int sel, unsigned int ch);
 void csic_tdm_lbc_cfg(unsigned int sel, unsigned int ch, struct tdm_rx_lbc *lbc);
 void csic_tdm_get_lbc_st(unsigned int sel, unsigned int ch, struct tdm_lbc_status *status);
+
 #endif /* __CSIC__TDM200__REG__H__ */

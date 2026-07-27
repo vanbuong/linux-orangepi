@@ -285,7 +285,9 @@ void aicwf_rx_deinit(struct aicwf_rx_priv *rx_priv)
 {
 	if (!IS_ERR_OR_NULL(rx_priv->aicdev->bus_if->busrx_thread)) {
 		complete_all(&rx_priv->aicdev->bus_if->busrx_trgg);
-		kthread_stop(rx_priv->aicdev->bus_if->busrx_thread);
+		if (!IS_ERR_OR_NULL(rx_priv->aicdev->bus_if->busrx_thread)) {
+			kthread_stop(rx_priv->aicdev->bus_if->busrx_thread);
+		}
 		rx_priv->aicdev->bus_if->busrx_thread = NULL;
 	}
 

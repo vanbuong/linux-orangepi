@@ -67,6 +67,10 @@ int mipi_lane_spec[VIN_MAX_MIPI][2] = {
 int mipi_lane_spec[VIN_MAX_MIPI][2] = {
 	{4, 4}, {4, 4}, {2, 2},
 };
+#elif IS_ENABLED(CONFIG_ARCH_SUN65IW1)
+int mipi_lane_spec[VIN_MAX_MIPI][2] = {
+	{4, 4}, {2, 4}, {2, 2},
+};
 #else
 int mipi_lane_spec[VIN_MAX_MIPI][2] = {
 };
@@ -570,7 +574,7 @@ void combo_rx_init(struct v4l2_subdev *sd)
 
 	cmb_rx_enable(mipi->id);
 }
-#elif defined MIPI_PING_CONFIG
+#elif defined MIPI_COMBO_CSI
 void cmb_phy_init(struct mipi_dev *mipi)
 {
 	cmb_phy_lane_num_en(mipi->id + mipi->phy_offset, mipi->cmb_csi_cfg.phy_lane_cfg);
@@ -611,6 +615,8 @@ static void combo_csi_link_mode_set(struct v4l2_subdev *sd)
 	} else {
 		vin_err("phy link mode set error, mipi sel set error!\n");
 	}
+#elif IS_ENABLED(CONFIG_ARCH_SUN65IW1)
+	cmb_phy_link_mode_set(TWO_4LANE);
 #elif IS_ENABLED(CONFIG_ARCH_SUN300IW1)
 	cmb_phy_link_mode_set(ONE_2LANE);
 #endif
@@ -673,6 +679,23 @@ static void combo_csi_mipi_init(struct v4l2_subdev *sd)
 	cmb_port_enable(mipi->id);
 }
 
+static int combo_top_s_stream(struct v4l2_subdev *sd, int on)
+{
+	struct vin_md *vind = dev_get_drvdata(sd->v4l2_dev->dev);
+
+	if (on && (vind->mipi_top_stream_count)++ > 0)
+		return 0;
+	else if (!on && (vind->mipi_top_stream_count == 0 || --(vind->mipi_top_stream_count) > 0))
+		return 0;
+
+	if (on)
+		cmb_phy_top_enable();
+	else
+		cmb_phy_top_disable();
+
+	return 0;
+}
+
 void combo_csi_init(struct v4l2_subdev *sd)
 {
 	struct mipi_dev *mipi = v4l2_get_subdevdata(sd);
@@ -702,6 +725,24 @@ void combo_csi_init(struct v4l2_subdev *sd)
 }
 #endif
 
+static int sunxi_mipi_cal_time_hs(struct mipi_dev *mipi)
+{
+#if defined MIPI_COMBO_CSI
+	unsigned int csi_clk;
+	unsigned int phy_freq_cnt;
+	unsigned int phy_s2p_dly;
+	struct vin_md *vind = dev_get_drvdata(mipi->subdev.v4l2_dev->dev);
+
+	csi_clk = clk_get_rate(vind->clk[VIN_TOP_CLK].clock) / 1000000;
+	phy_freq_cnt = cmb_phy_freq_cnt_get(mipi->id);
+	phy_s2p_dly = 145 * csi_clk / 1000 + phy_freq_cnt / 800 - 10;
+
+	return phy_s2p_dly;
+#else
+	return 0x30;
+#endif
+}
+
 static int sunxi_mipi_subdev_s_stream(struct v4l2_subdev *sd, int enable)
 {
 	struct mipi_dev *mipi = v4l2_get_subdevdata(sd);
@@ -728,13 +769,8 @@ static int sunxi_mipi_subdev_s_stream(struct v4l2_subdev *sd, int enable)
 		mipi->time_hs = mipi->settle_time;
 	} else if (res->res_time_hs)
 		mipi->time_hs = res->res_time_hs;
-	else {
-#if IS_ENABLED(CONFIG_ARCH_SUN8IW16P1)
-		mipi->time_hs = 0x30;
-#else
-		mipi->time_hs = 0x28;
-#endif
-	}
+	else
+		mipi->time_hs = sunxi_mipi_cal_time_hs(mipi);
 	if (res->res_deskew)
 		mipi->deskew = res->res_deskew;
 
@@ -745,7 +781,8 @@ static int sunxi_mipi_subdev_s_stream(struct v4l2_subdev *sd, int enable)
 	if (enable) {
 #if IS_ENABLED(CONFIG_ARCH_SUN8IW16P1)
 		combo_rx_init(sd);
-#elif IS_ENABLED(CONFIG_ARCH_SUN50IW10) || IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN60IW1) || IS_ENABLED(CONFIG_ARCH_SUN60IW2)
+#elif defined MIPI_COMBO_CSI
+		combo_top_s_stream(sd, enable);
 		combo_csi_init(sd);
 #else
 		bsp_mipi_csi_dphy_init(mipi->id);
@@ -768,6 +805,7 @@ static int sunxi_mipi_subdev_s_stream(struct v4l2_subdev *sd, int enable)
 		cmb_port_disable(mipi->id);
 		cmb_phy0_en(mipi->id, 0);
 		cmb_phy0_freq_en(mipi->id, 0);
+		combo_top_s_stream(sd, enable);
 #else
 		bsp_mipi_csi_dphy_disable(mipi->id, mipi->sensor_flags);
 		bsp_mipi_csi_protocol_disable(mipi->id);
@@ -1372,7 +1410,7 @@ static int mipi_tvin_init(struct v4l2_subdev *sd,
 #endif
 		mipi_get_ch_field(mipi, ch, &ch_field);
 		vin_log(VIN_LOG_MIPI, "mipi%d get field is %d!\r\n", mipi->id, ch_field);
-#if defined  MIPI_COMBO_CSI
+#if defined MIPI_COMBO_CSI
 		cmb_port_mipi_set_ch_field(mipi->id, ch, ch_field);
 #endif
 	}
@@ -1477,7 +1515,7 @@ static int mipi_probe(struct platform_device *pdev)
 
 #if IS_ENABLED(CONFIG_ARCH_SUN8IW16P1)
 	cmb_rx_set_base_addr(mipi->id, (unsigned long)mipi->base);
-#elif IS_ENABLED(CONFIG_ARCH_SUN50IW10) || IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN60IW1) || IS_ENABLED(CONFIG_ARCH_SUN60IW2)
+#elif defined MIPI_COMBO_CSI
 	cmb_csi_set_phy_base_addr(mipi->id, (unsigned long)mipi->base);
 	mipi->port_base = of_iomap(np, 1);
 	if (!mipi->port_base) {
@@ -1523,7 +1561,7 @@ static int mipi_remove(struct platform_device *pdev)
 	device_remove_file(&pdev->dev, &dev_attr_settle_time);
 	platform_set_drvdata(pdev, NULL);
 	v4l2_set_subdevdata(sd, NULL);
-#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN60IW2)
+#if defined MIPI_PING_CONFIG
 	__mcsi_pin_release(mipi);
 #endif
 	if (mipi->port_base)

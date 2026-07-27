@@ -35,6 +35,19 @@
 #endif
 #include <linux/dma-mapping.h>
 
+/* Linux 6.6 compatibility macros */
+#if (KERNEL_VERSION(6, 6, 0) <= LINUX_VERSION_CODE)
+/* In Linux 6.6+, struct dma_buf no longer has a public 'lock' member.
+ * We use a local mutex for our internal synchronization.
+ */
+static DEFINE_MUTEX(dma_te_lock);
+#define DMA_TE_LOCK(dmabuf) mutex_lock(&dma_te_lock)
+#define DMA_TE_UNLOCK(dmabuf) mutex_unlock(&dma_te_lock)
+#else
+#define DMA_TE_LOCK(dmabuf) mutex_lock(&(dmabuf)->lock)
+#define DMA_TE_UNLOCK(dmabuf) mutex_unlock(&(dmabuf)->lock)
+#endif
+
 /* Maximum size allowed in a single DMA_BUF_TE_ALLOC call */
 #define DMA_BUF_TE_ALLOC_MAX_SIZE ((8ull << 30) >> PAGE_SHIFT) /* 8 GB */
 
@@ -138,14 +151,14 @@ static struct sg_table *dma_buf_te_map(struct dma_buf_attachment *attachment, en
 		return ERR_PTR(-ENOMEM);
 
 	/* from here we access the allocation object, so lock the dmabuf pointing to it */
-	mutex_lock(&attachment->dmabuf->lock);
+	DMA_TE_LOCK(attachment->dmabuf);
 
 	if (alloc->contiguous)
 		ret = sg_alloc_table(sg, 1, GFP_KERNEL);
 	else
 		ret = sg_alloc_table(sg, alloc->nr_pages, GFP_KERNEL);
 	if (ret) {
-		mutex_unlock(&attachment->dmabuf->lock);
+		DMA_TE_UNLOCK(attachment->dmabuf);
 		kfree(sg);
 		return ERR_PTR(ret);
 	}
@@ -160,7 +173,7 @@ static struct sg_table *dma_buf_te_map(struct dma_buf_attachment *attachment, en
 	}
 
 	if (!dma_map_sg(attachment->dev, sg->sgl, sg->nents, direction)) {
-		mutex_unlock(&attachment->dmabuf->lock);
+		DMA_TE_UNLOCK(attachment->dmabuf);
 		sg_free_table(sg);
 		kfree(sg);
 		return ERR_PTR(-ENOMEM);
@@ -169,7 +182,7 @@ static struct sg_table *dma_buf_te_map(struct dma_buf_attachment *attachment, en
 	alloc->nr_device_mappings++;
 	pa->attachment_mapped = true;
 	pa->sg = sg;
-	mutex_unlock(&attachment->dmabuf->lock);
+	DMA_TE_UNLOCK(attachment->dmabuf);
 	return sg;
 }
 
@@ -181,14 +194,14 @@ static void dma_buf_te_unmap(struct dma_buf_attachment *attachment,
 
 	alloc = attachment->dmabuf->priv;
 
-	mutex_lock(&attachment->dmabuf->lock);
+	DMA_TE_LOCK(attachment->dmabuf);
 
 	WARN(!pa->attachment_mapped, "WARNING: Unmatched unmap of attachment.");
 
 	alloc->nr_device_mappings--;
 	pa->attachment_mapped = false;
 	pa->sg = NULL;
-	mutex_unlock(&attachment->dmabuf->lock);
+	DMA_TE_UNLOCK(attachment->dmabuf);
 
 	dma_unmap_sg(attachment->dev, sg->sgl, sg->nents, direction);
 	sg_free_table(sg);
@@ -235,7 +248,7 @@ static int dma_buf_te_sync(struct dma_buf *dmabuf,
 {
 	struct dma_buf_attachment *attachment;
 
-	mutex_lock(&dmabuf->lock);
+	DMA_TE_LOCK(dmabuf);
 
 	list_for_each_entry(attachment, &dmabuf->attachments, node) {
 		struct dma_buf_te_attachment *pa = attachment->priv;
@@ -256,7 +269,7 @@ static int dma_buf_te_sync(struct dma_buf *dmabuf,
 		}
 	}
 
-	mutex_unlock(&dmabuf->lock);
+	DMA_TE_UNLOCK(dmabuf);
 	return 0;
 }
 
@@ -294,9 +307,9 @@ static void dma_buf_te_mmap_open(struct vm_area_struct *vma)
 	dma_buf = vma->vm_private_data;
 	alloc = dma_buf->priv;
 
-	mutex_lock(&dma_buf->lock);
+	DMA_TE_LOCK(dma_buf);
 	alloc->nr_cpu_mappings++;
-	mutex_unlock(&dma_buf->lock);
+	DMA_TE_UNLOCK(dma_buf);
 }
 
 static void dma_buf_te_mmap_close(struct vm_area_struct *vma)
@@ -307,9 +320,9 @@ static void dma_buf_te_mmap_close(struct vm_area_struct *vma)
 	alloc = dma_buf->priv;
 
 	BUG_ON(alloc->nr_cpu_mappings <= 0);
-	mutex_lock(&dma_buf->lock);
+	DMA_TE_LOCK(dma_buf);
 	alloc->nr_cpu_mappings--;
-	mutex_unlock(&dma_buf->lock);
+	DMA_TE_UNLOCK(dma_buf);
 }
 
 #if KERNEL_VERSION(4, 11, 0) > LINUX_VERSION_CODE
@@ -358,7 +371,11 @@ static int dma_buf_te_mmap(struct dma_buf *dmabuf, struct vm_area_struct *vma)
 	if (alloc->fail_mmap)
 		return -ENOMEM;
 
+#if (KERNEL_VERSION(6, 6, 0) <= LINUX_VERSION_CODE)
+	vm_flags_set(vma, VM_IO | VM_DONTEXPAND | VM_DONTDUMP);
+#else
 	vma->vm_flags |= VM_IO | VM_DONTEXPAND | VM_DONTDUMP;
+#endif
 	vma->vm_ops = &dma_buf_te_vm_ops;
 	vma->vm_private_data = dmabuf;
 
@@ -634,11 +651,11 @@ static int do_dma_buf_te_ioctl_status(struct dma_buf_te_ioctl_status __user *arg
 	alloc = dmabuf->priv;
 
 	/* lock while reading status to take a snapshot */
-	mutex_lock(&dmabuf->lock);
+	DMA_TE_LOCK(dmabuf);
 	status.attached_devices = alloc->nr_attached_devices;
 	status.device_mappings = alloc->nr_device_mappings;
 	status.cpu_mappings = alloc->nr_cpu_mappings;
-	mutex_unlock(&dmabuf->lock);
+	DMA_TE_UNLOCK(dmabuf);
 
 	if (copy_to_user(arg, &status, sizeof(status)))
 		goto err_have_dmabuf;
@@ -671,12 +688,13 @@ static int do_dma_buf_te_ioctl_set_failing(struct dma_buf_te_ioctl_set_failing _
 
 	/* ours, set the fail modes */
 	alloc = dmabuf->priv;
+
 	/* lock to set the fail modes atomically */
-	mutex_lock(&dmabuf->lock);
+	DMA_TE_LOCK(dmabuf);
 	alloc->fail_attach = f.fail_attach;
 	alloc->fail_map    = f.fail_map;
 	alloc->fail_mmap   = f.fail_mmap;
-	mutex_unlock(&dmabuf->lock);
+	DMA_TE_UNLOCK(dmabuf);
 
 	/* success */
 	res = 0;
@@ -822,3 +840,6 @@ static void __exit dma_buf_te_exit(void)
 module_init(dma_buf_te_init);
 module_exit(dma_buf_te_exit);
 MODULE_LICENSE("GPL");
+#if (KERNEL_VERSION(6, 6, 0) <= LINUX_VERSION_CODE)
+MODULE_IMPORT_NS(DMA_BUF);
+#endif

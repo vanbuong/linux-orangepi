@@ -19,6 +19,7 @@
 #include <linux/pm_runtime.h>
 #include <xh2a_host_drv.h>
 #include <xh2a_pcie_api.h>
+#include "xh2a_ipu_device.h"
 #include "xh2a_sys.h"
 
 #define ADDRESS_2GB		 0x80000000ULL
@@ -245,6 +246,14 @@ static int xh2a_sys_ioctl_fullchip_reset(struct xh2a_sys_dev *sys_dev,
 		return -EINVAL;
 	}
 
+	ret = xh2a_ipu_prepare_fullchip_reset(sys_dev->private_data);
+	if (ret != 0) {
+		dev_err(sys_dev->miscdev.this_device,
+			"%s: prepare ipu fullchip reset failed %d\n",
+			__func__, ret);
+		return ret;
+	}
+
 	xh2a_pcie_stop_runtime_pm(sys_dev->private_data);
 
 	ret = xh2a_pcie_write_bar_msgbit(sys_dev->private_data,
@@ -252,6 +261,7 @@ static int xh2a_sys_ioctl_fullchip_reset(struct xh2a_sys_dev *sys_dev,
 					 XH2A_PCIE_MSG_TO_E2);
 
 	if (ret != 0) {
+		xh2a_ipu_abort_fullchip_reset(sys_dev->private_data);
 		pr_err("%s: write msgbit fail\n", __func__);
 		return ret;
 	}
@@ -392,7 +402,7 @@ static ssize_t xh2a_sys_device_addr_show(struct device *dev,
 	struct miscdevice *miscdev = dev_get_drvdata(dev);
 	struct xh2a_sys_dev *sys_dev =
 		container_of(miscdev, struct xh2a_sys_dev, miscdev);
-	return sprintf(buf, "0x%llx\n", sys_dev->device_addr);
+	return sprintf(buf, "0x%llx\n", (unsigned long long)sys_dev->device_addr);
 }
 
 static ssize_t xh2a_sys_device_addr_store(struct device *dev,

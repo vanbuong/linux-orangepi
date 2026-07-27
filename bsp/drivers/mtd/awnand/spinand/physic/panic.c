@@ -12,7 +12,7 @@
 
 #include "physic.h"
 
-#if IS_ENABLED(CONFIG_SPI_SUNXI_ATOMIC_XFER)
+#if IS_ENABLED(CONFIG_AW_SPI_NG_ATOMIC_XFER)
 extern int sunxi_spi_sync_atomic(struct spi_device *spi, struct spi_message *message);
 
 int aw_spi_sync_atomic(struct spi_device *spi, struct spi_message *message)
@@ -34,10 +34,10 @@ aw_spi_sync_transfer_atomic(struct spi_device *spi, struct spi_transfer *xfers,
 
 	spi_message_init_with_transfers(&msg, xfers, num_xfers);
 
-#if IS_ENABLED(CONFIG_SPI_SUNXI_ATOMIC_XFER)
+#if IS_ENABLED(CONFIG_AW_SPI_NG_ATOMIC_XFER)
 	return sunxi_spi_sync_atomic(spi, &msg);
 #else
-	sunxi_warn(NULL, "CONFIG_SPI_SUNXI_ATOMIC_XFER is disabled, can't guarantee write success\n");
+	sunxi_warn(NULL, "CONFIG_AW_SPI_NG_ATOMIC_XFER is disabled, can't guarantee write success\n");
 	return spi_sync(spi, &msg);
 #endif
 }
@@ -50,10 +50,10 @@ aw_spi_write_atomic(struct spi_device *spi, const void *buf, size_t len)
 			.len		= len,
 		};
 
-#if IS_ENABLED(CONFIG_SPI_SUNXI_ATOMIC_XFER)
+#if IS_ENABLED(CONFIG_AW_SPI_NG_ATOMIC_XFER)
 	return aw_spi_sync_transfer_atomic(spi, &t, 1);
 #else
-	sunxi_warn(NULL, "CONFIG_SPI_SUNXI_ATOMIC_XFER is disabled, can't guarantee write success\n");
+	sunxi_warn(NULL, "CONFIG_AW_SPI_NG_ATOMIC_XFER is disabled, can't guarantee write success\n");
 	return spi_sync_transfer(spi, &t, 1);
 #endif
 }
@@ -98,10 +98,10 @@ int aw_spi_write_then_read_atomic(struct spi_device *spi,
 	x[1].rx_buf = local_buf + n_tx;
 
 	/* do the i/o */
-#if IS_ENABLED(CONFIG_SPI_SUNXI_ATOMIC_XFER)
+#if IS_ENABLED(CONFIG_AW_SPI_NG_ATOMIC_XFER)
 	status = sunxi_spi_sync_atomic(spi, &message);
 #else
-	sunxi_warn(NULL, "CONFIG_SPI_SUNXI_ATOMIC_XFER is disabled, can't guarantee write success\n");
+	sunxi_warn(NULL, "CONFIG_AW_SPI_NG_ATOMIC_XFER is disabled, can't guarantee write success\n");
 	status = spi_sync(spi, &message);
 #endif
 	if (status == 0)

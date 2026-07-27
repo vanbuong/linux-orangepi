@@ -26,7 +26,14 @@ ccu-sunxi-ng-y					+= ccu_mp.o
 
 obj-$(CONFIG_AW_CCU)				+= ccu-sunxi-ng.o
 obj-$(CONFIG_AW_RTC_CCU)			+= ccu-sunxi-rtc.o
+
+ifneq ($(strip $(CONFIG_ARCH_SUN65IW1)),)
+obj-$(CONFIG_AW_DDR_CCU)			+= ccu-ddr-v2.o
+else ifneq ($(strip $(CONFIG_ARCH_SUN8IW22)),)
+obj-$(CONFIG_AW_DDR_CCU)			+= ccu-ddr-v2.o
+else
 obj-$(CONFIG_AW_DDR_CCU)			+= ccu-ddr.o
+endif
 
 # SoC support
 obj-$(CONFIG_AW_SUN8IW11_CCU)		+= ccu-sun8iw11.o

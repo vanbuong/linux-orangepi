@@ -7,15 +7,18 @@
 #include <linux/netdevice.h>
 #include <linux/inetdevice.h>
 #include <linux/rtnetlink.h>
+#include <linux/types.h>
+#include <linux/module.h>
 #include <net/netlink.h>
 #include "rwnx_version_gen.h"
 #include "rwnx_msg_tx.h"
+#include "aicwf_nan.h"
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(3, 14, 0)
 
 #ifdef CONFIG_APF
 #define AIC_APF_MEM_SIZE      4096
-#define AIC_APF_VERSION       6000
+#define AIC_APF_VERSION       6100
 
 static char apfProgram[AIC_APF_MEM_SIZE];
 #endif
@@ -381,6 +384,12 @@ static int aicwf_vendor_subcmd_get_feature_set(struct wiphy *wiphy, struct wirel
 	/*bit 5:soft AP feature supported*/
 	if (wiphy->interface_modes & BIT(NL80211_IFTYPE_AP))
 		feature |= WIFI_FEATURE_SOFT_AP;
+
+#ifdef CONFIG_AIC_NAN
+	/*bit 7:NAN*/
+	if (wiphy->interface_modes & BIT(NL80211_IFTYPE_NAN))
+		feature |= WIFI_FEATURE_NAN;
+#endif
 
 	/*bit 18:WiFi Logger*/
 	feature |= WIFI_FEATURE_LOGGER;
@@ -772,6 +781,163 @@ static int aicwf_vendor_logger_start_pkt_fate_monitoring(struct wiphy *wiphy,
 	return -3;  // WIFI_ERROR_NOT_SUPPORTED
 }
 
+#ifdef CONFIG_AIC_NAN
+static int aicwf_vendor_nan_wifi_subcmd_enable(struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void  *data, int len)
+{
+	int ret = -ENOTSUPP;
+	printk("%s, enter\n", __func__);
+
+	return ret;
+}
+
+static int aicwf_vendor_nan_wifi_subcmd_disable(struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void  *data, int len)
+{
+	int ret = -ENOTSUPP;
+	printk("%s, enter\n", __func__);
+
+	return ret;
+}
+
+static int aicwf_vendor_nan_wifi_subcmd_data_path_iface_delete(struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void  *data, int len)
+{
+	int ret = -ENOTSUPP;
+	printk("%s, enter\n", __func__);
+
+	return ret;
+}
+
+static int aicwf_vendor_nan_wifi_subcmd_get_capabilities(struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void  *data, int len)
+{
+	int ret = 0;
+	int payload = 0;
+	nan_hal_resp_t nan_req_resp;
+	struct sk_buff *reply;
+	nan_hal_capabilities_t *capabilities = &nan_req_resp.capabilities;
+
+	printk("%s, enter\n", __func__);
+
+	payload = sizeof(nan_hal_resp_t);
+	reply = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, payload);
+
+	if (!reply)
+		return -ENOMEM;
+
+	nan_req_resp.subcmd = NAN_WIFI_SUBCMD_GET_CAPABILITIES;
+	capabilities->max_concurrent_nan_clusters = MAX_CONCURRENT_NAN_CLUSTERS;
+	capabilities->max_publishes = MAX_PUBLISHES;
+	capabilities->max_subscribes = MAX_SUBSCRIBES;
+	capabilities->max_service_name_len = MAX_SVC_NAME_LEN;
+	capabilities->max_match_filter_len = MAX_MATCH_FILTER_LEN;
+	capabilities->max_total_match_filter_len = MAX_TOTAL_MATCH_FILTER_LEN;
+	capabilities->max_service_specific_info_len = NAN_MAX_SERVICE_SPECIFIC_INFO_LEN;
+	capabilities->max_ndi_interfaces = NAN_MAX_NDI;
+	capabilities->max_ndp_sessions = MAX_NDP_SESSIONS;
+	capabilities->max_app_info_len = MAX_APP_INFO_LEN;
+	capabilities->max_queued_transmit_followup_msgs = MAX_QUEUED_TX_FOLLOUP_MSGS;
+	capabilities->max_sdea_service_specific_info_len = MAX_SDEA_SVC_INFO_LEN;
+	capabilities->max_subscribe_address = MAX_SUBSCRIBE_ADDRESS;
+	capabilities->max_scid_len = NAN_MAX_SCID_BUF_LEN;
+	capabilities->is_ndp_security_supported = true;
+	capabilities->ndp_supported_bands = NDP_SUPPORTED_BANDS;
+	capabilities->ndpe_attr_supported = false;
+	capabilities->cipher_suites_supported = -1;
+	nan_req_resp.status = 0;
+
+	if (nla_put_nohdr(reply, payload, &nan_req_resp)) {
+		wiphy_err(wiphy, "%s put version error\n", __func__);
+		return -1;
+	}
+
+	ret = cfg80211_vendor_cmd_reply(reply);
+	if (ret)
+		wiphy_err(wiphy, "%s reply cmd error\n", __func__);
+
+	printk("%s, exit\n", __func__);
+
+	return ret;
+}
+
+#define NAN_VERSION_INFO 0x2
+static int aicwf_vendor_nan_wifi_subcmd_version_info(struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void  *data, int len)
+{
+	int ret = 0;
+	int payload = 0;
+	u32 version = NAN_VERSION_INFO;
+	struct sk_buff *reply;
+
+	printk("%s, enter\n", __func__);
+
+	payload = sizeof(u32);
+	reply = cfg80211_vendor_cmd_alloc_reply_skb(wiphy, payload);
+
+	if (!reply)
+		return -ENOMEM;
+
+	if (nla_put_nohdr(reply, payload, &version)) {
+		wiphy_err(wiphy, "%s put version error\n", __func__);
+		return -1;
+	}
+
+	ret = cfg80211_vendor_cmd_reply(reply);
+	if (ret)
+		wiphy_err(wiphy, "%s reply cmd error\n", __func__);
+
+	printk("%s, exit\n", __func__);
+
+	return ret;
+}
+
+static int aicwf_vendor_nan_wifi_subcmd_config(struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void  *data, int len)
+{
+	int ret = -ENOTSUPP;
+	printk("%s, enter\n", __func__);
+
+	return ret;
+}
+
+static int aicwf_vendor_nan_wifi_subcmd_req_publish(struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void  *data, int len)
+{
+	int ret = -ENOTSUPP;
+	printk("%s, enter\n", __func__);
+
+	return ret;
+}
+
+static int aicwf_vendor_nan_wifi_subcmd_req_subscribe(struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void  *data, int len)
+{
+	int ret = -ENOTSUPP;
+	printk("%s, enter\n", __func__);
+
+	return ret;
+}
+
+static int aicwf_vendor_nan_wifi_subcmd_cancel_publish(struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void  *data, int len)
+{
+	int ret = -ENOTSUPP;
+	printk("%s, enter\n", __func__);
+
+	return ret;
+}
+
+static int aicwf_vendor_nan_wifi_subcmd_cancel_subscribe(struct wiphy *wiphy,
+	struct wireless_dev *wdev, const void  *data, int len)
+{
+	int ret = -ENOTSUPP;
+	printk("%s, enter\n", __func__);
+
+	return ret;
+}
+#endif /* CONFIG_AIC_NAN */
+
 static const struct nla_policy
 aicwf_cfg80211_mkeep_alive_policy[MKEEP_ALIVE_ATTRIBUTE_MAX+1] = {
 	[0] = {.type = NLA_UNSPEC },
@@ -826,6 +992,123 @@ aicwf_cfg80211_subcmd_set_mac_policy[WIFI_VENDOR_ATTR_DRIVER_MAX + 1] = {
 	[0] = {.type = NLA_UNSPEC },
 	[WIFI_VENDOR_ATTR_DRIVER_MAC_ADDR] = { .type = NLA_MSECS, .len  = ETH_ALEN },
 };
+
+#ifdef CONFIG_AIC_NAN
+static const struct nla_policy
+aicwf_cfg80211_nan_attr_policy[NAN_ATTRIBUTE_MAX] = {
+	[NAN_ATTRIBUTE_2G_SUPPORT] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_5G_SUPPORT] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_CLUSTER_LOW] = { .type = NLA_U16, .len = sizeof(uint16_t) },
+	[NAN_ATTRIBUTE_CLUSTER_HIGH] = { .type = NLA_U16, .len = sizeof(uint16_t) },
+	[NAN_ATTRIBUTE_SID_BEACON] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_SUB_SID_BEACON] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_SYNC_DISC_2G_BEACON] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_SYNC_DISC_5G_BEACON] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_SDF_2G_SUPPORT] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_SDF_5G_SUPPORT] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_HOP_COUNT_LIMIT] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_RANDOM_TIME] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_MASTER_PREF] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_OUI] = { .type = NLA_U32, .len = sizeof(uint32_t) },
+	[NAN_ATTRIBUTE_WARMUP_TIME] = { .type = NLA_U16, .len = sizeof(uint16_t) },
+	[NAN_ATTRIBUTE_CHANNEL] = { .type = NLA_U32, .len = sizeof(uint32_t) },
+	[NAN_ATTRIBUTE_24G_CHANNEL] = { .type = NLA_U32, .len = sizeof(uint32_t) },
+	[NAN_ATTRIBUTE_5G_CHANNEL] = { .type = NLA_U32, .len = sizeof(uint32_t) },
+	[NAN_ATTRIBUTE_CONF_CLUSTER_VAL] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_DWELL_TIME] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_SCAN_PERIOD] = { .type = NLA_U16, .len = sizeof(uint16_t) },
+	[NAN_ATTRIBUTE_DWELL_TIME_5G] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_SCAN_PERIOD_5G] = { .type = NLA_U16, .len = sizeof(uint16_t) },
+	[NAN_ATTRIBUTE_AVAIL_BIT_MAP] = { .type = NLA_U32, .len = sizeof(uint32_t) },
+	[NAN_ATTRIBUTE_ENTRY_CONTROL] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_RSSI_CLOSE] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_RSSI_MIDDLE] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_RSSI_PROXIMITY] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_RSSI_CLOSE_5G] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_RSSI_MIDDLE_5G] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_RSSI_PROXIMITY_5G] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_RSSI_WINDOW_SIZE] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_CIPHER_SUITE_TYPE] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_SCID_LEN] = { .type = NLA_U32, .len = sizeof(uint32_t) },
+	[NAN_ATTRIBUTE_SCID] = { .type = NLA_BINARY, .len = NAN_MAX_SCID_BUF_LEN },
+	[NAN_ATTRIBUTE_2G_AWAKE_DW] = { .type = NLA_U32, .len = sizeof(uint32_t) },
+	[NAN_ATTRIBUTE_5G_AWAKE_DW] = { .type = NLA_U32, .len = sizeof(uint32_t) },
+	[NAN_ATTRIBUTE_DISC_IND_CFG] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_MAC_ADDR] = { .type = NLA_BINARY, .len = ETHER_ADDR_LEN },
+	[NAN_ATTRIBUTE_RANDOMIZATION_INTERVAL] = { .type = NLA_U32, .len = sizeof(uint32_t) },
+	[NAN_ATTRIBUTE_CMD_USE_NDPE] = { .type = NLA_U32, .len = sizeof(uint32_t) },
+	[NAN_ATTRIBUTE_ENABLE_MERGE] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_DISCOVERY_BEACON_INTERVAL] = { .type = NLA_U32, .len = sizeof(uint32_t) },
+	[NAN_ATTRIBUTE_NSS] = { .type = NLA_U32, .len = sizeof(uint32_t) },
+	[NAN_ATTRIBUTE_ENABLE_RANGING] = { .type = NLA_U32, .len = sizeof(uint32_t) },
+	[NAN_ATTRIBUTE_DW_EARLY_TERM] = { .type = NLA_U32, .len = sizeof(uint32_t) },
+	[NAN_ATTRIBUTE_TRANSAC_ID] = { .type = NLA_U16, .len = sizeof(uint16_t) },
+	[NAN_ATTRIBUTE_PUBLISH_ID] = { .type = NLA_U32, .len = sizeof(uint32_t) },
+	[NAN_ATTRIBUTE_SERVICE_SPECIFIC_INFO_LEN] = { .type = NLA_U16, .len = sizeof(uint16_t) },
+	[NAN_ATTRIBUTE_SERVICE_SPECIFIC_INFO] = { .type = NLA_BINARY, .len =
+	NAN_MAX_SERVICE_SPECIFIC_INFO_LEN },
+	[NAN_ATTRIBUTE_SUBSCRIBE_ID] = { .type = NLA_U16, .len = sizeof(uint16_t) },
+	[NAN_ATTRIBUTE_SUBSCRIBE_TYPE] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_PUBLISH_COUNT] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_PUBLISH_TYPE] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_PERIOD] = { .type = NLA_U16, .len = sizeof(uint16_t) },
+	[NAN_ATTRIBUTE_TTL] = { .type = NLA_U16, .len = sizeof(uint16_t) },
+	[NAN_ATTRIBUTE_SERVICE_NAME_LEN] = { .type = NLA_U16, .len = sizeof(uint16_t) },
+	[NAN_ATTRIBUTE_SERVICE_NAME] = { .type = NLA_BINARY, .len = WL_NAN_SVC_HASH_LEN },
+	[NAN_ATTRIBUTE_PEER_ID] = { .type = NLA_U32, .len = sizeof(uint32_t) },
+	[NAN_ATTRIBUTE_INST_ID] = { .type = NLA_U16, .len = sizeof(uint16_t) },
+	[NAN_ATTRIBUTE_SUBSCRIBE_COUNT] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_SSIREQUIREDFORMATCHINDICATION] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_SUBSCRIBE_MATCH] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_PUBLISH_MATCH] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_SERVICERESPONSEFILTER] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_SERVICERESPONSEINCLUDE] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_USESERVICERESPONSEFILTER] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_RX_MATCH_FILTER_LEN] = { .type = NLA_U16, .len = sizeof(uint16_t) },
+	[NAN_ATTRIBUTE_RX_MATCH_FILTER] = { .type = NLA_BINARY, .len = MAX_MATCH_FILTER_LEN },
+	[NAN_ATTRIBUTE_TX_MATCH_FILTER_LEN] = { .type = NLA_U16, .len = sizeof(uint16_t) },
+	[NAN_ATTRIBUTE_TX_MATCH_FILTER] = { .type = NLA_BINARY, .len = MAX_MATCH_FILTER_LEN },
+	[NAN_ATTRIBUTE_MAC_ADDR_LIST_NUM_ENTRIES] = { .type = NLA_U16, .len = sizeof(uint16_t) },
+	[NAN_ATTRIBUTE_MAC_ADDR_LIST] = { .type = NLA_BINARY, .len =
+	(NAN_SRF_MAX_MAC*ETHER_ADDR_LEN) },
+	[NAN_ATTRIBUTE_TX_TYPE] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_SDE_CONTROL_CONFIG_DP] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_SDE_CONTROL_RANGE_SUPPORT] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_SDE_CONTROL_DP_TYPE] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_SDE_CONTROL_SECURITY] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_RECV_IND_CFG] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_KEY_TYPE] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_KEY_LEN] = { .type = NLA_U32, .len = sizeof(uint32_t) },
+	[NAN_ATTRIBUTE_KEY_DATA] = { .type = NLA_BINARY, .len = NAN_MAX_PMK_LEN },
+	[NAN_ATTRIBUTE_RSSI_THRESHOLD_FLAG] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_SDEA_SERVICE_SPECIFIC_INFO_LEN] = { .type = NLA_U16, .len =
+	sizeof(uint16_t) },
+	[NAN_ATTRIBUTE_SDEA_SERVICE_SPECIFIC_INFO] = { .type = NLA_BINARY, .len =
+	MAX_SDEA_SVC_INFO_LEN },
+	[NAN_ATTRIBUTE_SECURITY] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_RANGING_INTERVAL] = { .type = NLA_U32, .len = sizeof(uint32_t) },
+	[NAN_ATTRIBUTE_RANGING_NUM_FTM] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_RANGING_INGRESS_LIMIT] = { .type = NLA_U32, .len = sizeof(uint32_t) },
+	[NAN_ATTRIBUTE_RANGING_EGRESS_LIMIT] = { .type = NLA_U32, .len = sizeof(uint32_t) },
+	[NAN_ATTRIBUTE_RANGING_INDICATION] = { .type = NLA_U32, .len = sizeof(uint32_t) },
+	[NAN_ATTRIBUTE_SVC_RESPONDER_POLICY] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_NDP_ID] = { .type = NLA_U32, .len = sizeof(uint32_t) },
+	[NAN_ATTRIBUTE_IFACE] = { .type = NLA_BINARY, .len = IFNAMSIZ+1 },
+	[NAN_ATTRIBUTE_QOS] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_RSP_CODE] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_INST_COUNT] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_PEER_DISC_MAC_ADDR] = { .type = NLA_BINARY, .len = ETHER_ADDR_LEN },
+	[NAN_ATTRIBUTE_PEER_NDI_MAC_ADDR] = { .type = NLA_BINARY, .len = ETHER_ADDR_LEN },
+	[NAN_ATTRIBUTE_IF_ADDR] = { .type = NLA_BINARY, .len = ETHER_ADDR_LEN },
+	[NAN_ATTRIBUTE_NO_CONFIG_AVAIL] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+	[NAN_ATTRIBUTE_CHANNEL_INFO] = { .type = NLA_BINARY, .len =
+	sizeof(nan_channel_info_t) * NAN_MAX_CHANNEL_INFO_SUPPORTED },
+	[NAN_ATTRIBUTE_NUM_CHANNELS] = { .type = NLA_U32, .len = sizeof(uint32_t) },
+	[NAN_ATTRIBUTE_INSTANT_MODE_ENABLE] = { .type = NLA_U32, .len = sizeof(uint32_t) },
+	[NAN_ATTRIBUTE_INSTANT_COMM_CHAN] = { .type = NLA_U32, .len = sizeof(uint32_t) },
+	[NAN_ATTRIBUTE_CHRE_REQUEST] = { .type = NLA_U8, .len = sizeof(uint8_t) },
+};
+#endif /* CONFIG_AIC_NAN */
 
 static int aicwf_dump_interface(struct wiphy *wiphy,
 				struct wireless_dev *wdev, struct sk_buff *skb,
@@ -1075,6 +1358,220 @@ const struct wiphy_vendor_command aicwf_vendor_cmd[] = {
 		.policy = VENDOR_CMD_RAW_DATA,
 #endif
 	},
+#ifdef CONFIG_AIC_NAN
+	{
+		{
+			.vendor_id = GOOGLE_OUI,
+			.subcmd = NAN_WIFI_SUBCMD_ENABLE
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = aicwf_vendor_nan_wifi_subcmd_enable,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = aicwf_cfg80211_nan_attr_policy,
+		.maxattr = NAN_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
+	},
+	{
+		{
+			.vendor_id = GOOGLE_OUI,
+			.subcmd = NAN_WIFI_SUBCMD_DISABLE
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = aicwf_vendor_nan_wifi_subcmd_disable,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = aicwf_cfg80211_nan_attr_policy,
+		.maxattr = NAN_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
+	},
+	{
+		{
+			.vendor_id = GOOGLE_OUI,
+			.subcmd = NAN_WIFI_SUBCMD_CONFIG
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = aicwf_vendor_nan_wifi_subcmd_config,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = aicwf_cfg80211_nan_attr_policy,
+		.maxattr = NAN_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
+	},
+	{
+		{
+			.vendor_id = GOOGLE_OUI,
+			.subcmd = NAN_WIFI_SUBCMD_REQUEST_PUBLISH
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = aicwf_vendor_nan_wifi_subcmd_req_publish,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = aicwf_cfg80211_nan_attr_policy,
+		.maxattr = NAN_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
+	},
+	{
+		{
+			.vendor_id = GOOGLE_OUI,
+			.subcmd = NAN_WIFI_SUBCMD_REQUEST_SUBSCRIBE
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = aicwf_vendor_nan_wifi_subcmd_req_subscribe,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = aicwf_cfg80211_nan_attr_policy,
+		.maxattr = NAN_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
+	},
+	{
+		{
+			.vendor_id = GOOGLE_OUI,
+			.subcmd = NAN_WIFI_SUBCMD_CANCEL_PUBLISH
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = aicwf_vendor_nan_wifi_subcmd_cancel_publish,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = aicwf_cfg80211_nan_attr_policy,
+		.maxattr = NAN_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
+	},
+	{
+		{
+			.vendor_id = GOOGLE_OUI,
+			.subcmd = NAN_WIFI_SUBCMD_CANCEL_SUBSCRIBE
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = aicwf_vendor_nan_wifi_subcmd_cancel_subscribe,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = aicwf_cfg80211_nan_attr_policy,
+		.maxattr = NAN_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
+	},
+#if 0
+	{
+		{
+			.vendor_id = GOOGLE_OUI,
+			.subcmd = NAN_WIFI_SUBCMD_TRANSMIT
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = aicwf_vendor_nan_wifi_subcmd_transmit,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = aicwf_cfg80211_nan_attr_policy,
+		.maxattr = NAN_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
+	},
+#endif
+	{
+		{
+			.vendor_id = GOOGLE_OUI,
+			.subcmd = NAN_WIFI_SUBCMD_GET_CAPABILITIES
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = aicwf_vendor_nan_wifi_subcmd_get_capabilities,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+	},
+#if 0
+	{
+		{
+			.vendor_id = GOOGLE_OUI,
+			.subcmd = NAN_WIFI_SUBCMD_DATA_PATH_IFACE_CREATE
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = aicwf_vendor_nan_wifi_subcmd_data_path_iface_create,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = aicwf_cfg80211_nan_attr_policy,
+		.maxattr = NAN_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
+	},
+#endif
+	{
+		{
+			.vendor_id = GOOGLE_OUI,
+			.subcmd = NAN_WIFI_SUBCMD_DATA_PATH_IFACE_DELETE
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = aicwf_vendor_nan_wifi_subcmd_data_path_iface_delete,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = aicwf_cfg80211_nan_attr_policy,
+		.maxattr = NAN_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
+	},
+#if 0
+	{
+		{
+			.vendor_id = GOOGLE_OUI,
+			.subcmd = NAN_WIFI_SUBCMD_DATA_PATH_REQUEST
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = aicwf_vendor_nan_wifi_subcmd_data_path_request,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = aicwf_cfg80211_nan_attr_policy,
+		.maxattr = NAN_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
+	},
+	{
+		{
+			.vendor_id = GOOGLE_OUI,
+			.subcmd = NAN_WIFI_SUBCMD_DATA_PATH_RESPONSE
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = aicwf_vendor_nan_wifi_subcmd_data_path_response,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = aicwf_cfg80211_nan_attr_policy,
+		.maxattr = NAN_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
+	},
+	{
+		{
+			.vendor_id = GOOGLE_OUI,
+			.subcmd = NAN_WIFI_SUBCMD_DATA_PATH_END
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = aicwf_vendor_nan_wifi_subcmd_data_path_end,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = aicwf_cfg80211_nan_attr_policy,
+		.maxattr = NAN_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
+	},
+#ifdef WL_NAN_DISC_CACHE
+	{
+		{
+			.vendor_id = GOOGLE_OUI,
+			.subcmd = NAN_WIFI_SUBCMD_DATA_PATH_SEC_INFO
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = aicwf_vendor_nan_wifi_subcmd_data_path_sec_info,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = aicwf_cfg80211_nan_attr_policy,
+		.maxattr = NAN_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
+	},
+#endif /* WL_NAN_DISC_CACHE */
+#endif
+	{
+		{
+			.vendor_id = GOOGLE_OUI,
+			.subcmd = NAN_WIFI_SUBCMD_VERSION_INFO
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = aicwf_vendor_nan_wifi_subcmd_version_info,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = VENDOR_CMD_RAW_DATA,
+#endif
+	},
+#if 0
+	{
+		{
+			.vendor_id = GOOGLE_OUI,
+			.subcmd = NAN_WIFI_SUBCMD_ENABLE_MERGE
+		},
+		.flags = WIPHY_VENDOR_CMD_NEED_WDEV | WIPHY_VENDOR_CMD_NEED_NETDEV,
+		.doit = aicwf_vendor_nan_wifi_subcmd_enable_merge,
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(5, 3, 0))
+		.policy = aicwf_cfg80211_nan_attr_policy,
+		.maxattr = NAN_ATTRIBUTE_MAX
+#endif /* LINUX_VERSION >= 5.3 */
+	},
+#endif
+#endif /* CONFIG_AIC_NAN */
 };
 
 static const struct nl80211_vendor_cmd_info aicwf_vendor_events[] = {

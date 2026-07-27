@@ -3680,11 +3680,18 @@
 				  <0x0 0x06c06000 0x0 0x2000>, /* serdes top register part-2 */
 				  <0x0 0x0709016c 0x0 0x4>; /* sys-rtc */
 			clocks = <&ccu CLK_SERDES_PHY_CFG>,
-					 <&rtc_ccu CLK_RTC_DCXO_SERDES0>,
-					 <&rtc_ccu CLK_RTC_DCXO_SERDES1>;
+				 <&rtc_ccu CLK_RTC_DCXO_SERDES0>,
+				 <&rtc_ccu CLK_RTC_DCXO_SERDES1>,
+				 <&ccu CLK_USB2_U3_UTMI>,
+				 <&ccu CLK_USB2_U2_PIPE>;
 			clock-names = "serdes-clk",
-						  "dcxo-serdes0-clk",
-						  "dcxo-serdes1-clk";
+				      "dcxo-serdes0-clk",
+				      "dcxo-serdes1-clk",
+				      "usb-u3-utmi-clk",
+				      "usb-u2-pipe-clk";
+			assigned-clocks = <&ccu CLK_USB2_U2_PIPE>, <&ccu CLK_USB2_U3_UTMI>;
+			assigned-clock-parents = <&ccu CLK_PLL_PERI0_480M>, <&ccu CLK_PLL_PERI0_300M>;
+			assigned-clock-rates = <120000000>, <60000000>;
 			resets = <&ccu RST_BUS_SERDES>;
 			reset-names = "serdes-reset";
 			#address-cells = <2>;

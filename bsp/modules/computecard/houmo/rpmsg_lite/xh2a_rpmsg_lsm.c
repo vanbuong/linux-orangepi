@@ -192,7 +192,7 @@ int xh2a_rpmsg_lsm_init(struct xh2a_rpmsg_link *link,
 	struct xh2a_rpmsg_ept_info ept_info;
 	struct xh2a_rpmsg_lsm_ctx *lsm_ctx = &link->lsm_ctx;
 
-	sprintf(ept_info.name, "%s%d", XH2A_RPMSG_LSM_NAME, link->link_id);
+	sprintf(ept_info.name, "%s%u", XH2A_RPMSG_LSM_NAME, link->link_id);
 	ept_info.addr = XH2A_RPMSG_LSM_EPT_ADDR;
 
 	ept = xh2a_rpmsg_create_ept(link, xh2a_rpmsg_lsm_cb, lsm_ctx,

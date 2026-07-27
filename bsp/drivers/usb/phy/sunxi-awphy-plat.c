@@ -62,6 +62,7 @@ struct sunxi_phy {
 
 	__u8			num; /* phy number */
 	enum phy_mode		mode;
+	__u32 usb_phy_mode; /* PHY mode from device tree */
 };
 
 struct sunxi_phy_plat {
@@ -87,6 +88,13 @@ enum sunxi_phy_type_e {
 	SUNXI_PHY0_TYPE = 0,
 	SUNXI_PHY1_TYPE,
 	SUNXI_PHY2_TYPE,
+};
+
+enum phy_mode_usb_e {
+	PHY_MODE_USB_DISALBED = 0,
+	PHY_MODE_USB_U2_ONLY,
+	PHY_MODE_USB_U3_ONLY,
+	PHY_MODE_USB_U2_U3,
 };
 
 /* The AW PHY support x_p0_transceiver, x_p1_transceiver, x_p2_transceiver and x_common module */
@@ -351,6 +359,10 @@ static int sunxi_phy2_init(struct phy *_phy)
 	struct sunxi_phy_plat *sunxi_phy = uphy->sunxi_phy;
 	int ret;
 
+	/* if only use usb3.1_u3, don't init usb3.1_u2 phy*/
+	if (uphy->usb_phy_mode == PHY_MODE_USB_U3_ONLY)
+		return 0;
+
 	if (uphy->ref_clk) {
 		ret = clk_prepare_enable(uphy->ref_clk);
 		if (ret) {
@@ -384,6 +396,9 @@ static int sunxi_phy2_init(struct phy *_phy)
 static int sunxi_phy2_exit(struct phy *_phy)
 {
 	struct sunxi_phy *uphy = phy_get_drvdata(_phy);
+
+	if (uphy->usb_phy_mode == PHY_MODE_USB_U3_ONLY)
+		return 0;
 
 	sunxi_phy_set(uphy, false);
 
@@ -449,6 +464,16 @@ int sunxi_phy_plat_create(struct device *dev, struct device_node *np,
 		dev_err(dev, "failed to create phy for %s, ret: %d\n", uphy->name, ret);
 		return ret;
 	}
+
+#if IS_ENABLED(CONFIG_ARCH_SUN65IW1)
+	if (of_property_read_u32(np, "usb-phy-mode", &uphy->usb_phy_mode)) {
+		uphy->usb_phy_mode = PHY_MODE_USB_U2_U3;
+		dev_warn(dev, "usb-phy-mode not set, using default value %d\n",
+			uphy->usb_phy_mode);
+	} else {
+		dev_info(dev, "usb-phy-mode: %d\n", uphy->usb_phy_mode);
+	}
+#endif
 
 	uphy->sunxi_phy = sunxi_phy;
 	phy_set_drvdata(uphy->phy, uphy);
@@ -709,4 +734,4 @@ MODULE_ALIAS("platform:sunxi-plat-awphy");
 MODULE_DESCRIPTION("Allwinner Platform USB2.0 AW PHY driver");
 MODULE_AUTHOR("kanghoupeng<kanghoupeng@allwinnertech.com>");
 MODULE_LICENSE("GPL v2");
-MODULE_VERSION("0.0.4");
+MODULE_VERSION("0.0.5");

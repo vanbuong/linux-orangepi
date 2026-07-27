@@ -410,22 +410,22 @@ unsigned int bsp_isp_load_update_flag(unsigned long id)
 	return isp_regs[id].isp_update_flag->dwval;
 }
 
-void bsp_isp_set_wdr_addr0(unsigned long id, dma_addr_t addr)
+void bsp_isp_set_wdr_addr0(unsigned long id, vin_dma_addr_t addr)
 {
 	writel(addr >> ISP_ADDR_BIT_R_SHIFT, isp_regs[id].isp_wdr_exp_addr0);
 }
 
-void bsp_isp_set_wdr_addr1(unsigned long id, dma_addr_t addr)
+void bsp_isp_set_wdr_addr1(unsigned long id, vin_dma_addr_t addr)
 {
 	writel(addr >> ISP_ADDR_BIT_R_SHIFT, isp_regs[id].isp_wdr_exp_addr1);
 }
 
-void bsp_isp_set_d3d_addr0(unsigned long id, dma_addr_t addr)
+void bsp_isp_set_d3d_addr0(unsigned long id, vin_dma_addr_t addr)
 {
 	writel(addr >> ISP_ADDR_BIT_R_SHIFT, isp_regs[id].isp_d3d_rec_addr0);
 }
 
-void bsp_isp_set_d3d_addr1(unsigned long id, dma_addr_t addr)
+void bsp_isp_set_d3d_addr1(unsigned long id, vin_dma_addr_t addr)
 {
 	writel(addr >> ISP_ADDR_BIT_R_SHIFT, isp_regs[id].isp_d3d_rec_addr1);
 }

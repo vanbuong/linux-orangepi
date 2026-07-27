@@ -180,6 +180,7 @@ static void sort_allocations_by_core_id(struct xh2a_target_allocation *alloc,
  */
 bool priority_resource_enough(struct xh2a_ipu_group *group)
 {
+	uint32_t mask;
 	int core, i, ret, this_core;
 	int min_remain_queue_entries, best_start_queue;
 
@@ -198,6 +199,10 @@ bool priority_resource_enough(struct xh2a_ipu_group *group)
 
 	/* Iterate each core to find multiple optimal combinations */
 	for (core = XH2A_IPU_CORE_NUM - 1; core >= 0; core--) {
+		mask = (0x1 << core);
+		if ((group->coremask != 0) && (mask & group->coremask) != mask)
+			continue;
+
 		best_start_queue = priority_get_best_queues_start_id(
 			ipu_device, core, tile_num_needed, entry_num_needed,
 			&min_remain_queue_entries);
@@ -221,7 +226,8 @@ bool priority_resource_enough(struct xh2a_ipu_group *group)
 	}
 
 	/* balance ipu load */
-	if (core_needed == 1) {
+	if (core_needed == 1 &&
+	    (group->coremask == 0 || group->coremask == 0x3)) {
 		this_core = allocation[0].core_id;
 
 		if (this_core == group->ipu_dev->last_core) {
@@ -280,6 +286,7 @@ static void priority_enqueue_group(struct xh2a_ipu_policy *base,
 		container_of(base, struct xh2a_priority_policy, base);
 
 	mutex_lock(&policy->mutex);
+	xh2a_ipu_group_get(group);
 	list_add_tail(&group->policy_list_node,
 		      &policy->priority_list[TOTAL_PRIORITY_LEVELS - 1]);
 	mutex_unlock(&policy->mutex);
@@ -302,6 +309,13 @@ priority_pick_runnable_group(struct xh2a_ipu_policy *base)
 	for (i = 0; i < TOTAL_PRIORITY_LEVELS; i++) {
 		list_for_each_entry_safe(group, tmp, &policy->priority_list[i],
 					 policy_list_node) {
+			int status = atomic_read(&group->status);
+			if (status == GROUP_CANCEL || status == GROUP_DESTROY ||
+			    status == GROUP_DONE) {
+				list_del_init(&group->policy_list_node);
+				xh2a_ipu_group_put(group);
+				continue;
+			}
 			/* Check if resources are sufficient for the group */
 			if (priority_resource_enough(group)) {
 				list_del_init(&group->policy_list_node);
@@ -346,8 +360,10 @@ static void priority_remove_group(struct xh2a_ipu_policy *base,
 
 	mutex_lock(&policy->mutex);
 
-	if (!list_empty(&group->policy_list_node))
+	if (!list_empty(&group->policy_list_node)) {
 		list_del_init(&group->policy_list_node);
+		xh2a_ipu_group_put(group);
+	}
 
 	mutex_unlock(&policy->mutex);
 }
@@ -413,12 +429,24 @@ xh2a_priority_policy_create(struct xh2a_ipu_device *ipu_dev)
 
 void xh2a_priority_policy_destroy(struct xh2a_ipu_policy *base)
 {
+	int i;
+	struct xh2a_ipu_group *group, *tmp;
 	struct xh2a_priority_policy *policy;
 
 	if (!base)
 		return;
 
 	policy = container_of(base, struct xh2a_priority_policy, base);
+
+	mutex_lock(&policy->mutex);
+	for (i = 0; i < TOTAL_PRIORITY_LEVELS; i++) {
+		list_for_each_entry_safe(group, tmp, &policy->priority_list[i],
+					 policy_list_node) {
+			list_del_init(&group->policy_list_node);
+			xh2a_ipu_group_put(group);
+		}
+	}
+	mutex_unlock(&policy->mutex);
 
 	kfree(policy);
 }

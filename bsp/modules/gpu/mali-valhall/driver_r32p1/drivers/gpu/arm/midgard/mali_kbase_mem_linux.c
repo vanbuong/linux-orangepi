@@ -639,9 +639,16 @@ unsigned long kbase_mem_evictable_reclaim_count_objects(struct shrinker *s,
 
 	kctx = container_of(s, struct kbase_context, reclaim);
 
+#if (KERNEL_VERSION(6, 6, 0) <= LINUX_VERSION_CODE)
+	/* __GFP_ATOMIC was removed in Linux 6.6, use GFP_ATOMIC instead */
+	WARN((sc->gfp_mask & GFP_ATOMIC),
+	     "Shrinkers cannot be called for GFP_ATOMIC allocations. Check kernel mm for problems. gfp_mask==%x\n",
+	     sc->gfp_mask);
+#else
 	WARN((sc->gfp_mask & __GFP_ATOMIC),
 	     "Shrinkers cannot be called for GFP_ATOMIC allocations. Check kernel mm for problems. gfp_mask==%x\n",
 	     sc->gfp_mask);
+#endif
 	WARN(in_atomic(),
 	     "Shrinker called whilst in atomic context. The caller must switch to using GFP_ATOMIC or similar. gfp_mask==%x\n",
 	     sc->gfp_mask);
@@ -738,7 +745,11 @@ int kbase_mem_evictable_init(struct kbase_context *kctx)
 	 * struct shrinker does not define batch
 	 */
 	kctx->reclaim.batch = 0;
+#if (KERNEL_VERSION(6, 0, 0) <= LINUX_VERSION_CODE)
+	register_shrinker(&kctx->reclaim, "mali-gpu-shrinker");
+#else
 	register_shrinker(&kctx->reclaim);
+#endif
 	return 0;
 }
 
@@ -1640,7 +1651,15 @@ KERNEL_VERSION(4, 5, 0) > LINUX_VERSION_CODE
 #elif KERNEL_VERSION(4, 9, 0) > LINUX_VERSION_CODE
 	faulted_pages = get_user_pages(address, *va_pages,
 			write, 0, pages, NULL);
+#elif KERNEL_VERSION(5, 9, 0) > LINUX_VERSION_CODE
+	faulted_pages = get_user_pages(address, *va_pages,
+			write ? FOLL_WRITE : 0, pages, NULL);
+#elif KERNEL_VERSION(5, 15, 0) > LINUX_VERSION_CODE
+	/* Linux 5.9+ removed vmas and locked parameters from get_user_pages */
+	faulted_pages = get_user_pages(address, *va_pages,
+			write ? FOLL_WRITE : 0, pages);
 #else
+	/* Linux 5.15+ restored vmas parameter to get_user_pages */
 	faulted_pages = get_user_pages(address, *va_pages,
 			write ? FOLL_WRITE : 0, pages, NULL);
 #endif
@@ -2480,8 +2499,11 @@ static int kbase_cpu_mmap(struct kbase_context *kctx,
 	 * This will need updating to propagate coherency flags
 	 * See MIDBASE-1057
 	 */
-
+#if (KERNEL_VERSION(6, 3, 0) <= LINUX_VERSION_CODE)
+	vm_flags_set(vma, VM_DONTCOPY | VM_DONTDUMP | VM_DONTEXPAND | VM_IO);
+#else
 	vma->vm_flags |= VM_DONTCOPY | VM_DONTDUMP | VM_DONTEXPAND | VM_IO;
+#endif
 	vma->vm_ops = &kbase_vm_ops;
 	vma->vm_private_data = map;
 
@@ -2510,11 +2532,19 @@ static int kbase_cpu_mmap(struct kbase_context *kctx,
 	}
 
 	if (!kaddr) {
+#if (KERNEL_VERSION(6, 3, 0) <= LINUX_VERSION_CODE)
+		vm_flags_set(vma, VM_PFNMAP);
+#else
 		vma->vm_flags |= VM_PFNMAP;
+#endif
 	} else {
 		WARN_ON(aligned_offset);
 		/* MIXEDMAP so we can vfree the kaddr early and not track it after map time */
+#if (KERNEL_VERSION(6, 3, 0) <= LINUX_VERSION_CODE)
+		vm_flags_set(vma, VM_MIXEDMAP);
+#else
 		vma->vm_flags |= VM_MIXEDMAP;
+#endif
 		/* vmalloc remaping is easy... */
 		err = remap_vmalloc_range(vma, kaddr, 0);
 		WARN_ON(err);
@@ -2725,9 +2755,17 @@ int kbase_context_mmap(struct kbase_context *const kctx,
 	dev_dbg(dev, "kbase_mmap\n");
 
 	if (!(vma->vm_flags & VM_READ))
+#if (KERNEL_VERSION(6, 3, 0) <= LINUX_VERSION_CODE)
+		vm_flags_clear(vma, VM_MAYREAD);
+#else
 		vma->vm_flags &= ~VM_MAYREAD;
+#endif
 	if (!(vma->vm_flags & VM_WRITE))
+#if (KERNEL_VERSION(6, 3, 0) <= LINUX_VERSION_CODE)
+		vm_flags_clear(vma, VM_MAYWRITE);
+#else
 		vma->vm_flags &= ~VM_MAYWRITE;
+#endif
 
 	if (nr_pages == 0) {
 		err = -EINVAL;
@@ -3085,7 +3123,10 @@ KBASE_EXPORT_TEST_API(kbase_vunmap);
 
 static void kbasep_add_mm_counter(struct mm_struct *mm, int member, long value)
 {
-#if (KERNEL_VERSION(4, 19, 0) <= LINUX_VERSION_CODE)
+#if (KERNEL_VERSION(6, 6, 0) <= LINUX_VERSION_CODE)
+	/* Linux 6.6 changed mm->rss_stat from atomic_long_t to percpu_counter */
+	percpu_counter_add(&mm->rss_stat[member], value);
+#elif (KERNEL_VERSION(4, 19, 0) <= LINUX_VERSION_CODE)
 	/* To avoid the build breakage due to an unexported kernel symbol
 	 * 'mm_trace_rss_stat' from later kernels, i.e. from V4.19.0 onwards,
 	 * we inline here the equivalent of 'add_mm_counter()' from linux
@@ -3168,8 +3209,13 @@ static int kbase_tracking_page_setup(struct kbase_context *kctx, struct vm_area_
 	spin_unlock(&kctx->mm_update_lock);
 
 	/* no real access */
+#if (KERNEL_VERSION(6, 3, 0) <= LINUX_VERSION_CODE)
+	vm_flags_clear(vma, VM_READ | VM_MAYREAD | VM_WRITE | VM_MAYWRITE | VM_EXEC | VM_MAYEXEC);
+	vm_flags_set(vma, VM_DONTCOPY | VM_DONTEXPAND | VM_DONTDUMP | VM_IO);
+#else
 	vma->vm_flags &= ~(VM_READ | VM_MAYREAD | VM_WRITE | VM_MAYWRITE | VM_EXEC | VM_MAYEXEC);
 	vma->vm_flags |= VM_DONTCOPY | VM_DONTEXPAND | VM_DONTDUMP | VM_IO;
+#endif
 	vma->vm_ops = &kbase_vm_special_ops;
 	vma->vm_private_data = kctx;
 

@@ -114,13 +114,19 @@ unsigned int sensor_get_exp(struct v4l2_subdev *sd)
 }
 EXPORT_SYMBOL_GPL(sensor_get_exp);
 
-#if IS_ENABLED(CONFIG_ARCH_SUN8IW16P1)
-static unsigned int __sensor_get_parameter(struct v4l2_subdev *sd, struct v4l2_mbus_config *cfg)
+#if IS_ENABLED(CONFIG_ARCH_SUN60IW2) || IS_ENABLED(CONFIG_ARCH_SUN65IW1)
+__maybe_unused static unsigned int __sensor_get_parameter(struct v4l2_subdev *sd, struct v4l2_mbus_config *cfg)
 {
 	struct sensor_info *info = to_state(sd);
-	unsigned flags = cfg->flags & 0xf;
+	unsigned flag;
 
-	switch (flags) {
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0)
+	flag = cfg->bus.mipi_csi2.num_data_lanes & 0xf;
+#else
+	flag = cfg->flags & 0xf;
+#endif
+
+	switch (flag) {
 	case V4L2_MBUS_CSI2_1_LANE:
 		info->lane_num = 1;
 		break;
@@ -167,16 +173,17 @@ unsigned int sensor_get_clk(struct v4l2_subdev *sd, struct v4l2_mbus_config *cfg
 				unsigned long *top_clk, unsigned long *isp_clk)
 {
 	struct sensor_info *info = to_state(sd);
-	unsigned long topclk_theory, ispclk_theory;
-	unsigned long topclk_max = 432*1000*1000;
-	unsigned long ispclk_max = 432*1000*1000;
-	unsigned int hblank;
-	unsigned int hblank_cmp = 128;
-	int ret;
+	__maybe_unused unsigned long topclk_theory, ispclk_theory;
+	__maybe_unused unsigned long topclk_max = 432*1000*1000;
+	__maybe_unused unsigned long ispclk_max = 432*1000*1000;
+	__maybe_unused unsigned int hblank;
+	__maybe_unused unsigned int hblank_cmp = 128;
+	__maybe_unused int ret;
 
 	if (info->current_wins->top_clk && info->current_wins->isp_clk) {
 		*top_clk = info->current_wins->top_clk;
 		*isp_clk = info->current_wins->isp_clk;
+#if VIN_FALSE
 	} else if (info->current_wins->mipi_bps && info->current_wins->hts && info->current_wins->pclk) {
 		ret = __sensor_get_parameter(sd, cfg);
 		if (ret) {
@@ -197,10 +204,11 @@ unsigned int sensor_get_clk(struct v4l2_subdev *sd, struct v4l2_mbus_config *cfg
 		*top_clk = min(topclk_max, roundup(topclk_theory + topclk_theory*5/100, 1000000));
 		*isp_clk = min(ispclk_max, roundup(ispclk_theory + ispclk_theory*5/100, 1000000));
 		if (!(*top_clk) || !(*isp_clk)) {
-			vin_warn("%s warning! top_clk = %ld, isp_clk = %ld\n", __func__, *top_clk, *isp_clk);
+			vin_warn("%s warning! theoretical top_clk = %ld, isp_clk = %ld\n", __func__, *top_clk, *isp_clk);
 			return -1;
 		}
-	}  else
+#endif
+	} else
 		return -1;
 
 	return 0;
@@ -418,6 +426,11 @@ static void sensor_fill_mbus_fmt(struct v4l2_subdev *sd,
 	res->res_deskew = info->deskew;
 	res->fps = ws->fps_fixed;
 	res->pclk_dly = ws->pclk_dly;
+	if (ws->deskew != 0)
+		res->res_deskew = ws->deskew;
+	else
+		res->res_deskew = info->deskew;
+
 }
 
 static void sensor_try_format(struct v4l2_subdev *sd,

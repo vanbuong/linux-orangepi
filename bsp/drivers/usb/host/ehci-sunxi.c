@@ -1010,7 +1010,7 @@ static void sunxi_ehci_resume_work(struct work_struct *work)
 	struct sunxi_hci_hcd *sunxi_ehci = NULL;
 
 	sunxi_ehci = container_of(work, struct sunxi_hci_hcd, resume_work);
-
+	msleep(RESUME_VBUS_DELAY_MS);
 	sunxi_hcd_board_set_vbus(sunxi_ehci, 1);
 }
 
@@ -1210,4 +1210,4 @@ MODULE_DESCRIPTION(DRIVER_DESC);
 MODULE_LICENSE("GPL v2");
 MODULE_ALIAS("platform:" SUNXI_EHCI_NAME);
 MODULE_AUTHOR("javen");
-MODULE_VERSION("1.1.5");
+MODULE_VERSION("1.1.6");

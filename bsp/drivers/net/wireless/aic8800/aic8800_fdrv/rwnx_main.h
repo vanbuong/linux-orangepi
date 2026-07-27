@@ -28,6 +28,7 @@ typedef struct _compat_android_wifi_priv_cmd {
 #endif /* CONFIG_COMPAT */
 
 #define POWER_LEVEL_INVALID_VAL     (127)
+#define NMI_IFNAME    "aware_nmi0"
 
 int rwnx_cfg80211_init(struct rwnx_plat *rwnx_plat, void **platform_data);
 void rwnx_cfg80211_deinit(struct rwnx_hw *rwnx_hw);

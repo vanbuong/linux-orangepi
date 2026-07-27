@@ -91,6 +91,7 @@ struct sensor_win_size {
 	unsigned long top_clk;
 	unsigned long isp_clk;
 	unsigned char pclk_dly;
+	unsigned int deskew;
 
 	void *regs;		/* Regs to tweak */
 	int regs_size;

@@ -20,7 +20,7 @@
 #define SUPPORT_SYSRQ
 #endif
 
-#define SUNXI_UART_NG_VERSION		"1.1.25"
+#define SUNXI_UART_NG_VERSION		"1.1.28"
 
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -68,6 +68,98 @@
  */
 
 #define SUNXI_RX_MAX_COUNT	256
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 7, 0))
+
+sunxi_uart_xmit *sunxi_uart_get_xmit(struct uart_port *port)
+{
+	struct tty_port *tport = &port->state->port;
+	return (sunxi_uart_xmit *)&(tport->xmit_fifo);
+}
+
+sunxi_uart_xmit_fifo *sunxi_uart_get_xmit_fifo(struct uart_port *port, sunxi_uart_xmit *xmit)
+{
+	return xmit;
+}
+
+void sunxi_uart_set_xmit_fifo(struct uart_port *port, sunxi_uart_xmit *xmit, void *new)
+{
+	if (xmit != NULL && new != NULL)
+		memcpy(xmit, new, sizeof(sunxi_uart_xmit));
+	return;
+}
+
+bool sunxi_uart_is_xmit_empty(struct uart_port *port, sunxi_uart_xmit *xmit)
+{
+	struct tty_port *tport = &port->state->port;
+	return kfifo_is_empty(&tport->xmit_fifo);
+}
+
+unsigned int sunxi_uart_circ_cnt_to_end(struct uart_port *port, sunxi_uart_xmit *xmit)
+{
+	unsigned int tail, ret;
+	struct tty_port *tport = &port->state->port;
+	ret = kfifo_out_linear(&tport->xmit_fifo, &tail, UART_XMIT_SIZE);
+	return ret;
+}
+
+int sunxi_uart_get_ch(struct uart_port *port, sunxi_uart_xmit *xmit, unsigned char *c)
+{
+	return uart_fifo_get(port, c);
+}
+
+int sunxi_uart_circ_chars_pending(sunxi_uart_xmit *xmit, struct uart_port *port)
+{
+	struct tty_port *tport = &port->state->port;
+	return kfifo_len(&tport->xmit_fifo);
+}
+
+#else
+
+sunxi_uart_xmit *sunxi_uart_get_xmit(struct uart_port *port)
+{
+	struct sunxi_uart_port *uart_port = UART_TO_SPORT(port);
+	return &uart_port->port.state->xmit;
+}
+
+sunxi_uart_xmit_fifo *sunxi_uart_get_xmit_fifo(struct uart_port *port, sunxi_uart_xmit *xmit)
+{
+	struct sunxi_uart_port *uart_port = UART_TO_SPORT(port);
+	return uart_port->port.state->xmit.buf;
+}
+
+void sunxi_uart_set_xmit_fifo(struct uart_port *port, sunxi_uart_xmit *xmit, void *new)
+{
+	xmit->buf = new;
+	return;
+}
+
+bool sunxi_uart_is_xmit_empty(struct uart_port *port, sunxi_uart_xmit *xmit)
+{
+	return uart_circ_empty(xmit);
+}
+
+unsigned int sunxi_uart_circ_cnt_to_end(struct uart_port *port, sunxi_uart_xmit *xmit)
+{
+	return CIRC_CNT_TO_END(xmit->head, xmit->tail, UART_XMIT_SIZE);
+}
+
+int sunxi_uart_get_ch(struct uart_port *port, sunxi_uart_xmit *xmit, unsigned char *c)
+{
+	if (sunxi_uart_is_xmit_empty(port, xmit))
+		return 0;
+
+	*c = xmit->buf[xmit->tail];
+	xmit->tail = (xmit->tail + 1) & (UART_XMIT_SIZE - 1);
+	return 1;
+}
+
+int sunxi_uart_circ_chars_pending(sunxi_uart_xmit *xmit, struct uart_port *port)
+{
+	return CIRC_CNT(xmit->head, xmit->tail, UART_XMIT_SIZE);
+}
+
+#endif
 
 void sunxi_uart_enable_ier_thri(struct uart_port *port)
 {
@@ -280,8 +372,9 @@ static void sunxi_uart_stop_tx(struct uart_port *port)
 static void sunxi_uart_start_tx(struct uart_port *port)
 {
 	struct sunxi_uart_port *uart_port = UART_TO_SPORT(port);
-	struct circ_buf *xmit = &uart_port->port.state->xmit;
-	if (!(uart_port->port.x_char) && (uart_circ_empty(xmit)))
+	sunxi_uart_xmit *xmit = sunxi_uart_get_xmit(port);
+
+	if (!(uart_port->port.x_char) && (sunxi_uart_is_xmit_empty(port, xmit)))
 		return;
 
 	if ((uart_port->rs485conf.flags & SER_RS485_ENABLED) && \
@@ -294,9 +387,11 @@ static void sunxi_uart_start_tx(struct uart_port *port)
 
 static void sunxi_uart_handle_tx(struct sunxi_uart_port *uart_port)
 {
-	struct circ_buf *xmit = &uart_port->port.state->xmit;
+	struct uart_port *port = &(uart_port->port);
+	sunxi_uart_xmit *xmit = sunxi_uart_get_xmit(port);
 	int count;
 	int ch_9bit;
+	unsigned char c;
 
 	if (uart_port->port.x_char) {
 		serial_out(&uart_port->port, uart_port->port.x_char, SUNXI_UART_THR);
@@ -309,13 +404,18 @@ static void sunxi_uart_handle_tx(struct sunxi_uart_port *uart_port)
 		return;
 	}
 
-	if (uart_circ_empty(xmit) || uart_tx_stopped(&uart_port->port)) {
+	if (sunxi_uart_is_xmit_empty(port, xmit)) {
+		sunxi_uart_stop_tx(&uart_port->port);
+		return;
+	}
+
+	if (uart_tx_stopped(port)) {
 		sunxi_uart_stop_tx(&uart_port->port);
 		return;
 	}
 
 	if (uart_port->dma->use_dma & TX_DMA) {
-		if (SERIAL_CIRC_CNT_TO_END(xmit) >= (uart_port->port.fifosize / 2)) {
+		if (sunxi_uart_circ_cnt_to_end(port, xmit) >= (uart_port->port.fifosize / 2)) {
 			sunxi_uart_start_dma_tx(uart_port);
 			return;
 		}
@@ -323,30 +423,30 @@ static void sunxi_uart_handle_tx(struct sunxi_uart_port *uart_port)
 
 	count = uart_port->port.fifosize / 2;
 	do {
+		if (!sunxi_uart_get_ch(port, xmit, &c)) {
+			break;
+		}
 #if IS_ENABLED(CONFIG_SW_UART_DUMP_DATA)
-		uart_port->dump_buff[uart_port->dump_len++] = xmit->buf[xmit->tail];
+		uart_port->dump_buff[uart_port->dump_len++] = c;
 #endif
 		if ((uart_port->rs485conf.flags & SER_RS485_ENABLED) &&
 		     uart_port->rs485_receive_mode == RS485_RCV_9BITM) {
 			/* get ch_9bit in lcr */
 			ch_9bit = (uart_port->reg.lcr & SUNXI_UART_LCR_EPAR) << 4;
-			serial_out(&uart_port->port, (unsigned int)(xmit->buf[xmit->tail] | ch_9bit), SUNXI_UART_THR);
-			SERIAL_DBG(uart_port->port.dev, "write tx fifo 0x%x\n", (xmit->buf[xmit->tail] | ch_9bit));
+			serial_out(&uart_port->port, (unsigned int)(c | ch_9bit), SUNXI_UART_THR);
+			SERIAL_DBG(uart_port->port.dev, "write tx fifo 0x%x\n", (c | ch_9bit));
 		} else {
-			serial_out(&uart_port->port, xmit->buf[xmit->tail], SUNXI_UART_THR);
-			SERIAL_DBG(uart_port->port.dev, "write tx fifo 0x%x\n", xmit->buf[xmit->tail]);
+			serial_out(&uart_port->port, c, SUNXI_UART_THR);
+			SERIAL_DBG(uart_port->port.dev, "write tx fifo 0x%x\n", c);
 		}
 		if (uart_port->id != 0)
-			trace_uart_data_tx(uart_port, xmit->buf[xmit->tail], 0);
-		xmit->tail = (xmit->tail + 1) & (UART_XMIT_SIZE - 1);
+			trace_uart_data_tx(uart_port, (int)ch_9bit, 0);
+
 		uart_port->port.icount.tx++;
-		if (uart_circ_empty(xmit)) {
-			break;
-		}
 	} while (--count > 0);
 
 	SERIAL_DUMP(uart_port, "Tx");
-	if (uart_circ_chars_pending(xmit) < WAKEUP_CHARS) {
+	if (sunxi_uart_circ_chars_pending(xmit, port) < WAKEUP_CHARS) {
 		spin_unlock(&uart_port->port.lock);
 		uart_write_wakeup(&uart_port->port);
 		spin_lock(&uart_port->port.lock);
@@ -355,7 +455,7 @@ static void sunxi_uart_handle_tx(struct sunxi_uart_port *uart_port)
 	if (uart_port->rs485_pin_auto)
 		return;
 
-	if (uart_circ_empty(xmit))
+	if (sunxi_uart_is_xmit_empty(port, xmit))
 		sunxi_uart_stop_tx(&uart_port->port);
 }
 
@@ -661,13 +761,11 @@ static void sunxi_uart_config_rs485_hw_fl(struct uart_port *port)
 		sunxi_info(port->dev, "hardware 485-fl & 9bit mode set success\n");
 	} else {
 		uart_port->reg.mcr &= ~SUNXI_UART_MCR_MODE_MASK;
-		uart_port->reg.mcr |= SUNXI_UART_MCR_MODE_RS485;
-		uart_port->reg.mcr |= SUNXI_UART_MCR_AFE;
-		uart_port->rs485 |= SUNXI_UART_RS485_DUPLEX;
-		uart_port->rs485 |= SUNXI_UART_RS485_RXBFA;
+		uart_port->reg.mcr |= SUNXI_UART_MCR_MODE_UART;
+		uart_port->reg.mcr &= ~SUNXI_UART_MCR_AFE;
 
 		serial_out(port, uart_port->reg.mcr, SUNXI_UART_MCR);
-		serial_out(port, uart_port->rs485, SUNXI_UART_RS485);
+		serial_out(port, SUNXI_UART_RS485_AUTO_RST_EN, SUNXI_UART_SCH);
 
 		sunxi_info(port->dev, "hardware 485-fl set success\n");
 	}
@@ -681,7 +779,7 @@ static void sunxi_uart_config_rs485_no_fl(struct uart_port *port)
 		uart_port->rs485_receive_mode = RS485_RCV_9BITM;
 		uart_port->reg.mcr &= ~SUNXI_UART_MCR_MODE_MASK;
 		uart_port->reg.mcr |= SUNXI_UART_MCR_MODE_RS485;
-		uart_port->reg.mcr |= SUNXI_UART_MCR_AFE;
+		uart_port->reg.mcr &= ~SUNXI_UART_MCR_AFE;
 		uart_port->reg.lcr |= SUNXI_UART_LCR_PARITY;
 		uart_port->rs485 |= SUNXI_UART_RS485_DUPLEX;
 		uart_port->rs485 |= SUNXI_UART_RS485_RXBFA;
@@ -852,6 +950,7 @@ static int sunxi_uart_startup(struct uart_port *port)
 {
 	struct sunxi_uart_port *uart_port = UART_TO_SPORT(port);
 	int ret;
+	sunxi_uart_xmit *xmit = sunxi_uart_get_xmit(port);
 #ifdef CONFIG_PREEMPT_RT
 	struct irq_desc *desc;
 	struct sched_param sp = { .sched_priority = MAX_RT_PRIO / 2 };
@@ -860,7 +959,7 @@ static int sunxi_uart_startup(struct uart_port *port)
 
 	ret = devm_request_irq(port->dev, port->irq, sunxi_uart_irq, 0, uart_port->name, port);
 	if (unlikely(ret)) {
-		sunxi_info(port->dev, "uart%d cannot get irq %d\n", uart_port->id, port->irq);
+		sunxi_err(port->dev, "uart%d cannot get irq %d\n", uart_port->id, port->irq);
 		return ret;
 	}
 
@@ -899,11 +998,10 @@ static int sunxi_uart_startup(struct uart_port *port)
 	 */
 
 	if (uart_port->dma->use_dma & TX_DMA) {
-		if (uart_port->port.state->xmit.buf !=
+		if ((char *)sunxi_uart_get_xmit_fifo(port, xmit) !=
 						uart_port->dma->tx_buffer){
-			free_page((unsigned long)uart_port->port.state->xmit.buf);
-			uart_port->port.state->xmit.buf =
-						uart_port->dma->tx_buffer;
+			free_page((long unsigned int)sunxi_uart_get_xmit_fifo(port, xmit));
+			sunxi_uart_set_xmit_fifo(port, xmit, uart_port->dma->tx_buffer);
 		}
 	} else {
 		uart_port->reg.ier = 0;
@@ -916,10 +1014,11 @@ static int sunxi_uart_startup(struct uart_port *port)
 static void sunxi_uart_shutdown(struct uart_port *port)
 {
 	struct sunxi_uart_port *uart_port = UART_TO_SPORT(port);
+	sunxi_uart_xmit *xmit = sunxi_uart_get_xmit(port);
 
 	SERIAL_DBG(port->dev, "shut down ...\n");
 	if (uart_port->dma->use_dma & TX_DMA)
-		uart_port->port.state->xmit.buf = NULL;
+		sunxi_uart_set_xmit_fifo(port, xmit, NULL);
 
 	uart_port->reg.ier = 0;
 	uart_port->reg.lcr = 0;
@@ -2063,7 +2162,11 @@ static int sunxi_uart_probe(struct platform_device *pdev)
 	return uart_add_one_port(&sunxi_uart_driver, port);
 }
 
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 11, 0))
+static void sunxi_uart_remove(struct platform_device *pdev)
+#else
 static int sunxi_uart_remove(struct platform_device *pdev)
+#endif
 {
 #ifdef CONFIG_AW_AMP_SYS_RSC_MANAGER
 	int err;
@@ -2089,7 +2192,9 @@ static int sunxi_uart_remove(struct platform_device *pdev)
 	sunxi_uart_release_resource(uart_port, pdev->dev.platform_data);
 
 	uart_remove_one_port(&sunxi_uart_driver, port);
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 11, 0))
 	return 0;
+#endif
 }
 
 /* UART power management code */
@@ -2165,7 +2270,7 @@ static int __init sunxi_uart_init(void)
 
 	ret = uart_register_driver(&sunxi_uart_driver);
 	if (unlikely(ret)) {
-		sunxi_info(NULL, "driver initializied\n");
+		sunxi_info(NULL, "driver initialized\n");
 		return ret;
 	}
 

@@ -18,6 +18,7 @@
 #include <linux/reset.h>
 #include <dt-bindings/phy/phy.h>
 #include <sunxi-common.h>
+#include <sunxi-sid.h>
 
 struct sunxi_synopsys_combophy {
 	const char *name;
@@ -47,13 +48,26 @@ struct sunxi_synopsys_phy {
 	struct sunxi_synopsys_combophy *combo_pcie;
 
 	__u32 mode;
-	__u32 vernum;	    /* SUBSYS TOP Version number */
-	bool usb_supported; /* USB can use combo0 or support only U3/U2 mode */
+	__u32 vernum;	     /* SUBSYS TOP Version number */
+	__u32 usb_phy_mode; /* PHY mode from device tree */
+	bool usb_supported;  /* USB can use combo0 or support only U3/U2 mode */
+	const struct sunxi_phy_config *cfg;
+};
+
+struct sunxi_phy_config {
+	bool has_u2u3_mode;
 };
 
 enum phy_type_e {
 	COMB0_PHY_USB3 = 0,
 	COMB0_PHY_PCIE,
+};
+
+enum phy_mode_usb_e {
+	PHY_MODE_USB_DISALBED = 0,
+	PHY_MODE_USB_U2_ONLY,
+	PHY_MODE_USB_U3_ONLY,
+	PHY_MODE_USB_U2_U3,
 };
 
 /* The mode record which combo phy xlate owner */
@@ -81,6 +95,7 @@ enum phy_type_e {
 /* USB2_U2 PHY Control Register */
 #define USB2_U2_PHY_MODE			0x000C
 #define   USB2_U2PHY_MODE			BIT(0)
+#define   USB2_U3PHY_MODE			BIT(1)
 
 /* HSI COMB0 PHY Version Register */
 #define HSI_COMB0_PHY_VER			0x7FE0
@@ -228,8 +243,14 @@ static void combo_usb3_clk_set(struct sunxi_synopsys_phy *sunxi_cphy, bool enabl
 	__u32 val, tmp = 0;
 
 	val = readl(COMBO_REG_USB_BGR(sunxi_cphy->top_subsys_reg));
-	tmp = USB2_ACLK_EN | USB2_HCLK_EN | USB2_U3_UTMI_CLK_SEL;
-	//tmp = USB2_ACLK_EN | USB2_HCLK_EN;
+
+	tmp = USB2_ACLK_EN | USB2_HCLK_EN;
+
+#if IS_ENABLED(CONFIG_ARCH_SUN65IW1)
+	if ((sunxi_get_soc_ver() < 2) && (sunxi_cphy->usb_phy_mode == PHY_MODE_USB_U3_ONLY))
+		tmp |= USB2_U3_UTMI_CLK_SEL;
+#endif
+
 	if (enable)
 		val |= tmp;
 	else
@@ -248,12 +269,54 @@ static void combo_phy_mode_set(struct sunxi_synopsys_phy *sunxi_cphy, bool enabl
 		val &= ~PHY_USE_SEL;
 	writel(val, COMBO_REG_HSI_GBLC(sunxi_cphy->top_subsys_reg));
 
-	val = readl(COMBO_REG_U2PHY_MODE(sunxi_cphy->top_subsys_reg));
-	//if (enable)
-	//	val |= USB2_U2PHY_MODE;
-	//else
-	//	val &= ~USB2_U2PHY_MODE;
-	writel(val, COMBO_REG_U2PHY_MODE(sunxi_cphy->top_subsys_reg));
+	if (sunxi_cphy->cfg->has_u2u3_mode) {
+		val = readl(COMBO_REG_U2PHY_MODE(sunxi_cphy->top_subsys_reg));
+#if IS_ENABLED(CONFIG_ARCH_SUN65IW1)
+	/*fix sun65iw1 u2 only/u3 only situation*/
+		if (enable || !sunxi_cphy->usb_supported) {
+			switch (sunxi_cphy->usb_phy_mode) {
+			case PHY_MODE_USB_U2_U3:
+				val |= USB2_U2PHY_MODE;
+				break;
+			case PHY_MODE_USB_U3_ONLY:
+				/* use default*/
+				break;
+			case PHY_MODE_USB_U2_ONLY:
+				val |= USB2_U2PHY_MODE;
+				break;
+			case PHY_MODE_USB_DISALBED:
+				val &= ~USB2_U2PHY_MODE;
+				break;
+			default:
+				break;
+			}
+		} else {
+			val &= ~USB2_U2PHY_MODE;
+		}
+#else
+		if (enable || !sunxi_cphy->usb_supported) {
+			switch (sunxi_cphy->usb_phy_mode) {
+			case PHY_MODE_USB_U2_U3:
+				val |= (USB2_U2PHY_MODE | USB2_U3PHY_MODE);
+				break;
+			case PHY_MODE_USB_U3_ONLY:
+				val |= USB2_U3PHY_MODE;
+				break;
+			case PHY_MODE_USB_U2_ONLY:
+				val |= USB2_U2PHY_MODE;
+				break;
+			case PHY_MODE_USB_DISALBED:
+				val &= ~(USB2_U2PHY_MODE | USB2_U3PHY_MODE);
+				break;
+			default:
+				break;
+			}
+		} else {
+			val &= ~(USB2_U2PHY_MODE | USB2_U3PHY_MODE);
+		}
+#endif
+		writel(val, COMBO_REG_U2PHY_MODE(sunxi_cphy->top_subsys_reg));
+	}
 }
 
 static __u32 combo_phy_ver_get(struct sunxi_synopsys_phy *sunxi_cphy)
@@ -498,8 +561,25 @@ static int combo0_usb_phy_init(struct phy *phy)
 			return ret;
 		}
 	}
+	/*only ICs with u2u3phy mode need to adjust if combo need to config*/
+	if (sunxi_cphy->cfg->has_u2u3_mode) {
+		/*
+		usb_phy_mode == PHY_MODE_USB_U2_ONLY/PHY_MODE_USB_DISALBED,should close usb3 combophy,
+		because the usb3.0 mac of the controller has been turned off,only use usb2.0 phy
+		*/
+#if IS_ENABLED(CONFIG_ARCH_SUN65IW1)
+		combo0_usb_param_config(sunxi_cphy, true);
+#else
+		if (sunxi_cphy->usb_phy_mode == PHY_MODE_USB_U2_ONLY || sunxi_cphy->usb_phy_mode == PHY_MODE_USB_DISALBED) {
+			combo0_usb_param_config(sunxi_cphy, false);
+		} else {
+			combo0_usb_param_config(sunxi_cphy, true);
+		}
+#endif
+	} else {
+		combo0_usb_param_config(sunxi_cphy, true);
+	}
 
-	combo0_usb_param_config(sunxi_cphy, true);
 	combo0_usb_set_calibrate(sunxi_cphy);
 
 	return 0;
@@ -722,7 +802,17 @@ static int sunxi_synopsys_phy_create(struct device *dev, struct device_node *np,
 	return 0;
 }
 
-static int sunxi_synopsys_phy_subsys_init(struct sunxi_synopsys_phy *sunxi_cphy)
+static int sunxi_synopsys_phy_subsys_init_usb(struct sunxi_synopsys_phy *sunxi_cphy)
+{
+	if (sunxi_cphy->usb_supported)
+		combo_phy_mode_set(sunxi_cphy, true);
+
+	combo_usb3_clk_set(sunxi_cphy, true);
+
+	return 0;
+}
+
+static int sunxi_synopsys_phy_subsys_init_common(struct sunxi_synopsys_phy *sunxi_cphy)
 {
 	int ret;
 
@@ -766,23 +856,31 @@ static int sunxi_synopsys_phy_subsys_init(struct sunxi_synopsys_phy *sunxi_cphy)
 		}
 	}
 
-	if (sunxi_cphy->usb_supported) {
-		combo_phy_mode_set(sunxi_cphy, true);
-		combo_usb3_clk_set(sunxi_cphy, true);
-	}
-
 	sunxi_cphy->vernum = combo_phy_ver_get(sunxi_cphy);
 
 	return 0;
 }
 
-static void sunxi_synopsys_phy_subsys_exit(struct sunxi_synopsys_phy *sunxi_cphy)
+static int sunxi_synopsys_phy_subsys_init(struct sunxi_synopsys_phy *sunxi_cphy)
 {
-	if (sunxi_cphy->usb_supported) {
-		combo_usb3_clk_set(sunxi_cphy, false);
-		combo_phy_mode_set(sunxi_cphy, false);
-	}
+	int ret;
 
+	ret = sunxi_synopsys_phy_subsys_init_common(sunxi_cphy);
+	ret |= sunxi_synopsys_phy_subsys_init_usb(sunxi_cphy);
+
+	return ret;
+}
+
+static void sunxi_synopsys_phy_subsys_exit_usb(struct sunxi_synopsys_phy *sunxi_cphy)
+{
+	if (sunxi_cphy->usb_supported)
+		combo_phy_mode_set(sunxi_cphy, false);
+
+	combo_usb3_clk_set(sunxi_cphy, false);
+}
+
+static void sunxi_synopsys_phy_subsys_exit_common(struct sunxi_synopsys_phy *sunxi_cphy)
+{
 	if (sunxi_cphy->axi_bus_clk)
 		clk_disable_unprepare(sunxi_cphy->axi_bus_clk);
 
@@ -799,6 +897,12 @@ static void sunxi_synopsys_phy_subsys_exit(struct sunxi_synopsys_phy *sunxi_cphy
 		clk_disable_unprepare(sunxi_cphy->bus_clk);
 }
 
+static void sunxi_synopsys_phy_subsys_exit(struct sunxi_synopsys_phy *sunxi_cphy)
+{
+	sunxi_synopsys_phy_subsys_exit_usb(sunxi_cphy);
+	sunxi_synopsys_phy_subsys_exit_common(sunxi_cphy);
+}
+
 static int sunxi_synopsys_phy_parse_dt(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
@@ -808,6 +912,22 @@ static int sunxi_synopsys_phy_parse_dt(struct platform_device *pdev)
 
 	/* usb supported */
 	sunxi_cphy->usb_supported = !device_property_read_bool(dev, "usb-disable");
+
+	/*only ICs with u2u3phy mode need to get mode from device tree*/
+	if (sunxi_cphy->cfg->has_u2u3_mode) {
+		if (device_property_read_u32(dev, "usb-phy-mode", &sunxi_cphy->usb_phy_mode)) {
+			sunxi_cphy->usb_phy_mode = PHY_MODE_USB_U2_U3;
+			dev_warn(dev, "usb-phy-mode not set, using default value %d\n",
+				sunxi_cphy->usb_phy_mode);
+		} else {
+			dev_info(dev, "usb-phy-mode: %d\n", sunxi_cphy->usb_phy_mode);
+		}
+#if IS_ENABLED(CONFIG_ARCH_SUN65IW1)
+	/* (sun65iw1 && soc_ver=0/1 && U2U3) -> change to U3_ONLY */
+	if ((sunxi_get_soc_ver() < 2) && (sunxi_cphy->usb_phy_mode == PHY_MODE_USB_U2_U3))
+		sunxi_cphy->usb_phy_mode = PHY_MODE_USB_U3_ONLY;
+#endif
+	}
 	/* parse top register, which determide general configuration such as mode */
 	sunxi_cphy->top_subsys_reg = devm_platform_ioremap_resource(pdev, 0);
 	if (IS_ERR(sunxi_cphy->top_subsys_reg))
@@ -904,6 +1024,10 @@ static int sunxi_synopsys_phy_probe(struct platform_device *pdev)
 	sunxi_cphy->mode = PHY_NONE;
 	dev_set_drvdata(dev, sunxi_cphy);
 
+	sunxi_cphy->cfg = of_device_get_match_data(dev);
+	if (!sunxi_cphy->cfg)
+		return -ENODEV;
+
 	ret = sunxi_synopsys_phy_parse_dt(pdev);
 	if (ret)
 		return -EINVAL;
@@ -936,7 +1060,9 @@ static int __maybe_unused sunxi_synopsys_phy_suspend(struct device *dev)
 {
 	struct sunxi_synopsys_phy *sunxi_cphy = dev_get_drvdata(dev);
 
-	sunxi_synopsys_phy_subsys_exit(sunxi_cphy);
+	sunxi_synopsys_phy_subsys_exit_usb(sunxi_cphy);
+
+	sunxi_debug(dev, "suspend finished\n");
 
 	return 0;
 }
@@ -946,21 +1072,60 @@ static int __maybe_unused sunxi_synopsys_phy_resume(struct device *dev)
 	struct sunxi_synopsys_phy *sunxi_cphy = dev_get_drvdata(dev);
 	int ret;
 
-	ret = sunxi_synopsys_phy_subsys_init(sunxi_cphy);
+	ret = sunxi_synopsys_phy_subsys_init_usb(sunxi_cphy);
 	if (ret) {
 		dev_err(dev, "failed to resume sub system\n");
 		return ret;
 	}
+
+	sunxi_debug(dev, "resume finished\n");
+
+	return 0;
+}
+
+static int __maybe_unused sunxi_synopsys_phy_suspend_noirq(struct device *dev)
+{
+	struct sunxi_synopsys_phy *sunxi_cphy = dev_get_drvdata(dev);
+
+	sunxi_synopsys_phy_subsys_exit_common(sunxi_cphy);
+
+	sunxi_debug(dev, "noirq suspend finished\n");
+
+	return 0;
+}
+
+static int __maybe_unused sunxi_synopsys_phy_resume_noirq(struct device *dev)
+{
+	struct sunxi_synopsys_phy *sunxi_cphy = dev_get_drvdata(dev);
+	int ret;
+
+	ret = sunxi_synopsys_phy_subsys_init_common(sunxi_cphy);
+	if (ret) {
+		dev_err(dev, "failed to resume sub system\n");
+		return ret;
+	}
+
+	sunxi_debug(dev, "noirq resume finished\n");
 
 	return 0;
 }
 
 static struct dev_pm_ops sunxi_synopsys_phy_pm_ops = {
 	SET_SYSTEM_SLEEP_PM_OPS(sunxi_synopsys_phy_suspend, sunxi_synopsys_phy_resume)
+	SET_NOIRQ_SYSTEM_SLEEP_PM_OPS(sunxi_synopsys_phy_suspend_noirq, sunxi_synopsys_phy_resume_noirq)
+};
+
+static struct sunxi_phy_config synopsys_combophy = {
+	.has_u2u3_mode = false,
+};
+
+static struct sunxi_phy_config synopsys_combophy_v2 = {
+	.has_u2u3_mode	= true,
 };
 
 static const struct of_device_id sunxi_synopsys_phy_of_match_table[] = {
-	{ .compatible = "allwinner,synopsys-combophy", },
+	{ .compatible = "allwinner,synopsys-combophy", .data = &synopsys_combophy},
+	{ .compatible = "allwinner,synopsys-combophy-v2", .data = &synopsys_combophy_v2},
 	{ /* Sentinel */ }
 };
 
@@ -978,5 +1143,5 @@ module_platform_driver(sunxi_synopsys_phy_driver);
 
 MODULE_AUTHOR("kanghoupeng@allwinnertech.com");
 MODULE_DESCRIPTION("Allwinner SYNOPSYS COMBOPHY driver");
-MODULE_VERSION("0.1.1");
+MODULE_VERSION("0.1.4");
 MODULE_LICENSE("GPL v2");

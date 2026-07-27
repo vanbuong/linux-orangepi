@@ -213,6 +213,8 @@ struct sunxi_owa_dts {
 	size_t capture_cma;
 	size_t capture_fifo_size;
 
+	unsigned int owa_num;
+
 	bool tx_hub_en;		/* tx_hub */
 
 	/* components func -> rx_sync */

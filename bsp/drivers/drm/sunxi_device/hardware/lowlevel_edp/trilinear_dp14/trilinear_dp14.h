@@ -180,9 +180,10 @@
 #define TR_PSR2_UPDATE_BOTTOM			(0x9B4)
 #define TR_PSR2_UPDATE_LEFT				(0x9B8)
 #define TR_PSR2_UPDATE_WIDTH			(0x9BC)
-#define TR_DP_LINK_CLK_CFG				(0x2000)
-#define TR_DP_VID_CLK_CFG				(0x2004)
-#define TR_DP_MISC_RESERVED				(0x2018)
+
+#define TR_TOP_DP_LINK_CLK_CFG			(0x00)
+#define TR_TOP_DP_VID_CLK_CFG			(0x04)
+#define TR_TOP_DP_MISC_RESERVED			(0x18)
 
 #define HPD_EVENT_MASK					BIT(0)
 #define HPD_IRQ_MASK					BIT(1)

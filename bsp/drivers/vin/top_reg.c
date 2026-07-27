@@ -235,9 +235,10 @@ void csic_bk_intpool_clear_status(unsigned int sel, enum csis_bk_intpool interru
 void csic_bk_intpool_get_status(unsigned int sel, struct cisc_bk_intpool_status *status)
 {
 	unsigned int reg_val = vin_reg_readl(csic_top_base[sel] + CSIC_BK_INTPOOL0_INT_STA0_REG_OFF);
+	unsigned int irq_enable = vin_reg_readl(csic_top_base[sel] + CSIC_BK_INTPOOL0_INT_EN0_REG_OFF);
 
-	status->fifo_full = (reg_val & FIFO_FULL_INT_PD_MASK) >> FIFO_FULL_INT_PD;
-	status->fifo_avl = (reg_val & FIFO_AVL_INT_PD_MASK) >> FIFO_AVL_INT_PD;
+	status->fifo_full = (reg_val & FIFO_FULL_INT_PD_MASK) >> FIFO_FULL_INT_PD & (irq_enable & FIFO_FULL_INT_PD_MASK) >> FIFO_FULL_INT_PD;
+	status->fifo_avl = (reg_val & FIFO_AVL_INT_PD_MASK) >> FIFO_AVL_INT_PD & (irq_enable & FIFO_AVL_INT_PD_MASK) >> FIFO_AVL_INT_PD;
 }
 
 void csic_bk_intpool_en(unsigned int sel, unsigned int en)
@@ -265,7 +266,7 @@ void csic_bk_intpool_src_sel(unsigned int sel, struct bk_intpool_cfg cfg)
 			CSIC_SRC_MSK_CFG_GROUP1_MASK, (~cfg.mask_cfg1) << CSIC_SRC_MSK_CFG_GROUP1);
 }
 
-int csic_top_set_base_addr(unsigned int sel, unsigned long addr)
+int csic_top_set_base_addr(unsigned int sel, vin_dma_addr_t addr)
 {
 	if (sel > MAX_CSIC_TOP_NUM - 1)
 		return -1;
@@ -328,6 +329,30 @@ void csic_top_isp_bridge_ch_disable(unsigned int sel)
 			CSIC_ISP_BRIDGE_CH_EN_DISABLE_MASK, 1 << CSIC_ISP_BRIDGE_CH_EN_DISABLE);
 }
 
+void csic_top_isp1_bridge_ch_enable(unsigned int sel)
+{
+	vin_reg_clr_set(csic_top_base[sel] + CSIC_TOP_EN_REG_OFF,
+			CSIC_ISP1_BRIDGE_CH_EN_DISABLE_MASK, 0 << CSIC_ISP1_BRIDGE_CH_EN_DISABLE);
+}
+
+void csic_top_isp1_bridge_ch_disable(unsigned int sel)
+{
+	vin_reg_clr_set(csic_top_base[sel] + CSIC_TOP_EN_REG_OFF,
+			CSIC_ISP1_BRIDGE_CH_EN_DISABLE_MASK, 1 << CSIC_ISP1_BRIDGE_CH_EN_DISABLE);
+}
+
+void csic_top_f2s1_bridge_en(unsigned int sel, unsigned int en, unsigned int id)
+{
+	vin_reg_clr_set(csic_top_base[sel] + CSIC_TOP_EN_REG_OFF,
+			CSIC_ISP1_F2S1_BRIDGE_CH_EN_MASK << id, en << (CSIC_ISP1_F2S1_BRIDGE_CH_EN + id));
+}
+
+void csic_top_s2f1_bridge_en(unsigned int sel, unsigned int en, unsigned int id)
+{
+	vin_reg_clr_set(csic_top_base[sel] + CSIC_TOP_EN_REG_OFF,
+			CSIC_ISP1_S1F2_BRIDGE_CH_EN_MASK << id, en << (CSIC_ISP1_S1F2_BRIDGE_CH_EN + id));
+}
+
 void csic_top_version_read_en(unsigned int sel, unsigned int en)
 {
 	vin_reg_clr_set(csic_top_base[sel] + CSIC_TOP_EN_REG_OFF,
@@ -346,15 +371,6 @@ void csic_vipp_input_select(unsigned int sel, unsigned int vipp,
 {
 	vin_reg_writel(csic_top_base[sel] + CSIC_VIPP0_IN_REG_OFF + vipp * 4,
 			vipp_input[vipp][isp][ch]);
-}
-
-void csic_dma_input_select(unsigned int sel, unsigned int dma,
-				unsigned int parser, unsigned int ch)
-{
-#if IS_ENABLED(CONFIG_ARCH_SUN50IW9)
-	vin_reg_writel(csic_top_base[sel] + CSIC_VIPP0_IN_REG_OFF + dma * 4,
-			dma_input[dma][parser][ch]);
-#endif
 }
 
 void csic_feature_list_get(unsigned int sel, struct csic_feature_list *fl)
@@ -420,8 +436,8 @@ void csic_mulp_int_get_status(unsigned int sel, struct cisc_mulp_int_status *sta
 {
 	unsigned int reg_val = vin_reg_readl(csic_top_base[sel] + CSIC_MULP_INT_REG_OFF);
 
-	status->mulf_done = (reg_val & CSIC_MULP_DONE_PD_MASK) >> CSIC_MULP_DONE_PD;
-	status->mulf_err = (reg_val & CSIC_MULP_ERR_PD_MASK) >> CSIC_MULP_ERR_PD;
+	status->mulf_done = (reg_val & CSIC_MULP_DONE_PD_MASK) >> CSIC_MULP_DONE_PD & (reg_val & CSIC_MULP_DONE_EN_MASK) >> CSIC_MULP_DONE_EN;
+	status->mulf_err = (reg_val & CSIC_MULP_ERR_PD_MASK) >> CSIC_MULP_ERR_PD & (reg_val & CSIC_MULP_ERR_EN_MASK) >> CSIC_MULP_ERR_EN;
 }
 
 void csic_mulp_int_clear_status(unsigned int sel, enum csis_mulp_int interrupt)
@@ -457,7 +473,7 @@ void csic_ptn_length(unsigned int sel, unsigned int len)
 	vin_reg_writel(csic_top_base[sel] + CSIC_PTN_LEN_REG_OFF, len);
 }
 
-void csic_ptn_addr(unsigned int sel, unsigned long dma_addr)
+void csic_ptn_addr(unsigned int sel, vin_dma_addr_t dma_addr)
 {
 	vin_reg_writel(csic_top_base[sel] + CSIC_PTN_ADDR_REG_OFF, dma_addr >> 2);
 }
@@ -529,7 +545,7 @@ void csic_chfreq_obs_read(unsigned int sel, struct csic_chfreq_obs_value *value)
 /*
  * functions about ccu register
  */
-int csic_ccu_set_base_addr(unsigned long addr)
+int csic_ccu_set_base_addr(vin_dma_addr_t addr)
 {
 	csic_ccu_base = (volatile void __iomem *)addr;
 
@@ -570,6 +586,24 @@ void csic_ccu_mcsi_clk_mode(unsigned int mode)
 			CSIC_MCSI_POST_CLK_MODE_MASK, mode << CSIC_MCSI_POST_CLK_MODE);
 }
 
+void csic_ccu_mcsi_hclk_autogate_enable(void)
+{
+		vin_reg_clr_set(csic_ccu_base + CSIC_CCU_MODE_REG_OFF,
+			CSIC_MCSI_HCLK_AUTOGATE_EN_MASK, 1 << CSIC_MCSI_HCLK_AUTOGATE_EN);
+}
+
+void csic_ccu_mcsi_hclk_autogate_disable(void)
+{
+		vin_reg_clr_set(csic_ccu_base + CSIC_CCU_MODE_REG_OFF,
+			CSIC_MCSI_HCLK_AUTOGATE_EN_MASK, 0 << CSIC_MCSI_HCLK_AUTOGATE_EN);
+}
+
+void csic_ccu_mcsi_hclk_autogate_cycle_set(unsigned int cycle)
+{
+		vin_reg_clr_set(csic_ccu_base + CSIC_CCU_MODE_REG_OFF,
+			CSIC_MCSI_HCLK_AUTOGATE_CYCLE_MASK, cycle << CSIC_MCSI_HCLK_AUTOGATE_CYCLE);
+}
+
 void csic_ccu_mcsi_combo_clk_en(unsigned int sel, unsigned int en)
 {
 	vin_reg_clr_set(csic_ccu_base + CSIC_CCU_PARSER_CLK_EN_REG_OFF,
@@ -608,6 +642,18 @@ void csic_ccu_misp_bridge_clk_gating_disable(void)
 			CSIC_MISP0_BRIDGE_CH_CLK_GATING_DISABLE_MASK, 1 << CSIC_MISP0_BRIDGE_CH_CLK_GATING_DISABLE);
 }
 
+void csic_ccu_misp1_bridge_clk_gating_enable(void)
+{
+	vin_reg_clr_set(csic_ccu_base + CSIC_CCU_ISP_CLK_EN_REG_OFF,
+			CSIC_MISP1_BRIDGE_CH_CLK_GATING_DISABLE_MASK, 0 << CSIC_MISP1_BRIDGE_CH_CLK_GATING_DISABLE);
+}
+
+void csic_ccu_misp1_bridge_clk_gating_disable(void)
+{
+	vin_reg_clr_set(csic_ccu_base + CSIC_CCU_ISP_CLK_EN_REG_OFF,
+			CSIC_MISP1_BRIDGE_CH_CLK_GATING_DISABLE_MASK, 1 << CSIC_MISP1_BRIDGE_CH_CLK_GATING_DISABLE);
+}
+
 void csic_ccu_f2s0_bridge_clk_en(unsigned int en, unsigned int id)
 {
 	vin_reg_clr_set(csic_ccu_base + CSIC_CCU_ISP_CLK_EN_REG_OFF,
@@ -618,6 +664,18 @@ void csic_ccu_s2f0_bridge_clk_en(unsigned int en, unsigned int id)
 {
 	vin_reg_clr_set(csic_ccu_base + CSIC_CCU_ISP_CLK_EN_REG_OFF,
 			CSIC_MISP0_S2F0_BRIDGE_CH_CLK_EN_MASK << id, en << (CSIC_MISP0_S2F0_BRIDGE_CH_CLK_EN + id));
+}
+
+void csic_ccu_f2s1_bridge_clk_en(unsigned int en, unsigned int id)
+{
+	vin_reg_clr_set(csic_ccu_base + CSIC_CCU_ISP_CLK_EN_REG_OFF,
+			CSIC_MISP1_F2S1_BRIDGE_CH_CLK_EN_MASK << id, en << (CSIC_MISP1_F2S1_BRIDGE_CH_CLK_EN + id));
+}
+
+void csic_ccu_s2f1_bridge_clk_en(unsigned int en, unsigned int id)
+{
+	vin_reg_clr_set(csic_ccu_base + CSIC_CCU_ISP_CLK_EN_REG_OFF,
+			CSIC_MISP1_S2F1_BRIDGE_CH_CLK_EN_MASK << id, en << (CSIC_MISP1_S2F1_BRIDGE_CH_CLK_EN + id));
 }
 
 void csic_ccu_mcsi_post_clk_enable(unsigned int sel)

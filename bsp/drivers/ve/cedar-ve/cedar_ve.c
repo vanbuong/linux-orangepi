@@ -2104,7 +2104,7 @@ static void cedardev_exit(struct platform_device *pdev)
 static void ve_rv_stop_work(struct work_struct *work)
 {
 	struct cedar_dev *cedar_devp = dev_get_drvdata(&amp_ops.pdev->dev);
-	int ret;
+	int ret __maybe_unused;
 
 	if (amp_ops.rv_irq_state) {
 		cedar_devp->regulator = regulator_get(cedar_devp->plat_dev, "ve");

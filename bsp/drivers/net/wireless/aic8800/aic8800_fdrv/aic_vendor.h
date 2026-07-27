@@ -157,6 +157,25 @@ enum wifi_sub_command {
 	WIFI_SUBCMD_SET_LATENCY_MODE,                       /* 0x1018 */
 	/* Add more sub commands here */
 	GSCAN_SUBCMD_MAX,
+	NAN_WIFI_SUBCMD_ENABLE = ANDROID_NL80211_SUBCMD_NAN_RANGE_START,    /* 0x1700 */
+	NAN_WIFI_SUBCMD_DISABLE,                            /* 0x1701 */
+	NAN_WIFI_SUBCMD_REQUEST_PUBLISH,                    /* 0x1702 */
+	NAN_WIFI_SUBCMD_REQUEST_SUBSCRIBE,                  /* 0x1703 */
+	NAN_WIFI_SUBCMD_CANCEL_PUBLISH,                     /* 0x1704 */
+	NAN_WIFI_SUBCMD_CANCEL_SUBSCRIBE,                   /* 0x1705 */
+	NAN_WIFI_SUBCMD_TRANSMIT,                           /* 0x1706 */
+	NAN_WIFI_SUBCMD_CONFIG,                             /* 0x1707 */
+	NAN_WIFI_SUBCMD_TCA,                                /* 0x1708 */
+	NAN_WIFI_SUBCMD_STATS,                              /* 0x1709 */
+	NAN_WIFI_SUBCMD_GET_CAPABILITIES,                   /* 0x170A */
+	NAN_WIFI_SUBCMD_DATA_PATH_IFACE_CREATE,             /* 0x170B */
+	NAN_WIFI_SUBCMD_DATA_PATH_IFACE_DELETE,             /* 0x170C */
+	NAN_WIFI_SUBCMD_DATA_PATH_REQUEST,                  /* 0x170D */
+	NAN_WIFI_SUBCMD_DATA_PATH_RESPONSE,                 /* 0x170E */
+	NAN_WIFI_SUBCMD_DATA_PATH_END,                      /* 0x170F */
+	NAN_WIFI_SUBCMD_DATA_PATH_SEC_INFO,                 /* 0x1710 */
+	NAN_WIFI_SUBCMD_VERSION_INFO,                       /* 0x1711 */
+	NAN_WIFI_SUBCMD_ENABLE_MERGE,                       /* 0x1712 */
 	APF_SUBCMD_GET_CAPABILITIES = ANDROID_NL80211_SUBCMD_PKT_FILTER_RANGE_START,
 	APF_SUBCMD_SET_FILTER,
 #ifdef CONFIG_APF

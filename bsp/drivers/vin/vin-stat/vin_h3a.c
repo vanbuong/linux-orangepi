@@ -237,7 +237,7 @@ static int isp_stat_bufs_alloc(struct isp_stat *stat, u32 size, u32 count)
 
 #if VIN_FALSE
 	for (i = 0; i < stat->buf_cnt; i++) {
-		vin_print("save buffer%d dam_addr is 0x%px/0x%llx\n", i, stat->buf[i].dma_addr, (dma_addr_t)stat->buf[i].dma_addr >> 2);
+		vin_print("save buffer%d dam_addr is 0x%px/0x%llx\n", i, stat->buf[i].dma_addr, (vin_dma_addr_t)stat->buf[i].dma_addr >> 2);
 	}
 #endif
 
@@ -386,7 +386,7 @@ static int isp_stat_buf_queue(struct isp_stat *stat)
 static int isp_stat_buf_process(struct isp_stat *stat, int buf_state)
 {
 	int ret = STAT_BUF_DONE;
-	dma_addr_t dma_addr;
+	vin_dma_addr_t dma_addr;
 
 	if (buf_state == STAT_BUF_DONE && stat->state == ISPSTAT_ENABLED) {
 		isp_stat_buf_next(stat);
@@ -394,7 +394,7 @@ static int isp_stat_buf_process(struct isp_stat *stat, int buf_state)
 		if (!stat->active_buf)
 			return STAT_NO_BUF;
 
-		dma_addr = (dma_addr_t)(stat->active_buf->dma_addr);
+		dma_addr = (vin_dma_addr_t)(stat->active_buf->dma_addr);
 		bsp_isp_set_statistics_addr(stat->isp->id, dma_addr);
 		if (bsp_isp_get_irq_status(stat->isp->id, PARA_LOAD_PD)) {
 			stat->active_buf = NULL;
@@ -494,7 +494,7 @@ static int isp_stat_buf_queue(struct isp_stat *stat)
 static int isp_stat_buf_process(struct isp_stat *stat, int buf_state)
 {
 	int ret = STAT_NO_BUF;
-	dma_addr_t dma_addr;
+	vin_dma_addr_t dma_addr;
 
 	if (buf_state == STAT_BUF_DONE && stat->state == ISPSTAT_ENABLED) {
 		ret = isp_stat_buf_queue(stat);
@@ -503,7 +503,7 @@ static int isp_stat_buf_process(struct isp_stat *stat, int buf_state)
 		if (!stat->active_buf)
 			return STAT_NO_BUF;
 
-		dma_addr = (dma_addr_t)(stat->active_buf->dma_addr);
+		dma_addr = (vin_dma_addr_t)(stat->active_buf->dma_addr);
 		bsp_isp_set_statistics_addr(stat->isp->id, dma_addr);
 	}
 
@@ -922,7 +922,7 @@ static int isp_stat_buf_queue(struct isp_stat *stat)
 
 static int isp_stat_buf_process(struct isp_stat *stat, int buf_state)
 {
-	dma_addr_t dma_addr;
+	vin_dma_addr_t dma_addr;
 
 	if (buf_state == STAT_BUF_DONE && stat->state == ISPSTAT_ENABLED) {
 		isp_stat_buf_next(stat);
@@ -930,7 +930,7 @@ static int isp_stat_buf_process(struct isp_stat *stat, int buf_state)
 		if (!stat->active_buf)
 			return STAT_NO_BUF;
 
-		dma_addr = (dma_addr_t)(stat->active_buf->dma_addr);
+		dma_addr = (vin_dma_addr_t)(stat->active_buf->dma_addr);
 		bsp_isp_set_statistics_addr(stat->isp->id, dma_addr);
 		if (bsp_isp_get_irq_status(stat->isp->id, PARA_LOAD_PD)) {
 			stat->active_buf = NULL;

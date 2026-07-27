@@ -116,6 +116,9 @@ enum phy_link_mode {
 	ONE_2LANE = 0x1, /* 1x2lane */
 #elif IS_ENABLED(CONFIG_ARCH_SUN60IW2)
 	TWO_4LANE_ONE_2LANE = 0x0, /*2x4-lane(phya+phyb) + 1x2-lane)*/
+#elif IS_ENABLED(CONFIG_ARCH_SUN65IW1)
+	ONE_4LANE_PHYA = 0x0, /*4lane(phya)+2lane(phyb)+2lane(phyc)*/
+	TWO_4LANE = 0x1, /*4lane(phya)+4lane(phyb)*/
 #else /* CONFIG_ARCH_SUN55IW3 CONFIG_ARCH_SUN55IW6 */
 	FOUR_2LANE = 0x0, /*4x2lane, 4x1lane, default*/
 	ONE_4LANE_PHYA = 0x1, /*2x2lane+1x4lane(phya+phyb)*/

@@ -1246,6 +1246,14 @@ static void snd_sunxi_dts_params_init(struct platform_device *pdev, struct sunxi
 		dts->capture_fifo_size = temp_val;
 	}
 
+	ret = of_property_read_u32(np, "owa-num", &temp_val);
+	if (ret < 0) {
+		SND_LOG_WARN("owa-num config missing\n");
+		dts->owa_num = 0;
+	} else {
+		dts->owa_num = temp_val;
+	}
+
 	SND_LOG_DEBUG("playback-cma : %zu\n", dts->playback_cma);
 	SND_LOG_DEBUG("capture-cma  : %zu\n", dts->capture_cma);
 	SND_LOG_DEBUG("tx-fifo-size : %zu\n", dts->playback_fifo_size);
@@ -1588,7 +1596,7 @@ static int sunxi_owa_dev_probe(struct platform_device *pdev)
 		SND_LOG_WARN("irq init failed\n");
 
 #if IS_ENABLED(CONFIG_SND_SOC_SUNXI_DEBUG)
-	snprintf(owa->module_name, 32, "%s", "OWA");
+	snprintf(owa->module_name, 32, "%s%u", "OWA", dts->owa_num);
 	dump->name = owa->module_name;
 	dump->priv = owa;
 	dump->dump_version = snd_sunxi_dump_version;
@@ -1621,7 +1629,11 @@ err_devm_kzalloc:
 	return ret;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 11, 0)
+static void sunxi_owa_dev_remove(struct platform_device *pdev)
+#else
 static int sunxi_owa_dev_remove(struct platform_device *pdev)
+#endif
 {
 	struct device *dev = &pdev->dev;
 	struct device_node *np = pdev->dev.of_node;
@@ -1656,8 +1668,11 @@ static int sunxi_owa_dev_remove(struct platform_device *pdev)
 	of_node_put(np);
 
 	SND_LOG_DEBUG("unregister owa platform success\n");
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 11, 0)
+	return;
+#else
 	return 0;
+#endif
 }
 
 static const struct sunxi_owa_quirks sunxi_owa_quirks = {
@@ -1709,7 +1724,7 @@ static struct platform_driver sunxi_owa_driver = {
 	.remove	= sunxi_owa_dev_remove,
 };
 
-int __init sunxi_owa_dev_init(void)
+static int __init sunxi_owa_dev_init(void)
 {
 	int ret;
 
@@ -1722,7 +1737,7 @@ int __init sunxi_owa_dev_init(void)
 	return ret;
 }
 
-void __exit sunxi_owa_dev_exit(void)
+static void __exit sunxi_owa_dev_exit(void)
 {
 	platform_driver_unregister(&sunxi_owa_driver);
 }
@@ -1732,5 +1747,5 @@ module_exit(sunxi_owa_dev_exit);
 
 MODULE_AUTHOR("Dby@allwinnertech.com");
 MODULE_LICENSE("GPL");
-MODULE_VERSION("1.0.11");
+MODULE_VERSION("1.0.13");
 MODULE_DESCRIPTION("sunxi soundcard platform of owa");

@@ -163,7 +163,7 @@ static int ss_sg_config(ce_scatter_t *scatter,
 		return 0;
 	}
 
-	if (CE_METHOD_IS_HASH(type)) {
+	if (CE_METHOD_IS_HASH(type) || CE_METHOD_IS_HMAC(type)) {
 		scatter[cnt-1].len -= tail >> 2;
 		return 0;
 	}
@@ -198,7 +198,7 @@ static void ss_aes_unpadding(ce_scatter_t *scatter,
 		return;
 
 	/* Only the dst sg need to be recovered. */
-	if (info->dir == DMA_DEV_TO_MEM) {
+	if (info->dir == DMA_FROM_DEVICE) {
 		last_sg_len = scatter[index].len * 4;
 		last_sg_len -= ss_aes_align_size(0, mode) - tail;
 		ss_copy_to_user(info->last_sg, info->padding, last_sg_len);
@@ -339,21 +339,21 @@ static int ss_aes_start(ss_aes_ctx_t *ctx, ss_aes_req_ctx_t *req_ctx, int len)
 	ss_key_set(ctx->key, ctx->key_size, task);
 	ctx->comm.flags &= ~SS_FLAG_NEW_KEY;
 	dma_map_single(&ss_dev->pdev->dev,
-		ctx->key, ctx->key_size, DMA_MEM_TO_DEV);
+		ctx->key, ctx->key_size, DMA_TO_DEVICE);
 
 	if (ctx->iv_size > 0) {
 		phy_addr = virt_to_phys(ctx->iv);
 		SS_DBG("ctx->iv vir = 0x%px phy = 0x%px\n", ctx->iv, (void *)phy_addr);
 		ss_iv_set(ctx->iv, ctx->iv_size, task);
 		dma_map_single(&ss_dev->pdev->dev,
-			ctx->iv, ctx->iv_size, DMA_MEM_TO_DEV);
+			ctx->iv, ctx->iv_size, DMA_TO_DEVICE);
 
 		phy_addr = virt_to_phys(ctx->next_iv);
 		SS_DBG("ctx->next_iv addr, vir = 0x%px, phy = 0x%px\n",
 			ctx->next_iv, (void *)phy_addr);
 		ss_cnt_set(ctx->next_iv, ctx->iv_size, task);
 		dma_map_single(&ss_dev->pdev->dev,
-			ctx->next_iv, ctx->iv_size, DMA_DEV_TO_MEM);
+			ctx->next_iv, ctx->iv_size, DMA_FROM_DEVICE);
 	}
 
 	align_size = ss_aes_align_size(req_ctx->type, req_ctx->mode);
@@ -367,20 +367,20 @@ static int ss_aes_start(ss_aes_ctx_t *ctx, ss_aes_req_ctx_t *req_ctx, int len)
 		src_len = ss_sg_len(req_ctx->dma_src.sg, len);
 
 	dma_map_sg(&ss_dev->pdev->dev,
-		req_ctx->dma_src.sg, req_ctx->dma_src.nents, DMA_MEM_TO_DEV);
+		req_ctx->dma_src.sg, req_ctx->dma_src.nents, DMA_TO_DEVICE);
 	ss_sg_config(task->src,	&req_ctx->dma_src,
 		req_ctx->type, req_ctx->mode, src_len%align_size);
 	ss_aes_map_padding(task->src,
-		&req_ctx->dma_src, req_ctx->mode, DMA_MEM_TO_DEV);
+		&req_ctx->dma_src, req_ctx->mode, DMA_TO_DEVICE);
 
 	/* Prepare the dst scatterlist */
 	req_ctx->dma_dst.nents = ss_sg_cnt(req_ctx->dma_dst.sg, len);
 	dma_map_sg(&ss_dev->pdev->dev,
-		req_ctx->dma_dst.sg, req_ctx->dma_dst.nents, DMA_DEV_TO_MEM);
+		req_ctx->dma_dst.sg, req_ctx->dma_dst.nents, DMA_FROM_DEVICE);
 	ss_sg_config(task->dst,	&req_ctx->dma_dst,
 		req_ctx->type, req_ctx->mode, len%align_size);
 	ss_aes_map_padding(task->dst,
-		&req_ctx->dma_dst, req_ctx->mode, DMA_DEV_TO_MEM);
+		&req_ctx->dma_dst, req_ctx->mode, DMA_FROM_DEVICE);
 
 #ifdef SS_SUPPORT_CE_V3_1
 	if (CE_IS_AES_MODE(req_ctx->type, req_ctx->mode, CTS)) {
@@ -419,7 +419,7 @@ static int ss_aes_start(ss_aes_ctx_t *ctx, ss_aes_req_ctx_t *req_ctx, int len)
 	init_completion(&ss_dev->flows[flow].done);
 #ifndef TASK_DMA_POOL
 	dma_map_single(&ss_dev->pdev->dev, task, sizeof(ce_task_desc_t),
-		DMA_MEM_TO_DEV);
+		DMA_TO_DEVICE);
 #endif
 	SS_DBG("preCE, COMM: 0x%08x, SYM: 0x%08x, ASYM: 0x%08x, data_len:%d\n",
 		task->comm_ctl, task->sym_ctl, task->asym_ctl, task->data_len);
@@ -438,29 +438,29 @@ static int ss_aes_start(ss_aes_ctx_t *ctx, ss_aes_req_ctx_t *req_ctx, int len)
 
 #ifndef TASK_DMA_POOL
 	dma_unmap_single(&ss_dev->pdev->dev, virt_to_phys(task),
-		sizeof(ce_task_desc_t), DMA_MEM_TO_DEV);
+		sizeof(ce_task_desc_t), DMA_TO_DEVICE);
 #endif
 	/* Unpadding and unmap the dst sg. */
 	ss_aes_unpadding(task->dst,
 		&req_ctx->dma_dst, req_ctx->mode, len%align_size);
 	ss_aes_unmap_padding(task->dst,
-		&req_ctx->dma_dst, req_ctx->mode, DMA_DEV_TO_MEM);
+		&req_ctx->dma_dst, req_ctx->mode, DMA_FROM_DEVICE);
 	dma_unmap_sg(&ss_dev->pdev->dev,
-		req_ctx->dma_dst.sg, req_ctx->dma_dst.nents, DMA_DEV_TO_MEM);
+		req_ctx->dma_dst.sg, req_ctx->dma_dst.nents, DMA_FROM_DEVICE);
 
 	/* Unpadding and unmap the src sg. */
 	ss_aes_unpadding(task->src,
 		&req_ctx->dma_src, req_ctx->mode, src_len%align_size);
 	ss_aes_unmap_padding(task->src,
-		&req_ctx->dma_src, req_ctx->mode, DMA_MEM_TO_DEV);
+		&req_ctx->dma_src, req_ctx->mode, DMA_TO_DEVICE);
 	dma_unmap_sg(&ss_dev->pdev->dev,
-		req_ctx->dma_src.sg, req_ctx->dma_src.nents, DMA_MEM_TO_DEV);
+		req_ctx->dma_src.sg, req_ctx->dma_src.nents, DMA_TO_DEVICE);
 
 	if (ctx->iv_size > 0) {
 		dma_unmap_single(&ss_dev->pdev->dev, virt_to_phys(ctx->iv),
-			ctx->iv_size, DMA_MEM_TO_DEV);
+			ctx->iv_size, DMA_TO_DEVICE);
 		dma_unmap_single(&ss_dev->pdev->dev, virt_to_phys(ctx->next_iv),
-			ctx->iv_size, DMA_DEV_TO_MEM);
+			ctx->iv_size, DMA_FROM_DEVICE);
 	}
 	/* Backup the next IV from ctr_descriptor, except CBC/CTS/XTS mode. */
 	if (CE_METHOD_IS_AES(req_ctx->type)
@@ -470,7 +470,7 @@ static int ss_aes_start(ss_aes_ctx_t *ctx, ss_aes_req_ctx_t *req_ctx, int len)
 		memcpy(ctx->iv, ctx->next_iv, ctx->iv_size);
 
 	dma_unmap_single(&ss_dev->pdev->dev,
-		virt_to_phys(ctx->key), ctx->key_size, DMA_MEM_TO_DEV);
+		virt_to_phys(ctx->key), ctx->key_size, DMA_TO_DEVICE);
 
 	ce_task_destroy(task);
 	SS_DBG("After CE, TSR: 0x%08x, ERR: 0x%08x\n",
@@ -567,7 +567,7 @@ static int ss_rng_start(ss_aes_ctx_t *ctx, u8 *rdata, u32 dlen, u32 trng)
 		ss_key_set(ctx->key, ctx->key_size, task);
 		ctx->comm.flags &= ~SS_FLAG_NEW_KEY;
 		dma_map_single(&ss_dev->pdev->dev,
-			ctx->key, ctx->key_size, DMA_MEM_TO_DEV);
+			ctx->key, ctx->key_size, DMA_TO_DEVICE);
 	}
 	phy_addr = virt_to_phys(buf);
 	SS_DBG("buf addr, vir = 0x%px, phy = 0x%px\n", buf, (void *)phy_addr);
@@ -575,7 +575,7 @@ static int ss_rng_start(ss_aes_ctx_t *ctx, u8 *rdata, u32 dlen, u32 trng)
 	/* Prepare the dst scatterlist */
 	task->dst[0].addr = (virt_to_phys(buf) >> WORD_ALGIN) & 0xffffffff;
 	task->dst[0].len  = rng_len >> 2;
-	dma_map_single(&ss_dev->pdev->dev, buf, rng_len, DMA_DEV_TO_MEM);
+	dma_map_single(&ss_dev->pdev->dev, buf, rng_len, DMA_TO_DEVICE);
 	SS_DBG("task->dst_addr = 0x%x\n", task->dst[0].addr);
 #ifdef SS_SUPPORT_CE_V3_1
 	ss_data_len_set(rng_len/4, task);
@@ -591,7 +591,7 @@ static int ss_rng_start(ss_aes_ctx_t *ctx, u8 *rdata, u32 dlen, u32 trng)
 	/* Start CE controller. */
 	init_completion(&ss_dev->flows[flow].done);
 	dma_map_single(&ss_dev->pdev->dev, task,
-		sizeof(ce_task_desc_t), DMA_MEM_TO_DEV);
+		sizeof(ce_task_desc_t), DMA_TO_DEVICE);
 
 	ce_print_task_desc(task);
 	SS_DBG("Before CE, COMM_CTL: 0x%08x, TSK: 0x%08x ICR: 0x%08x TLR: 0x%08x\n",
@@ -610,12 +610,12 @@ static int ss_rng_start(ss_aes_ctx_t *ctx, u8 *rdata, u32 dlen, u32 trng)
 	SS_DBG("After CE, dst data:\n");
 
 	dma_unmap_single(&ss_dev->pdev->dev, virt_to_phys(task),
-		sizeof(ce_task_desc_t), DMA_MEM_TO_DEV);
+		sizeof(ce_task_desc_t), DMA_TO_DEVICE);
 	dma_unmap_single(&ss_dev->pdev->dev, virt_to_phys(buf),
-		rng_len, DMA_DEV_TO_MEM);
+		rng_len, DMA_FROM_DEVICE);
 	if (trng == 0)
 		dma_unmap_single(&ss_dev->pdev->dev, virt_to_phys(ctx->key),
-			ctx->key_size, DMA_MEM_TO_DEV);
+			ctx->key_size, DMA_TO_DEVICE);
 	memcpy(rdata, buf, dlen);
 	ss_irq_disable(flow);
 	ret = dlen;
@@ -678,7 +678,7 @@ u32 ss_hash_start(ss_hash_ctx_t *ctx,
 	ce_task_desc_t *task = &ss_dev->flows[flow].task;
 
 	/* Total len is too small, so process it in the padding data later. */
-	if ((last == 0) && (len > 0) && (len < blk_size)) {
+	if ((last == 0) && (((len > 0) && (len < blk_size)) || CE_METHOD_IS_HMAC(req_ctx->type))) {
 		ctx->cnt += len;
 		return 0;
 	}
@@ -705,10 +705,22 @@ u32 ss_hash_start(ss_hash_ctx_t *ctx,
 
 	ss_iv_set(ctx->md, ctx->md_size, task);
 	ss_iv_mode_set(CE_HASH_IV_INPUT, task);
-	dma_map_single(&ss_dev->pdev->dev,
-		ctx->md, ctx->md_size, DMA_MEM_TO_DEV);
+
+	dma_map_single(&ss_dev->pdev->dev, ctx->md, ctx->md_size, DMA_TO_DEVICE);
+
+#ifdef SS_HMAC_ENABLE
+	if (CE_METHOD_IS_HMAC(req_ctx->type)) {
+		task->key_addr = virt_to_phys(ctx->key) & 0xffffffff;
+		dma_map_single(&ss_dev->pdev->dev, ctx->key, ctx->key_size, DMA_TO_DEVICE);
+		ctx->comm.flags &= ~SS_FLAG_NEW_KEY;
+		phy_addr = virt_to_phys(ctx->key);
+		SS_DBG("key addr, vir = 0x%px, phy = 0x%pa\n", ctx->key, &phy_addr);
+	}
+#endif
 
 #ifdef SS_SUPPORT_CE_V3_1
+	if (CE_METHOD_IS_HMAC(req_ctx->type) && (last))
+		ss_hmac_sha1_last(task);
 	ss_data_len_set((len - len%blk_size)/4, task);
 #else
 	if (last == 1) {
@@ -721,9 +733,12 @@ u32 ss_hash_start(ss_hash_ctx_t *ctx,
 	/* Prepare the src scatterlist */
 	req_ctx->dma_src.nents = ss_sg_cnt(req_ctx->dma_src.sg, len);
 	dma_map_sg(&ss_dev->pdev->dev, req_ctx->dma_src.sg,
-		req_ctx->dma_src.nents, DMA_MEM_TO_DEV);
+		req_ctx->dma_src.nents, DMA_TO_DEVICE);
 	ss_sg_config(task->src,
 		&req_ctx->dma_src, req_ctx->type, 0, len%blk_size);
+	SS_DBG("src addr, phy = 0x%px, len = 0x%x\n",
+				(void *)sg_dma_address(req_ctx->dma_src.sg),
+				sg_dma_len(req_ctx->dma_src.sg) >> 2);
 
 #ifdef SS_HASH_HW_PADDING
 	if (last == 1) {
@@ -731,7 +746,7 @@ u32 ss_hash_start(ss_hash_ctx_t *ctx,
 		SS_DBG("cnt %d, tail_len %d.\n", ctx->cnt, ctx->tail_len);
 		ctx->cnt <<= 3; /* Translate to bits in the last pakcket */
 		dma_map_single(&ss_dev->pdev->dev, &ctx->cnt, 4,
-			DMA_MEM_TO_DEV);
+			DMA_TO_DEVICE);
 		task->key_addr = (virt_to_phys(&ctx->cnt) >> WORD_ALGIN) & 0xffffffff;
 	}
 #endif
@@ -740,23 +755,22 @@ u32 ss_hash_start(ss_hash_ctx_t *ctx,
 	task->dst[0].addr = (virt_to_phys(digest) >> WORD_ALGIN) & 0xffffffff;
 	task->dst[0].len  = ctx->md_size  >> 2;
 	dma_map_single(&ss_dev->pdev->dev,
-		digest, SHA512_DIGEST_SIZE, DMA_DEV_TO_MEM);
+		digest, SHA512_DIGEST_SIZE, DMA_FROM_DEVICE);
 	phy_addr = virt_to_phys(digest);
 	SS_DBG("digest addr, vir = 0x%px, phy = 0x%px\n", digest, (void *)phy_addr);
 
 	/* Start CE controller. */
 	init_completion(&ss_dev->flows[flow].done);
 	dma_map_single(&ss_dev->pdev->dev, task,
-		sizeof(ce_task_desc_t), DMA_MEM_TO_DEV);
+		sizeof(ce_task_desc_t), DMA_TO_DEVICE);
 
 	SS_DBG("Before CE, COMM_CTL: 0x%08x, ICR: 0x%08x\n",
 		task->comm_ctl, ss_reg_rd(CE_REG_ICR));
-	/* ce_print_task_desc(task); */
 
+	ce_print_task_desc(task);
 	ss_ctrl_start(task);
 
-	ret = wait_for_completion_timeout(&ss_dev->flows[flow].done,
-		msecs_to_jiffies(SS_WAIT_TIME));
+	ret = wait_for_completion_timeout(&ss_dev->flows[flow].done, msecs_to_jiffies(SS_WAIT_TIME));
 	if (ret == 0) {
 		SS_ERR("Timed out\n");
 		ss_reset();
@@ -765,17 +779,22 @@ u32 ss_hash_start(ss_hash_ctx_t *ctx,
 	ss_irq_disable(flow);
 
 	dma_unmap_single(&ss_dev->pdev->dev, virt_to_phys(task),
-		sizeof(ce_task_desc_t), DMA_MEM_TO_DEV);
+		sizeof(ce_task_desc_t), DMA_TO_DEVICE);
 	dma_unmap_single(&ss_dev->pdev->dev, virt_to_phys(digest),
-		SHA512_DIGEST_SIZE, DMA_DEV_TO_MEM);
+		SHA512_DIGEST_SIZE, DMA_FROM_DEVICE);
 	dma_unmap_single(&ss_dev->pdev->dev, virt_to_phys(ctx->md),
-		ctx->md_size, DMA_MEM_TO_DEV);
+		ctx->md_size, DMA_TO_DEVICE);
+#ifdef SS_HMAC_ENABLE
+	if (CE_METHOD_IS_HMAC(req_ctx->type))
+		dma_unmap_single(&ss_dev->pdev->dev, virt_to_phys(ctx->key),
+			ctx->key_size, DMA_FROM_DEVICE);
+#endif
 	dma_unmap_sg(&ss_dev->pdev->dev, req_ctx->dma_src.sg,
-		req_ctx->dma_src.nents, DMA_MEM_TO_DEV);
+		req_ctx->dma_src.nents, DMA_TO_DEVICE);
 #ifdef SS_HASH_HW_PADDING
 	if (last == 1) {
 		dma_unmap_single(&ss_dev->pdev->dev, virt_to_phys(&ctx->cnt), 4,
-			DMA_MEM_TO_DEV);
+			DMA_TO_DEVICE);
 		ctx->cnt >>= 3;
 	}
 #endif

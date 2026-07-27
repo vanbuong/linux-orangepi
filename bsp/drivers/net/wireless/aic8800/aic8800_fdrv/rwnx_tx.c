@@ -706,7 +706,7 @@ void rwnx_tx_push(struct rwnx_hw *rwnx_hw, struct rwnx_txhdr *txhdr, int flags)
 }
 
 
-#if 0
+#ifdef AICWF_USB_SUPPORT
 /**
  * rwnx_tx_retry - Push an AMPDU pkt that need to be retried
  *
@@ -1263,7 +1263,7 @@ netdev_tx_t rwnx_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		skb = newskb;
 	}
 
-	if(skb->priority < 3)
+	if (skb->priority < 3)
 		skb->priority = 0;
 
 #ifdef CONFIG_FILTER_TCP_ACK
@@ -1654,7 +1654,7 @@ int rwnx_txdatacfm(void *pthis, void *host_id)
 								rwnx_txst.acknowledged,
 								GFP_ATOMIC);
 	}
-#if 0
+#ifdef AICWF_USB_SUPPORT
 	else if ((txq->idx != TXQ_INACTIVE) &&
 			   (rwnx_txst.retry_required || rwnx_txst.sw_retry_required)) {
 		bool sw_retry = (rwnx_txst.sw_retry_required) ? true : false;

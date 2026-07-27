@@ -24,7 +24,7 @@ struct address_section_parameter {
 	uint64_t total_size;
 };
 
-static const struct address_section_parameter valid_address_tbl[] = {
+static struct address_section_parameter valid_address_tbl[] = {
 	{ XH2A_FAST_MEMORY_DDR_START_ADDR, XH2A_FAST_MEMORY_DDR_TOTAL_SIZE },
 	{ XH2A_FAST_MEMORY_SPM0_START_ADDR, XH2A_FAST_MEMORY_SPM0_TOTAL_SIZE },
 	{ XH2A_FAST_MEMORY_SPM1_START_ADDR, XH2A_FAST_MEMORY_SPM1_TOTAL_SIZE },
@@ -38,15 +38,21 @@ static inline bool is_address_valid(uint64_t addr, uint64_t size)
 {
 	int i;
 
+	if (addr > ((uint64_t)-1) - size)
+		return false;
+
 	for (i = 0; i < VALID_ADDRESS_TABLE_SIZE; i++) {
-		if (addr >= valid_address_tbl[i].start_addr &&
-		    addr + size <= valid_address_tbl[i].start_addr +
-					   valid_address_tbl[i].total_size)
+		if (valid_address_tbl[i].start_addr >
+		    ((uint64_t)-1) - valid_address_tbl[i].total_size)
+			continue;
+		if (addr < valid_address_tbl[i].start_addr)
+			continue;
+		if (size > valid_address_tbl[i].total_size)
+			continue;
+		if (addr - valid_address_tbl[i].start_addr <=
+		    valid_address_tbl[i].total_size - size)
 			return true;
 	}
-
-	pr_err("address 0x%llx size 0x%llx is not valid device address.\n",
-	       addr, size);
 
 	return false;
 }
@@ -654,6 +660,7 @@ static int xh2a_fast_memory_probe(void *handle)
 	int ret;
 	struct xh2a_pcie_client *client = NULL;
 	struct xh2a_fast_memory_dev *fast_memory_dev = NULL;
+	uint64_t size;
 
 	pr_debug("%s\n", __func__);
 
@@ -736,6 +743,12 @@ static int xh2a_fast_memory_probe(void *handle)
 				  fast_memory_dev->dma_paddr);
 		misc_deregister(&fast_memory_dev->miscdev);
 		goto err_misc_register;
+	}
+
+	ret = xh2a_pcie_efuse_update_ddr_size(handle, &size);
+	if ((ret == 0) && (size != 0)) {
+		size -= XH2A_DEVICE_SYSTEM_SIZE;
+		valid_address_tbl[0].total_size = size;
 	}
 
 	atomic_set(&fast_memory_dev->dev_initialized, 1);

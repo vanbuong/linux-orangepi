@@ -25,13 +25,13 @@ Environment:
 #ifndef XH2A_IPU_INTERNAL_H_
 #define XH2A_IPU_INTERNAL_H_
 
-#define XH2A_IPU_DEVICE_NAME       "xh2a_ipu"
+#define XH2A_IPU_DEVICE_NAME "xh2a_ipu"
 
 #define XH2A_GROUP_RESULT_BUF_SZ 1
-#define INVALID_GROUP_ID -1
+#define INVALID_GROUP_ID	 -1
 typedef int32_t group_id_t;
 
-/** struct ipu_kernel_launch_data - Kernel launch info£º
+/** struct ipu_kernel_launch_data - Kernel launch info
  * @kernel_addr: kernel code physical addr
  * @kernel_size: kernel code size
  * @param_phy_addr: param physical addr for core0
@@ -74,17 +74,17 @@ struct xh2a_group_ioctl_cmd {
 
 #define XH2A_IPU_IOCTL_MAGIC 'C'
 
-#define IOCTL_XH2A_IPU_CREATE_GROUP \
-	_IOR(XH2A_IPU_IOCTL_MAGIC, 0, group_id_t)
-#define IOCTL_XH2A_IPU_DESTROY_GROUP \
-	_IOW(XH2A_IPU_IOCTL_MAGIC, 1, group_id_t)
+#define IOCTL_XH2A_IPU_CREATE_GROUP  _IOR(XH2A_IPU_IOCTL_MAGIC, 0, group_id_t)
+#define IOCTL_XH2A_IPU_DESTROY_GROUP _IOW(XH2A_IPU_IOCTL_MAGIC, 1, group_id_t)
 #define IOCTL_XH2A_IPU_LAUNCH_KERNEL \
 	_IOW(XH2A_IPU_IOCTL_MAGIC, 2, struct xh2a_group_ioctl_cmd)
 #define IOCTL_XH2A_IPU_EXECUTE_GROUP \
 	_IOWR(XH2A_IPU_IOCTL_MAGIC, 3, struct xh2a_group_ioctl_cmd)
-#define IOCTL_XH2A_IPU_DEVICE_RESET \
-    _IOW(XH2A_IPU_IOCTL_MAGIC, 4, int32_t)
-#define IOCTL_XH2A_IPU_GET_LOADAVG	\
-    _IOWR(XH2A_IPU_IOCTL_MAGIC, 5, uint32_t)
+#define IOCTL_XH2A_IPU_DEVICE_RESET _IOW(XH2A_IPU_IOCTL_MAGIC, 4, int32_t)
+#define IOCTL_XH2A_IPU_GET_LOADAVG  _IOWR(XH2A_IPU_IOCTL_MAGIC, 5, uint32_t)
+#define IOCTL_XH2A_IPU_GET_GROUP_INFO \
+	_IOWR(XH2A_IPU_IOCTL_MAGIC, 6, struct xh2a_group_info)
+#define IOCTL_XH2A_IPU_SET_GROUP_ATTRIBUTE \
+	_IOW(XH2A_IPU_IOCTL_MAGIC, 7, struct xh2a_group_attribute)
 
 #endif // !XH2A_IPU_INTERNAL_H_

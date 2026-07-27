@@ -34,10 +34,13 @@
 #include <linux/reset.h>
 #include "sunxi_ce_cdev.h"
 #include "sunxi_ce_proc.h"
+
 #ifdef SS_SUPPORT_CE_V5
 #include "v5/sunxi_ce_reg.h"
 #elif defined(SS_SUPPORT_CE_V4)
 #include "v4/sunxi_ce_reg.h"
+#elif defined(SS_SUPPORT_CE_V1)
+#include "v1/sunxi_ce_reg.h"
 #else
 #include "v3/sunxi_ce_reg.h"
 #endif
@@ -570,6 +573,15 @@ static int ss_hash_init(struct ahash_request *req, int type, int size, char *iv)
 	ctx->cnt = 0;
 	ctx->npackets = 0;
 	memset(ctx->pad, 0, SS_HASH_PAD_SIZE);
+
+	req_ctx->ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
+	if (!req_ctx->ctx) {
+		SS_ERR("Failed to allocate context for request\n");
+		return -ENOMEM;
+	}
+
+	memcpy(req_ctx->ctx, ctx, sizeof(*ctx));
+
 	return 0;
 }
 
@@ -1022,6 +1034,16 @@ static int sunxi_ss_res_request(struct platform_device *pdev)
 	int ret = 0;
 	struct device_node *pnode = pdev->dev.of_node;
 	sunxi_ce_cdev_t *sss = platform_get_drvdata(pdev);
+#ifdef SS_SUPPORT_CE_V1
+	struct resource *res = platform_get_resource(pdev, IORESOURCE_MEM, 0);
+	sss->phy_base_addr = res->start;
+#endif
+
+	sss->base_addr = of_iomap(pnode, SS_RES_INDEX);
+	if (sss->base_addr == NULL) {
+		SS_ERR("Unable to map IO\n");
+		return -ENXIO;
+	}
 
 	sss->irq = irq_of_parse_and_map(pnode, SS_RES_INDEX);
 	if (sss->irq == 0) {
@@ -1036,42 +1058,36 @@ static int sunxi_ss_res_request(struct platform_device *pdev)
 		return ret;
 	}
 
-#ifdef CONFIG_OF
-	sss->base_addr = of_iomap(pnode, SS_RES_INDEX);
-	if (sss->base_addr == NULL) {
-		SS_ERR("Unable to remap IO\n");
-		return -ENXIO;
-	}
-#endif
-
 	return 0;
 }
 
 /* Release the resource: IRQ, mem */
 static int sunxi_ss_res_release(sunxi_ce_cdev_t *sss)
 {
-	iounmap(sss->base_addr);
-
 	free_irq(sss->irq, sss);
+
+	iounmap(sss->base_addr);
 	return 0;
 }
 
 static int sunxi_get_ce_clk(sunxi_ce_cdev_t *sss)
 {
+	int err = 0;
 	struct platform_device *pdev = sss->pdev;
 
-	if (sss->suspend == 1) {
+	if (sss->suspend)
 		return 0;
-	}
 
 	sss->pclk = devm_clk_get(&pdev->dev, "clk_src");
 	if (IS_ERR(sss->pclk)) {
 		SS_ERR("Fail to get src clk\n");
 	}
+
 	sss->ce_clk = devm_clk_get(&pdev->dev, "ce_clk");
 	if (IS_ERR(sss->ce_clk)) {
 		SS_ERR("Fail to get module clk\n");
-		return PTR_ERR(sss->ce_clk);
+		err = PTR_ERR(sss->ce_clk);
+		goto err0;
 	}
 
 	sss->bus_clk = devm_clk_get(&pdev->dev, "bus_ce");
@@ -1091,30 +1107,64 @@ static int sunxi_get_ce_clk(sunxi_ce_cdev_t *sss)
 	sss->reset = devm_reset_control_get(&pdev->dev, NULL);
 	if (IS_ERR(sss->reset)) {
 		SS_ERR("Fail to get reset clk\n");
-		return PTR_ERR(sss->reset);
+		err = PTR_ERR(sss->reset);
+		goto err1;
 	}
+
+	return 0;
+
+err1:
+	if (!IS_ERR(sss->ce_sys_clk))
+		devm_clk_put(&pdev->dev, sss->ce_sys_clk);
+	if (!IS_ERR(sss->mbus_clk))
+		devm_clk_put(&pdev->dev, sss->mbus_clk);
+	if (!IS_ERR(sss->bus_clk))
+		devm_clk_put(&pdev->dev, sss->bus_clk);
+	devm_clk_put(&pdev->dev, sss->ce_clk);
+err0:
+	if (!IS_ERR(sss->pclk))
+		devm_clk_put(&pdev->dev, sss->pclk);
+	return err;
+}
+
+static int sunxi_release_ce_clk(sunxi_ce_cdev_t *sss)
+{
+	struct platform_device *pdev = sss->pdev;
+
+	reset_control_put(sss->reset);
+	if (!IS_ERR(sss->ce_sys_clk))
+		devm_clk_put(&pdev->dev, sss->ce_sys_clk);
+	if (!IS_ERR(sss->mbus_clk))
+		devm_clk_put(&pdev->dev, sss->mbus_clk);
+	if (!IS_ERR(sss->bus_clk))
+		devm_clk_put(&pdev->dev, sss->bus_clk);
+	devm_clk_put(&pdev->dev, sss->ce_clk);
+	if (!IS_ERR(sss->pclk))
+		devm_clk_put(&pdev->dev, sss->pclk);
 
 	return 0;
 }
 
 static int sunxi_ss_hw_init(sunxi_ce_cdev_t *sss)
 {
+	int err = 0;
 	struct device_node *pnode = sss->pdev->dev.of_node;
 
-	if (sunxi_get_ce_clk(sss) != 0) {
+	if (sunxi_get_ce_clk(sss))
 		return -EINVAL;
-	}
 
 	/* deassert ce reset */
 	if (reset_control_deassert(sss->reset)) {
 		SS_ERR("Couldn't deassert reset\n");
-		return -EBUSY;
+		err = -EBUSY;
+		goto err0;
 	}
 
 	/* enable ce gating */
 	if (clk_prepare_enable(sss->bus_clk)) {
 		SS_ERR("Couldn't enable bus gating\n");
-		return -EBUSY;
+		err = -EBUSY;
+		goto err0;
 	}
 
 #ifdef SS_RSA_CLK_ENABLE
@@ -1136,21 +1186,33 @@ static int sunxi_ss_hw_init(sunxi_ce_cdev_t *sss)
 	/* enable ce clock */
 	if (clk_prepare_enable(sss->ce_clk)) {
 		SS_ERR("Couldn't enable module clock\n");
-		return -EBUSY;
+		err = -EBUSY;
+		goto err1;
+	}
+
+	/* set parent clock */
+	if (!IS_ERR_OR_NULL(sss->pclk)) {
+		if (clk_set_parent(sss->ce_clk, sss->pclk)) {
+			SS_ERR("Set parent clock fail\n");
+		};
 	}
 
 	/* enable ce mbus_clock */
 	if (!IS_ERR_OR_NULL(sss->mbus_clk)) {
 		if (clk_prepare_enable(sss->mbus_clk)) {
 			SS_ERR("Couldn't enable ce mbus clock\n");
-			return -EBUSY;
+			err = -EBUSY;
+			goto err2;
 		}
 	}
 
 	/* enable ce sys clk */
 	if (!IS_ERR_OR_NULL(sss->ce_sys_clk)) {
-		if (clk_prepare_enable(sss->ce_sys_clk))
+		if (clk_prepare_enable(sss->ce_sys_clk)) {
 			SS_ERR("Couldn't enable ce sys clk\n");
+			err = -EBUSY;
+			goto err3;
+		}
 	}
 
 #ifdef CE_DBL_ENT_SRC_EN
@@ -1158,7 +1220,21 @@ static int sunxi_ss_hw_init(sunxi_ce_cdev_t *sss)
 	ss_trng_dbl_ent_en();
 #endif
 
+	sss->low_power_mode = of_property_read_bool(pnode, "low-power-mode");
+	if (sss->low_power_mode)
+		ss_low_power_en();
+
 	return 0;
+
+err3:
+	clk_disable_unprepare(sss->mbus_clk);
+err2:
+	clk_disable_unprepare(sss->ce_clk);
+err1:
+	clk_disable_unprepare(sss->bus_clk);
+err0:
+	sunxi_release_ce_clk(sss);
+	return err;
 }
 
 static int sunxi_ss_hw_exit(sunxi_ce_cdev_t *sss)
@@ -1332,73 +1408,94 @@ static void sunxi_ss_sysfs_remove(struct platform_device *_pdev)
 	device_remove_file(&_pdev->dev, &sunxi_ss_status_attr);
 }
 
-static u64 sunxi_ss_dma_mask = DMA_BIT_MASK(64);
-
 static int sunxi_ss_probe(struct platform_device *pdev)
 {
-	int ret = 0;
-	sunxi_ce_cdev_t *sss = NULL;
+	int err = 0;
 
-	sss = devm_kzalloc(&pdev->dev, sizeof(sunxi_ce_cdev_t), GFP_KERNEL);
-	if (sss == NULL) {
+	ss_dev = devm_kzalloc(&pdev->dev, sizeof(*ss_dev), GFP_KERNEL);
+	if (!ss_dev) {
 		SS_ERR("Unable to allocate sunxi_ce_cdev_t\n");
 		return -ENOMEM;
 	}
 
 #ifdef TASK_DMA_POOL
-	sss->task_pool = dma_pool_create("task_pool", &pdev->dev,
+	ss_dev->task_pool = dma_pool_create("task_pool", &pdev->dev,
 			sizeof(struct ce_task_desc), 4, 0);
-	if (sss->task_pool == NULL)
-		return -ENOMEM;
+	if (!ss_dev->task_pool) {
+		err = -ENOMEM;
+		goto err0;
+	}
 #endif
 
 #ifdef CONFIG_OF
-	pdev->dev.dma_mask = &sunxi_ss_dma_mask;
-	pdev->dev.coherent_dma_mask = DMA_BIT_MASK(64);
+	/*
+	 * If @dev is expected to be DMA-capable then the bus code that created
+	 * it should have initialised its dma_mask pointer by this point. For
+	 * now, we'll continue the legacy behaviour of coercing it to the
+	 * coherent mask if not, but we'll no longer do so quietly.
+	 */
+	if (!pdev->dev.dma_mask) {
+		SS_DBG("dma_mask not set\n");
+		pdev->dev.dma_mask = &pdev->dev.coherent_dma_mask;
+	}
+	err = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(64));
+	if (err) {
+		SS_ERR("64-bit DMA mask not supported,try 32-bit\n");
+		if (dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(32))) {
+			SS_ERR("Failed to set DMA mask\n");
+			err = -EIO;
+			goto err1;
+		}
+	}
 #endif
 
-	sss->pdevice = &pdev->dev;
-	snprintf(sss->dev_name, sizeof(sss->dev_name), SUNXI_SS_DEV_NAME);
-	platform_set_drvdata(pdev, sss);
+	ss_dev->pdevice = &pdev->dev;
+	snprintf(ss_dev->dev_name, sizeof(ss_dev->dev_name), SUNXI_SS_DEV_NAME);
+	platform_set_drvdata(pdev, ss_dev);
 
-	ret = sunxi_ss_res_request(pdev);
-	if (ret != 0)
-		goto err0;
+	err = sunxi_ss_res_request(pdev);
+	if (err)
+		goto err2;
 
-	sss->pdev = pdev;
-	ss_dev = sss;
+	ss_dev->pdev = pdev;
 
-	ret = sunxi_ss_hw_init(sss);
-	if (ret != 0) {
+	err = sunxi_ss_hw_init(ss_dev);
+	if (err) {
 		SS_ERR("SS hw init failed!\n");
-		goto err1;
+		goto err3;
 	}
 
-	ret = sunxi_ss_alg_register();
-	if (ret != 0) {
-		SS_ERR("sunxi_ss_alg_register() failed! return %d\n", ret);
-		goto err2;
+	err = sunxi_ss_alg_register();
+	if (err) {
+		SS_ERR("sunxi_ss_alg_register() failed! return %d\n", err);
+		goto err4;
 	}
 
 	sunxi_ss_sysfs_create(pdev);
 
-	SS_DBG("SS is inited, base 0x%px, irq %d!\n", sss->base_addr, sss->irq);
+	SS_DBG("SS is inited, base 0x%px, irq %d!\n", ss_dev->base_addr, ss_dev->irq);
 	return 0;
 
+err4:
+	sunxi_ss_hw_exit(ss_dev);
+err3:
+	sunxi_ss_res_release(ss_dev);
 err2:
-	sunxi_ss_hw_exit(sss);
-err1:
-	sunxi_ss_res_release(sss);
-err0:
 	platform_set_drvdata(pdev, NULL);
-#ifdef SS_SCATTER_ENABLE
-	if (sss->task_pool)
-		dma_pool_destroy(sss->task_pool);
+err1:
+#ifdef TASK_DMA_POOL
+	dma_pool_destroy(ss_dev->task_pool);
 #endif
-	return ret;
+err0:
+	devm_kfree(&pdev->dev, ss_dev);
+	return err;
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 12, 0)
 static int sunxi_ss_remove(struct platform_device *pdev)
+#else
+static void sunxi_ss_remove(struct platform_device *pdev)
+#endif
 {
 	sunxi_ce_cdev_t *sss = platform_get_drvdata(pdev);
 
@@ -1415,7 +1512,9 @@ static int sunxi_ss_remove(struct platform_device *pdev)
 #endif
 	platform_set_drvdata(pdev, NULL);
 	ss_dev = NULL;
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 12, 0)
 	return 0;
+#endif
 }
 
 #ifdef CONFIG_PM
@@ -1499,7 +1598,7 @@ module_init(sunxi_ss_init);
 module_exit(sunxi_ss_exit);
 
 MODULE_AUTHOR("mintow");
-MODULE_VERSION("1.1.2");
+MODULE_VERSION("1.2.6");
 MODULE_DESCRIPTION("SUNXI SS Controller Driver");
 MODULE_ALIAS("platform:"SUNXI_SS_DEV_NAME);
 MODULE_LICENSE("GPL");

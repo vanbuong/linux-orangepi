@@ -14,6 +14,7 @@ enum {
 	AXP1530_ID,
 	AW37501_ID,
 	OCP2131_ID,
+	SY8810_ID,
 	NR_PMU_EXT_VARIANTS,
 };
 
@@ -63,6 +64,11 @@ enum {
 #define SY8827G_ID2		    0x04
 #define SY8827G_PGOOD		0x05
 
+/* List of registers for sy8810 */
+#define SY8810_VSEL0		0x00
+#define SY8810_CONTROL		0x01
+#define SY8810_PWR_GOOD		0x02
+
 /* List of registers for aw37501 */
 #define AW37501_OUTPUT_EN	0x03
 #define AW37501_WRITE_PROTECT	0x21
@@ -100,6 +106,11 @@ enum {
 	OCP2131_AVDD = 0,
 	OCP2131_AVEE,
 	OCP2131_REG_ID_MAX,
+};
+
+enum {
+	SY8810_DCDC0 = 0,
+	SY8810_REG_ID_MAX,
 };
 
 int pmu_ext_match_device(struct sunxi_power_dev *ext);

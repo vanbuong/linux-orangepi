@@ -5,9 +5,6 @@
 #include <linux/version.h>
 #include <linux/platform_device.h>
 
-struct wakeup_source *rwnx_wakeup_init(const char *name);
-void rwnx_wakeup_deinit(struct wakeup_source *ws);
-
 struct wakeup_source *rwnx_wakeup_register(struct device *dev, const char *name);
 void rwnx_wakeup_unregister(struct wakeup_source *ws);
 

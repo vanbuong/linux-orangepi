@@ -2483,7 +2483,10 @@ static int gtp_pm_suspend(struct device *dev)
 			dev_dbg(&ts->client->dev, "Suspend by i2c pm.");
 			gtp_suspend(ts);
 		} else {
-			dev_dbg(&ts->client->dev, "Use tp idle instead of PM suspend");
+			dev_dbg(&ts->client->dev, "Suspend by i2c pm, keep tp idle mode");
+			gtp_esd_off(ts);
+			gtp_work_control_enable(ts, false);
+			set_bit(SLEEP_MODE, &ts->flags);
 		}
 	}
 	return 0;
@@ -2499,7 +2502,10 @@ static int gtp_pm_resume(struct device *dev)
 			dev_dbg(&ts->client->dev, "Resume by i2c pm.");
 			gtp_resume(ts);
 		} else {
-			dev_dbg(&ts->client->dev, "Use tp idle instead of PM resume");
+			dev_dbg(&ts->client->dev, "Resume by i2c pm, keep tp idle mode");
+			clear_bit(SLEEP_MODE, &ts->flags);
+			gtp_work_control_enable(ts, true);
+			gtp_esd_on(ts);
 		}
 	}
 

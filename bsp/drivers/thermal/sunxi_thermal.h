@@ -19,6 +19,7 @@ struct tsensor {
 	struct ths_device		*tmdev;
 	struct thermal_zone_device	*tzd;
 	int				id;
+	int temp_calibration_para;
 #if IS_ENABLED(CONFIG_AW_THERMAL_CRITICAL_HANDLER)
 	int				last_temp;
 #endif

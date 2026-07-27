@@ -1217,10 +1217,14 @@ static void sunxi_jack_codec_det_irq_work(void *data, enum snd_jack_types *jack_
 		regmap_update_bits(regmap, SUNXI_HMIC_CTL, 0x1 << MIC_DET_IRQ_EN,
 				   0x0 << MIC_DET_IRQ_EN);
 
+		regmap_update_bits(regmap, SUNXI_DAC_AN_CTL, 0x1 << CPLDO_EN, 0x0 << CPLDO_EN);
 		*jack_type = 0;
 	break;
 	case JACK_IRQ_IN:
 		SND_LOG_DEBUG("jack in\n");
+		/* cpvcc set 1.2V, analog power for headphone charge pump */
+		regmap_update_bits(regmap, SUNXI_DAC_AN_CTL, 0x1 << CPLDO_EN, 0x1 << CPLDO_EN);
+
 		regmap_update_bits(regmap, SUNXI_HMIC_CTL,
 				   0x1 << JACK_IN_IRQ_EN, 0x0 << JACK_IN_IRQ_EN);
 		regmap_update_bits(regmap, SUNXI_HMIC_CTL,
@@ -1674,8 +1678,12 @@ static void sunxi_jack_extcon_det_scan_work(void *data, enum snd_jack_types *jac
 
 	if (jack_extcon->jack_plug_sta == JACK_PLUG_STA_OUT) {
 		*jack_type = 0;
+		regmap_update_bits(regmap, SUNXI_DAC_AN_CTL, 0x1 << CPLDO_EN, 0x0 << CPLDO_EN);
 		return;
 	}
+
+	/* cpvcc set 1.2V, analog power for headphone charge pump */
+	regmap_update_bits(regmap, SUNXI_DAC_AN_CTL, 0x1 << CPLDO_EN, 0x1 << CPLDO_EN);
 
 	regmap_update_bits(regmap, SUNXI_MICBIAS_AN_CTL, 0x1 << HMIC_BIAS_EN, 0x1 << HMIC_BIAS_EN);
 	regmap_update_bits(regmap, SUNXI_MICBIAS_AN_CTL, 0x1 << MIC_DET_ADC_EN,
@@ -1746,7 +1754,7 @@ static int sunxi_jack_extcon_status_sync(void *data, enum snd_jack_types type)
 	return 0;
 }
 
-struct sunxi_jack_port sunxi_jack_port = {
+static struct sunxi_jack_port sunxi_jack_port = {
 	.jack_codec = &sunxi_jack_codec,
 	.jack_extcon = &sunxi_jack_extcon,
 };
@@ -1764,9 +1772,6 @@ static void sunxi_codec_init(struct snd_soc_component *component)
 	/* Enable DAC/ADC DAP */
 	regmap_update_bits(regmap, SUNXI_DAC_DAP_CTL, 0x1 << DDAP_EN, 0x1 << DDAP_EN);
 	regmap_update_bits(regmap, SUNXI_ADC_DAP_CTL, 0x1 << ADAP_EN, 0x1 << ADAP_EN);
-	/* cpvcc set 1.2V, analog power for headphone charge pump */
-	regmap_update_bits(regmap, SUNXI_DAC_AN_CTL, 0x1 << CPLDO_EN, 0x1 << CPLDO_EN);
-	regmap_update_bits(regmap, SUNXI_DAC_AN_CTL, 0x3 << CPLDO_VOLTAGE, 0x3 << CPLDO_VOLTAGE);
 	/* HMICBIAS set to 2.55V for support MEMS and ECM MIC */
 	regmap_update_bits(regmap, SUNXI_MICBIAS_AN_CTL, 0x3 << HMIC_BIAS_SEL,
 			   0x3 << HMIC_BIAS_SEL);
@@ -1776,6 +1781,8 @@ static void sunxi_codec_init(struct snd_soc_component *component)
 	/* Open ADC1\2 and DACL\R Volume Setting */
 	regmap_update_bits(regmap, SUNXI_DAC_VOL_CTL, 0x1 << DAC_VOL_SEL, 0x1 << DAC_VOL_SEL);
 	regmap_update_bits(regmap, SUNXI_ADC_DIG_CTL, 0x1 << ADC1_2_VOL_EN, 0x1 << ADC1_2_VOL_EN);
+
+	regmap_update_bits(regmap, SUNXI_DAC_AN_CTL, 0x3 << CPLDO_VOLTAGE, 0x3 << CPLDO_VOLTAGE);
 
 	/* Set default volume/gain control value */
 	regmap_update_bits(regmap, SUNXI_DAC_DPC, 0x3F << DVOL, dts->dac_vol << DVOL);
@@ -1890,7 +1897,11 @@ static int sunxi_codec_component_probe(struct snd_soc_component *component)
 	sunxi_jack_extcon.pdev = codec->pdev;
 	sunxi_jack_extcon.data = (void *)(&codec->jack_extcon_priv);
 
-	snd_sunxi_jack_init(&sunxi_jack_port);
+	ret = snd_sunxi_jack_init(&sunxi_jack_port);
+	if (ret) {
+		SND_LOG_ERR("jack init failed\n");
+		return ret;
+	}
 
 	return 0;
 }
@@ -1918,6 +1929,8 @@ static int sunxi_codec_component_suspend(struct snd_soc_component *component)
 	struct regmap *regmap = codec->mem.regmap;
 
 	SND_LOG_DEBUG("\n");
+
+	regmap_update_bits(regmap, SUNXI_DAC_AN_CTL, 0x1 << CPLDO_EN, 0x0 << CPLDO_EN);
 
 	snd_sunxi_save_reg(regmap, &sunxi_reg_group);
 	snd_sunxi_pa_pin_disable(codec->pa_cfg, codec->pa_pin_max);
@@ -2748,7 +2761,11 @@ err_devm_kzalloc:
 	return ret;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 11, 0)
+static void sunxi_codec_dev_remove(struct platform_device *pdev)
+#else
 static int sunxi_codec_dev_remove(struct platform_device *pdev)
+#endif
 {
 	struct device *dev = &pdev->dev;
 	struct sunxi_codec *codec = dev_get_drvdata(dev);
@@ -2782,7 +2799,11 @@ static int sunxi_codec_dev_remove(struct platform_device *pdev)
 
 	SND_LOG_DEBUG("unregister internal-codec codec success\n");
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 11, 0)
+	return;
+#else
 	return 0;
+#endif
 }
 
 static const struct of_device_id sunxi_codec_of_match[] = {
@@ -2801,7 +2822,7 @@ static struct platform_driver sunxi_codec_driver = {
 	.remove	= sunxi_codec_dev_remove,
 };
 
-int __init sunxi_codec_dev_init(void)
+static int __init sunxi_codec_dev_init(void)
 {
 	int ret;
 
@@ -2814,7 +2835,7 @@ int __init sunxi_codec_dev_init(void)
 	return ret;
 }
 
-void __exit sunxi_codec_dev_exit(void)
+static void __exit sunxi_codec_dev_exit(void)
 {
 	platform_driver_unregister(&sunxi_codec_driver);
 }
@@ -2824,5 +2845,5 @@ module_exit(sunxi_codec_dev_exit);
 
 MODULE_AUTHOR("huhaoxin@allwinnertech.com");
 MODULE_LICENSE("GPL");
-MODULE_VERSION("1.0.3");
+MODULE_VERSION("1.0.7");
 MODULE_DESCRIPTION("sunxi soundcard codec of internal-codec");

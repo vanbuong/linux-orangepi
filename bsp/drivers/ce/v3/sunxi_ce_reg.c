@@ -103,6 +103,32 @@ void ss_key_set(char *key, int size, ce_task_desc_t *task)
 	SS_DBG("task->key_addr: 0x%x\n", task->key_addr);
 }
 
+void ce_task_addr_set(u8 *vir_addr, phys_addr_t phy_addr, u8 *dst)
+{
+	phys_addr_t phy;
+
+	if (phy_addr)
+		phy = phy_addr >> 2;	/* task addr in word */
+	else
+		phy = virt_to_phys(vir_addr) >> 2;	/* task addr in word */
+
+	if (phy > 0xffffffff) {
+		phy = phy & CE_ADDR_MASK;
+		memcpy(dst, (void *)&phy, 5);
+	} else {
+		memcpy(dst, (void *)&phy, 4);
+	}
+}
+
+phys_addr_t ce_task_addr_get(u8 *dst)
+{
+	phys_addr_t phy;
+
+	phy = *((u32 *)dst);
+
+	return phy;
+}
+
 void ss_pending_clear(int flow)
 {
 	int val = CE_CHAN_PENDING << flow;
@@ -183,6 +209,52 @@ void ss_hmac_sha1_last(ce_task_desc_t *task)
 	task->comm_ctl |= CE_HMAC_SHA1_LAST;
 }
 
+static void ss_convert_hash_mode(int type, int *hw_mode)
+{
+	switch (type) {
+	case 0:
+		*hw_mode = SS_METHOD_MD5;
+		break;
+	case 1:
+		*hw_mode = SS_METHOD_SHA1;
+		break;
+	case 2:
+		*hw_mode = SS_METHOD_SHA224;
+		break;
+	case 3:
+		*hw_mode = SS_METHOD_SHA256;
+		break;
+	case 4:
+		*hw_mode = SS_METHOD_SHA384;
+		break;
+	case 5:
+		*hw_mode = SS_METHOD_SHA512;
+		break;
+	case 6:
+		*hw_mode = SS_METHOD_SM3;
+		break;
+	default:
+		SS_DBG("This type:%d is not supported, switch to sha256\n", type);
+		*hw_mode = SS_METHOD_SHA256;
+		break;
+	}
+}
+
+void ss_hash_method_set(int *type, ce_task_desc_t *task)
+{
+	int hw_mode;
+
+	ss_convert_hash_mode(*type, &hw_mode);
+
+	task->comm_ctl |= hw_mode << CE_COMM_CTL_METHOD_SHIFT;
+	*type = hw_mode;
+}
+
+void ss_hash_cmd_set(ce_task_desc_t *task)
+{
+	task->comm_ctl |= (CE_COMM_CTL_TASK_INT_MASK | CE_HMAC_SHA1_LAST);
+}
+
 void ss_method_set(int dir, int type, ce_task_desc_t *task)
 {
 	task->comm_ctl |= dir << CE_COMM_CTL_OP_DIR_SHIFT;
@@ -215,6 +287,31 @@ void ss_cfb_bitwidth_set(int bitwidth, ce_task_desc_t *task)
 		break;
 	}
 	task->sym_ctl |= val << CE_SYM_CTL_CFB_WIDTH_SHIFT;
+}
+
+void ss_ctr_bitwidth_set(unsigned char *ctr_addr, int bitwidth, ce_task_desc_t *task)
+{
+	int val = 0;
+
+	switch (bitwidth) {
+	case 16:
+		val = CE_CTR_SIZE_16;
+		break;
+	case 32:
+		val = CE_CTR_SIZE_32;
+		break;
+	case 64:
+		val = CE_CTR_SIZE_64;
+		break;
+	case 128:
+		val = CE_CTR_SIZE_128;
+		break;
+	default:
+		break;
+	}
+
+	task->sym_ctl |= val << CE_SYM_CTL_CTR_SIZE_SHIFT;
+	task->ctr_addr = (virt_to_phys(ctr_addr) >> WORD_ALGIN) & 0xffffffff;
 }
 
 void ss_sha_final(void)
@@ -359,6 +456,21 @@ void ss_wait_idle(void)
 void ss_data_len_set(int len, ce_task_desc_t *task)
 {
 	task->data_len = len;
+}
+
+void ce_reg_print(void)
+{
+	pr_err("The SS control register:\n");
+	pr_err("[TSK] 0x%02x = 0x%08x\n", CE_REG_TSK, ss_readl(CE_REG_TSK));
+
+	pr_err("[ICR] 0x%02x = 0x%08x\n", CE_REG_ICR, ss_readl(CE_REG_ICR));
+	pr_err("[ISR] 0x%02x = 0x%08x\n", CE_REG_ISR, ss_readl(CE_REG_ISR));
+	pr_err("[TLR] 0x%02x = 0x%08x\n", CE_REG_TLR, ss_readl(CE_REG_TLR));
+	pr_err("[TSR] 0x%02x = 0x%08x\n", CE_REG_TSR, ss_readl(CE_REG_TSR));
+	pr_err("[ERR] 0x%02x = 0x%08x\n", CE_REG_ERR, ss_readl(CE_REG_ERR));
+
+	pr_err("[CSA] 0x%02x = 0x%08x\n", CE_REG_CSA, ss_readl(CE_REG_CSA));
+	pr_err("[CDA] 0x%02x = 0x%08x\n", CE_REG_CDA, ss_readl(CE_REG_CDA));
 }
 
 int ss_reg_print(char *buf, int len)

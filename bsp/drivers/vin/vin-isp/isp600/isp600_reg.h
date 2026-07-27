@@ -26,13 +26,13 @@
 #define ISP_TOP_REG_OFFSET			0x0000
 #define ISP_AHB_REG_OFFSET			0x0020
 #if IS_ENABLED(CONFIG_ARCH_SUN55IW3)
-#define ISP_AHB_AMONG_OFFSET		0x0020
+#define ISP_AHB_AMONG_OFFSET			0x0020
 #else
-#define ISP_AHB_AMONG_OFFSET		0x0030
+#define ISP_AHB_AMONG_OFFSET			0x0030
 #endif
 #define ISP_LOAD_REG_OFFSET			0x0100
 #define ISP_SAVE_REG_OFFSET			0x1000
-#define ISP_SAVE_LOAD_REG_OFFSET	0x1200
+#define ISP_SAVE_LOAD_REG_OFFSET		0x1200
 
 /*top reg*/
 #define ISP_TOP_CFG0_REG			0x000
@@ -45,43 +45,55 @@
 #define ISP_LOAD_ADDR_REG			0x004
 #define ISP_INT_BYPASS_REG			0x008
 #define ISP_INT_STATUS_REG			0x00c
-#define ISP_INTER_STATUS0_REG		0x010
-#define ISP_INTER_STATUS1_REG		0x014
-#define ISP_INTER_STATUS2_REG		0x018
+#define ISP_INTER_STATUS0_REG			0x010
+#define ISP_INTER_STATUS1_REG			0x014
+#define ISP_INTER_STATUS2_REG			0x018
 #define ISP_SAVE_ADDR_REG			0x01c
-#if !defined CONFIG_ARCH_SUN55IW3
-#define ISP_SAVE_LOAD_ADDR_REG		0x020
+#if !IS_ENABLED(CONFIG_ARCH_SUN55IW3)
+#define ISP_SAVE_LOAD_ADDR_REG			0x020
 #endif
 
 /*load reg*/
 #define ISP_GLOBAL_CFG0_REG			0x000
 #define ISP_GLOBAL_CFG1_REG			0x004
-#define ISP_LBC_TIME_CYCLE_REG		0x008
+#define ISP_LBC_TIME_CYCLE_REG			0x008
 #if IS_ENABLED(CONFIG_ARCH_SUN55IW3)
-#define ISP_SAVE_LOAD_ADDR_REG		0x014
+#define ISP_SAVE_LOAD_ADDR_REG			0x014
+#elif IS_ENABLED(CONFIG_ARCH_SUN65IW1)
+#define ISP_FDBK_TDM_RDMA_FIFO_REG		0x010
+#define ISP_FDBK_TDM_WDMA_FIFO_REG		0x014
 #endif
 #define ISP_INPUT_SIZE_REG			0x020
 #define ISP_VALID_SIZE_REG			0x024
 #define ISP_VALID_START_REG			0x028
-#define ISP_MODULE_BYPASS0_REG		0x030
-#define ISP_MODULE_BYPASS1_REG		0x034
-#define ISP_MODULE_MODE0_REG		0x038
-#define ISP_MODULE_MODE1_REG		0x03c
-#define ISP_D3D_BAYER_ADDR_REG		0x040
+#define ISP_MODULE_BYPASS0_REG			0x030
+#define ISP_MODULE_BYPASS1_REG			0x034
+#define ISP_MODULE_MODE0_REG			0x038
+#define ISP_MODULE_MODE1_REG			0x03c
+#define ISP_D3D_BAYER_ADDR_REG			0x040
 #define ISP_D3D_K0_ADDR_REG			0x044
 #define ISP_D3D_K1_ADDR_REG			0x048
-#define ISP_D3D_STATUS_ADDR_REG		0x04c
+#define ISP_D3D_STATUS_ADDR_REG			0x04c
+#define ISP_RDMA_CFG1_REG			0x064
 #define ISP_VIN_CFG0_REG			0x070
-#define ISP_CH0_EXPAND_CFG0_REG		0x098
-#define ISP_CH1_EXPAND_CFG0_REG		0x0b8
-#define ISP_CH2_EXPAND_CFG0_REG		0x0d8
+#define ISP_CH0_EXPAND_OFFSET0_REG		0x090
+#define ISP_CH0_EXPAND_OFFSET1_REG		0x094
+#define ISP_CH0_EXPAND_CFG0_REG			0x098
+#define ISP_CH1_EXPAND_OFFSET0_REG		0x0b0
+#define ISP_CH1_EXPAND_OFFSET1_REG		0x0b4
+#define ISP_CH1_EXPAND_CFG0_REG			0x0b8
+#define ISP_CH2_EXPAND_OFFSET0_REG		0x0d0
+#define ISP_CH2_EXPAND_OFFSET1_REG		0x0d4
+#define ISP_CH2_EXPAND_CFG0_REG			0x0d8
 #define ISP_D3D_CFG0_REG			0x220
-#define ISP_D3D_LBC_CFG0_REG		0x280
-#define ISP_D3D_LBC_CFG1_REG		0x284
-#define ISP_D3D_LBC_CFG2_REG		0x288
-#define ISP_D3D_LBC_CFG3_REG		0x28c
-#define ISP_D3D_LBC_CFG4_REG		0x290
-#define ISP_D3D_LBC_CFG5_REG		0x294
+#define ISP_D3D_LBC_CFG0_REG			0x280
+#define ISP_D3D_LBC_CFG1_REG			0x284
+#define ISP_D3D_LBC_CFG2_REG			0x288
+#define ISP_D3D_LBC_CFG3_REG			0x28c
+#define ISP_D3D_LBC_CFG4_REG			0x290
+#define ISP_D3D_LBC_CFG5_REG			0x294
+#define ISP_BLC_OFFSET0_REG			0x298
+#define ISP_BLC_OFFSET1_REG			0x29c
 
 /*save load reg*/
 #define ISP_RANDOM_SEED_REG			0x030
@@ -155,10 +167,28 @@ typedef union {
 		unsigned int nr_msc_update:1;
 		unsigned int fe1_msc_update:1;
 		unsigned int fe2_msc_update:1;
-		unsigned int res2:10;
+		unsigned int res2:8;
+		unsigned int rec_rdma_feedback_en:1;
+		unsigned int rec_wdma_feedback_en:1;
 		unsigned int dma_error_mode:1;
 	} bits;
 }  ISP_AHB_CFG0_REG_t;
+
+typedef union {
+	unsigned int dwval;
+	struct {
+		unsigned int rec_fifo_low_limit:16;
+		unsigned int rec_fifo_high_limit:16;
+	} bits;
+} ISP_FDBK_TDM_RDMA_FIFO_REG_t;
+
+typedef union {
+	unsigned int dwval;
+	struct {
+		unsigned int rec_fifo_low_limit:16;
+		unsigned int rec_fifo_high_limit:16;
+	} bits;
+} ISP_FDBK_TDM_WDMA_FIFO_REG_t;
 
 typedef union {
 	unsigned int dwval;
@@ -351,6 +381,18 @@ typedef union {
 typedef union {
 	unsigned int dwval;
 	struct {
+		unsigned int isp_d3d_raw:9;
+		unsigned int res0:7;
+		unsigned int isp_pltm_pkx:6;
+		unsigned int res1:2;
+		unsigned int tbl_dma_req_max_num:4;
+		unsigned int res2:4;
+	} bits;
+} ISP_RDMA_CFG1_REG_t;
+
+typedef union {
+	unsigned int dwval;
+	struct {
 		unsigned int input_cfg:4;
 		unsigned int res0:4;
 		unsigned int output_cfg:4;
@@ -363,6 +405,26 @@ typedef union {
 		unsigned int res4:5;
 	} bits;
 } ISP_VIN_CFG0_REG_t;
+
+typedef union {
+	unsigned int dwval;
+	struct {
+		unsigned int r_offset:13;
+		unsigned int res0:3;
+		unsigned int gr_offset:13;
+		unsigned int res1:3;
+	} bits;
+} ISP_CH0_EXPAND_OFFSET0_REG_t;
+
+typedef union {
+	unsigned int dwval;
+	struct {
+		unsigned int gb_offset:13;
+		unsigned int res0:3;
+		unsigned int b_offset:13;
+		unsigned int res1:3;
+	} bits;
+} ISP_CH0_EXPAND_OFFSET1_REG_t;
 
 typedef union {
 	unsigned int dwval;
@@ -380,6 +442,26 @@ typedef union {
 typedef union {
 	unsigned int dwval;
 	struct {
+		unsigned int r_offset:13;
+		unsigned int res0:3;
+		unsigned int gr_offset:13;
+		unsigned int res1:3;
+	} bits;
+} ISP_CH1_EXPAND_OFFSET0_REG_t;
+
+typedef union {
+	unsigned int dwval;
+	struct {
+		unsigned int gb_offset:13;
+		unsigned int res0:3;
+		unsigned int b_offset:13;
+		unsigned int res1:3;
+	} bits;
+} ISP_CH1_EXPAND_OFFSET1_REG_t;
+
+typedef union {
+	unsigned int dwval;
+	struct {
 		unsigned int blc_en:1;
 		unsigned int inv_blc_en:1;
 		unsigned int res0:2;
@@ -389,6 +471,26 @@ typedef union {
 		unsigned int res2:11;
 	} bits;
 } ISP_CH1_EXPAND_CFG0_REG_t;
+
+typedef union {
+	unsigned int dwval;
+	struct {
+		unsigned int r_offset:13;
+		unsigned int res0:3;
+		unsigned int gr_offset:13;
+		unsigned int res1:3;
+	} bits;
+} ISP_CH2_EXPAND_OFFSET0_REG_t;
+
+typedef union {
+	unsigned int dwval;
+	struct {
+		unsigned int gb_offset:13;
+		unsigned int res0:3;
+		unsigned int b_offset:13;
+		unsigned int res1:3;
+	} bits;
+} ISP_CH2_EXPAND_OFFSET1_REG_t;
 
 typedef union {
 	unsigned int dwval;
@@ -498,5 +600,25 @@ typedef union {
 		unsigned int res0:16;
 	} bits;
 } ISP_D3D_LBC_CFG5_REG_t;
+
+typedef union {
+	unsigned int dwval;
+	struct {
+		unsigned int r_offset:13;
+		unsigned int res0:3;
+		unsigned int gr_offset:13;
+		unsigned int res1:3;
+	} bits;
+} ISP_BLC_OFFSET0_REG_t;
+
+typedef union {
+	unsigned int dwval;
+	struct {
+		unsigned int gb_offset:13;
+		unsigned int res0:3;
+		unsigned int b_offset:13;
+		unsigned int res1:3;
+	} bits;
+} ISP_BLC_OFFSET1_REG_t;
 
 #endif /*_1_REG_H_*/

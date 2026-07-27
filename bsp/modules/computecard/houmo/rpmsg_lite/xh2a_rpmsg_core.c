@@ -587,7 +587,7 @@ int xh2a_rpmsg_link_register(struct xh2a_rpmsg_link *link, int parent_index,
 	mutex_init(&link->ept_ctx_lock);
 
 	snprintf(link->name, XH2A_RPMSG_LINK_NAME_LEN,
-		 XH2A_RPMSG_LINK_NAME "%d_%d", parent_index, link->link_id);
+		 XH2A_RPMSG_LINK_NAME "%d_%u", parent_index, link->link_id);
 
 	link->miscdev.minor = MISC_DYNAMIC_MINOR;
 	link->miscdev.name = link->name;

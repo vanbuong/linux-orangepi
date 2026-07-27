@@ -8,9 +8,28 @@
 #ifdef CONFIG_PREALLOC_RX_SKB
 struct aicwf_rx_buff_list aic_rx_buff_list;
 
+#ifdef AICWF_USB_SUPPORT
+int aic_rxbuff_num_max = 300;
+
+#ifdef CONFIG_PLATFORM_HI
+int aic_rxbuff_size = (4 * 512) * 1;
+#else
+int aic_rxbuff_size = (4 * 512) * 10;
+#endif
+#else
 int aic_rxbuff_num_max = 30;
 
 int aic_rxbuff_size = (64 * 512);
+#endif
+
+static int rx_buff_list_ava;
+
+module_param(rx_buff_list_ava, int, 0660);
+
+int aicwf_rxbuff_size_get(void)
+{
+	return aic_rxbuff_size;
+}
 
 struct rx_buff *aicwf_prealloc_rxbuff_alloc(spinlock_t *lock)
 {
@@ -18,6 +37,12 @@ struct rx_buff *aicwf_prealloc_rxbuff_alloc(spinlock_t *lock)
 	struct rx_buff *rxbuff = NULL;
 
 	spin_lock_irqsave(lock, flags);
+	rx_buff_list_ava = atomic_read(&aic_rx_buff_list.rxbuff_list_len);
+	if (rx_buff_list_ava < 10) {
+		pr_err("%s WARNING rxbuff is running out %d\n", __func__, rx_buff_list_ava);
+		mdelay(10);
+	}
+
 	if (list_empty(&aic_rx_buff_list.rxbuff_list)) {
 		spin_unlock_irqrestore(lock, flags);
 		printk("%s %d, rxbuff list is empty\n", __func__, __LINE__);
@@ -46,10 +71,11 @@ void aicwf_prealloc_rxbuff_free(struct rx_buff *rxbuff, spinlock_t *lock)
 	spin_lock_irqsave(lock, flags);
 	list_add_tail(&rxbuff->queue, &aic_rx_buff_list.rxbuff_list);
 	atomic_inc(&aic_rx_buff_list.rxbuff_list_len);
+	rx_buff_list_ava = atomic_read(&aic_rx_buff_list.rxbuff_list_len);
 	spin_unlock_irqrestore(lock, flags);
 }
 
-int aicwf_prealloc_init()
+int aicwf_prealloc_init(void)
 {
 	struct rx_buff *rxbuff;
 	int i = 0;
@@ -57,7 +83,7 @@ int aicwf_prealloc_init()
 	printk("%s enter\n", __func__);
 	INIT_LIST_HEAD(&aic_rx_buff_list.rxbuff_list);
 
-	for (i = 0 ; i < aic_rxbuff_num_max ; i++) {
+	for (i = 0; i < aic_rxbuff_num_max; i++) {
 		rxbuff = kzalloc(sizeof(struct rx_buff), GFP_KERNEL);
 		if (rxbuff) {
 			rxbuff->data = kzalloc(aic_rxbuff_size, GFP_KERNEL);
@@ -72,6 +98,7 @@ int aicwf_prealloc_init()
 			rxbuff->end = NULL;
 			list_add_tail(&rxbuff->queue, &aic_rx_buff_list.rxbuff_list);
 			atomic_inc(&aic_rx_buff_list.rxbuff_list_len);
+			rx_buff_list_ava = atomic_read(&aic_rx_buff_list.rxbuff_list_len);
 		}
 	}
 
@@ -79,7 +106,7 @@ int aicwf_prealloc_init()
 	return 0;
 }
 
-void aicwf_prealloc_exit()
+void aicwf_prealloc_exit(void)
 {
 	struct rx_buff *rxbuff;
 	struct rx_buff *pos;

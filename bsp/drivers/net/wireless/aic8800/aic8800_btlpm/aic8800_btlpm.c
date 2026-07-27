@@ -45,6 +45,10 @@
 #include <linux/wakelock.h>
 #endif
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 14, 18)
+#define del_timer         timer_delete
+#endif
+
 /*
  * #define BT_SLEEP_DBG
  */
@@ -64,7 +68,7 @@
  * Defines
  */
 #define DRV_RELEASE_DATE "20220429"
-#define DRV_PATCH_LEVEL  "011"
+#define DRV_PATCH_LEVEL  "012"
 #define DRV_RELEASE_TAG  "aic-btlpm-" DRV_RELEASE_DATE "-" DRV_PATCH_LEVEL
 #define VERSION          "1.3.3"
 #define PROC_DIR         "bluetooth/sleep"
@@ -873,18 +877,25 @@ static int __init bluesleep_probe(struct platform_device *pdev)
 		BT_DBG("override host_wake assert to %d", bsi->host_wake_assert);
 	}
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 16, 0)
+	ret = devm_gpio_request_one(dev, bsi->host_wake, GPIOF_IN, "bt_hostwake");
+#else
 	ret = devm_gpio_request(dev, bsi->host_wake, "bt_hostwake");
+#endif
 	if (ret < 0) {
 		BT_ERR("can't request bt_hostwake gpio %d\n",
 			bsi->host_wake);
 		goto err0;
 	}
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 16, 0)
 	ret = gpio_direction_input(bsi->host_wake);
 	if (ret < 0) {
 		BT_ERR("can't request input direction bt_wake gpio %d\n",
 			bsi->host_wake);
 		goto err1;
 	}
+#endif
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 19, 0)
 	if (!of_property_read_bool(np, "wakeup-source")) {
@@ -919,7 +930,11 @@ static int __init bluesleep_probe(struct platform_device *pdev)
 		goto err2;
 	}
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 16, 0)
+	ret = devm_gpio_request_one(dev, bsi->ext_wake, GPIOF_OUT_INIT_LOW, "bt_wake");
+#else
 	ret = devm_gpio_request(dev, bsi->ext_wake, "bt_wake");
+#endif
 	if (ret < 0) {
 		BT_ERR("can't request bt_wake gpio %d\n",
 			bsi->ext_wake);
@@ -940,6 +955,7 @@ static int __init bluesleep_probe(struct platform_device *pdev)
 		BT_DBG("override ext_wake assert to %d", bsi->ext_wake_assert);
 	}
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 16, 0)
 	/* 1.set bt_wake as output and the level is assert, assert bt wake */
 	ret = gpio_direction_output(bsi->ext_wake, bsi->ext_wake_assert);
 	if (ret < 0) {
@@ -947,6 +963,7 @@ static int __init bluesleep_probe(struct platform_device *pdev)
 			bsi->ext_wake);
 		goto err3;
 	}
+#endif
 	/*set ext_wake deassert as default*/
 	gpio_set_value(bsi->ext_wake, !bsi->ext_wake_assert);
 
@@ -1001,7 +1018,11 @@ err0:
 	return ret;
 }
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 10, 0))
 static int bluesleep_remove(struct platform_device *pdev)
+#else
+static void bluesleep_remove(struct platform_device *pdev)
+#endif
 {
 	/* assert bt wake */
 	gpio_set_value(bsi->ext_wake, bsi->ext_wake_assert);
@@ -1028,7 +1049,9 @@ static int bluesleep_remove(struct platform_device *pdev)
 		dev_pm_clear_wake_irq(&pdev->dev);
 	}
 
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 10, 0))
 	return 0;
+#endif
 }
 
 static const struct of_device_id sunxi_btlpm_ids[] = {

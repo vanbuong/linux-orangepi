@@ -179,4 +179,19 @@ int rwnx_send_get_apf_prog_req(struct rwnx_hw *rwnx_hw, u8_l *program, u32_l pro
 int rwnx_send_reboot(struct rwnx_hw *rwnx_hw);
 #endif // CONFIG_USB_BT
 
+int rwnx_send_nan_start_req(struct rwnx_hw *rwnx_hw, u8_l pref, u8_l band);
+int rwnx_send_nan_publish_req(struct rwnx_hw *rwnx_hw, u8_l service_id[], const u8 *ssi, u16 ssi_len);
+int rwnx_send_nan_followup_req(struct rwnx_hw *rwnx_hw, u8_l service_id[]);
+int rwnx_send_nan_subscribe_req(struct rwnx_hw *rwnx_hw, u8_l service_id[]);
+int rwnx_send_nan_add_skda_req(struct rwnx_hw *rwnx_hw, u16 skda_len, u8 *skda);
+int rwnx_send_nan_add_nm_tk_req(struct rwnx_hw *rwnx_hw, u16 nm_tk_len, u8 *nm_tk, u8 *peer_addr, u8 *pmkid, u8 flag);
+int rwnx_send_nan_ndp_req(struct rwnx_hw *rwnx_hw);
+int rwnx_send_nan_pmk_req(struct rwnx_hw *rwnx_hw, u16 nd_pmk_len, u8 *nd_pmk);
+int rwnx_send_nan_kek_req(struct rwnx_hw *rwnx_hw, u16 kek_len, u8 *kek);
+int rwnx_send_nan_service_info(struct rwnx_hw *rwnx_hw, struct mm_nan_service_info *param);
+int rwnx_send_nan_pmksa_req(struct rwnx_hw *rwnx_hw, u16 pmksa_len, u8 *pmksa, u8 *peer_addr);
+int rwnx_send_nan_self_nik_req(struct rwnx_hw *rwnx_hw, u16 self_nik_len, u8 *self_nik, u16_l self_nounce_len, u8 *self_nounce);
+int rwnx_send_nan_start_bootstrapping_req(struct rwnx_hw *rwnx_hw, u8_l *da);
+int rwnx_send_nan_set_country_req(struct rwnx_hw *rwnx_hw, u8 *country_code, u8 country_code_len, u32 nan_freq);
+
 #endif /* _RWNX_MSG_TX_H_ */

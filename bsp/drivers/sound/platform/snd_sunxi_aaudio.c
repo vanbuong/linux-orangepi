@@ -239,14 +239,22 @@ err_devm_kzalloc:
 	return ret;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 11, 0)
+static void sunxi_aaudio_dev_remove(struct platform_device *pdev)
+#else
 static int sunxi_aaudio_dev_remove(struct platform_device *pdev)
+#endif
 {
 	snd_sunxi_dma_platform_unregister(&pdev->dev);
 	snd_soc_unregister_component(&pdev->dev);
 
 	SND_LOG_DEBUG("unregister aaudio platform success\n");
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 11, 0)
+	return;
+#else
 	return 0;
+#endif
 }
 
 static const struct of_device_id sunxi_aaudio_of_match[] = {
@@ -265,7 +273,7 @@ static struct platform_driver sunxi_aaudio_driver = {
 	.remove	= sunxi_aaudio_dev_remove,
 };
 
-int __init sunxi_aaudio_dev_init(void)
+static int __init sunxi_aaudio_dev_init(void)
 {
 	int ret;
 
@@ -278,7 +286,7 @@ int __init sunxi_aaudio_dev_init(void)
 	return ret;
 }
 
-void __exit sunxi_aaudio_dev_exit(void)
+static void __exit sunxi_aaudio_dev_exit(void)
 {
 	platform_driver_unregister(&sunxi_aaudio_driver);
 }
@@ -288,5 +296,5 @@ module_exit(sunxi_aaudio_dev_exit);
 
 MODULE_AUTHOR("Dby@allwinnertech.com");
 MODULE_LICENSE("GPL");
-MODULE_VERSION("1.0.1");
+MODULE_VERSION("1.0.2");
 MODULE_DESCRIPTION("sunxi soundcard platform of aaudio");

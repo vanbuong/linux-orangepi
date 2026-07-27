@@ -435,12 +435,13 @@ static int sunxi_loopback_component_probe(struct snd_soc_component *component)
 	SND_LOG_DEBUG("\n");
 
 	/* init hrtime */
-	hrtimer_init(&sunxi_loopback->play_hrt.timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	sunxi_loopback->play_hrt.timer.function = play_hrtimer_handler;
+	HRTIMER_COMPAT_INIT(&sunxi_loopback->play_hrt.timer, play_hrtimer_handler,
+			    CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 
-	hrtimer_init(&sunxi_loopback->cap_hrt.timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	sunxi_loopback->cap_hrt.timer.function = cap_hrtimer_handler;
-
+	HRTIMER_COMPAT_INIT(&sunxi_loopback->cap_hrt.timer, cap_hrtimer_handler,
+			    CLOCK_MONOTONIC, HRTIMER_MODE_REL);
 	INIT_WORK(&sunxi_loopback->play_hrt.hrtime_work, snd_sunxi_loopback_play_hrtime_work);
 	INIT_WORK(&sunxi_loopback->cap_hrt.hrtime_work, snd_sunxi_loopback_cap_hrtime_work);
 
@@ -629,5 +630,5 @@ module_exit(sunxi_loopback_dev_exit);
 
 MODULE_AUTHOR("huhaoxin@allwinnertech.com");
 MODULE_LICENSE("GPL");
-MODULE_VERSION("1.0.0");
+MODULE_VERSION("1.0.1");
 MODULE_DESCRIPTION("sunxi soundcard platform of loopback");

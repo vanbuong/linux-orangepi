@@ -571,7 +571,7 @@ static int aicwf_sdio_recv_pkt(struct priv_dev *aicdev, struct sk_buff *skbbuf,
 	int ret;
 
 	if ((!skbbuf) || (!size)) {
-		return -EINVAL;;
+		return -EINVAL;
 	}
 
 	sdio_claim_host(aicdev->func[0]);
@@ -592,7 +592,7 @@ static int aicwf_sdio_recv_msg(struct priv_dev *aicdev, struct sk_buff *skbbuf,
 	int ret;
 
 	if ((!skbbuf) || (!size)) {
-		return -EINVAL;;
+		return -EINVAL;
 	}
 
 	sdio_claim_host(aicdev->func[1]);

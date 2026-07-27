@@ -89,6 +89,7 @@ static inline int rwnx_rx_chan_switch_ind(struct rwnx_hw *rwnx_hw,
 	int chan_idx = ((struct mm_channel_switch_ind *)msg->param)->chan_index;
 	bool roc     = ((struct mm_channel_switch_ind *)msg->param)->roc;
 	bool roc_tdls = ((struct mm_channel_switch_ind *)msg->param)->roc_tdls;
+	struct rwnx_roc_elem *roc_elem = NULL;
 
 	REG_SW_SET_PROFILING_CHAN(rwnx_hw, SW_PROF_CHAN_CTXT_SWTCH_BIT);
 #ifdef CONFIG_RWNX_FULLMAC
@@ -112,7 +113,8 @@ static inline int rwnx_rx_chan_switch_ind(struct rwnx_hw *rwnx_hw,
 		spin_unlock_bh(&rwnx_hw->cb_lock);
 	} else {
 		/* Retrieve the allocated RoC element */
-		struct rwnx_roc_elem *roc_elem = rwnx_hw->roc_elem;
+		spin_lock_bh(&rwnx_hw->cb_lock);
+		roc_elem = rwnx_hw->roc_elem;
 		/* Get VIF on which RoC has been started */
 		//rwnx_vif = netdev_priv(roc_elem->wdev->netdev);
 
@@ -132,6 +134,7 @@ static inline int rwnx_rx_chan_switch_ind(struct rwnx_hw *rwnx_hw,
 		} else {
 			printk("roc_elem == null\n");
 		}
+		spin_unlock_bh(&rwnx_hw->cb_lock);
 		// Enable traffic on OFF channel queue
 		rwnx_txq_offchan_start(rwnx_hw);
 	}
@@ -214,14 +217,18 @@ static inline int rwnx_rx_remain_on_channel_exp_ind(struct rwnx_hw *rwnx_hw,
 {
 #ifdef CONFIG_RWNX_FULLMAC
 	/* Retrieve the allocated RoC element */
-	struct rwnx_roc_elem *roc_elem = rwnx_hw->roc_elem;
+	struct rwnx_roc_elem *roc_elem = NULL;
 	/* Get VIF on which RoC has been started */
 	struct rwnx_vif *rwnx_vif;
 
 	RWNX_DBG(RWNX_FN_ENTRY_STR);
 
-	if (!roc_elem)
+	spin_lock_bh(&rwnx_hw->cb_lock);
+	roc_elem = rwnx_hw->roc_elem;
+	if (!roc_elem) {
+		spin_unlock_bh(&rwnx_hw->cb_lock);
 		return 0;
+	}
 
 	rwnx_vif = container_of(roc_elem->wdev, struct rwnx_vif, wdev);
 	/* For debug purpose (use ftrace kernel option) */
@@ -249,6 +256,7 @@ static inline int rwnx_rx_remain_on_channel_exp_ind(struct rwnx_hw *rwnx_hw,
 	/* Free the allocated RoC element */
 	kfree(roc_elem);
 	rwnx_hw->roc_elem = NULL;
+	spin_unlock_bh(&rwnx_hw->cb_lock);
 
 #endif /* CONFIG_RWNX_FULLMAC */
 	return 0;
@@ -844,15 +852,15 @@ static inline int rwnx_rx_sm_connect_ind(struct rwnx_hw *rwnx_hw,
 			rwnx_vif->wep_auth_err = true;
 			printk("con ind wep_auth_err %d\n", rwnx_vif->wep_auth_err);
 		}
-		rwnx_set_conn_state(&rwnx_vif->drv_conn_state, (int)RWNX_DRV_STATUS_DISCONNECTED);
+		rwnx_set_conn_state(rwnx_vif, &rwnx_vif->drv_conn_state, (int)RWNX_DRV_STATUS_DISCONNECTED);
 	} else {
-		rwnx_set_conn_state(&rwnx_vif->drv_conn_state, (int)RWNX_DRV_STATUS_DISCONNECTED);
+		rwnx_set_conn_state(rwnx_vif, &rwnx_vif->drv_conn_state, (int)RWNX_DRV_STATUS_DISCONNECTED);
 	}
 
 	printk("%s ind->roamed:%d ind->status_code:%d rwnx_vif->drv_conn_state:%d\r\n",
 			__func__, ind->roamed, ind->status_code, (int)atomic_read(&rwnx_vif->drv_conn_state));
 
-	if (ind->status_code == 0 && (int)atomic_read(&rwnx_vif->drv_conn_state) == RWNX_DRV_STATUS_DISCONNECTING){
+	if (ind->status_code == 0 && (int)atomic_read(&rwnx_vif->drv_conn_state) == RWNX_DRV_STATUS_DISCONNECTING) {
 		printk("%s the disconnection has been requested, return it\r\n", __func__);
 		goto exit;
 	}
@@ -863,18 +871,18 @@ static inline int rwnx_rx_sm_connect_ind(struct rwnx_hw *rwnx_hw,
 								ind->assoc_rsp_ie_len, ind->status_code,
 								GFP_ATOMIC);
 		if (ind->status_code == 0) {
-			rwnx_set_conn_state(&rwnx_vif->drv_conn_state, (int)RWNX_DRV_STATUS_CONNECTED);
+			rwnx_set_conn_state(rwnx_vif, &rwnx_vif->drv_conn_state, (int)RWNX_DRV_STATUS_CONNECTED);
 			printk("%s cfg80211_connect_result pass, rwnx_vif->drv_conn_state:%d\r\n",
 				__func__, (int)atomic_read(&rwnx_vif->drv_conn_state));
 		} else {
-			rwnx_set_conn_state(&rwnx_vif->drv_conn_state, (int)RWNX_DRV_STATUS_DISCONNECTED);
+			rwnx_set_conn_state(rwnx_vif, &rwnx_vif->drv_conn_state, (int)RWNX_DRV_STATUS_DISCONNECTED);
 			rwnx_external_auth_disable(rwnx_vif);
 		}
 	} else { //roaming
 		if (ind->status_code != 0) {
 			printk("%s roaming fail to notify disconnect \r\n", __func__);
 			cfg80211_disconnected(dev, 0, NULL, 0, 1, GFP_ATOMIC);
-			rwnx_set_conn_state(&rwnx_vif->drv_conn_state, (int)RWNX_DRV_STATUS_DISCONNECTED);
+			rwnx_set_conn_state(rwnx_vif, &rwnx_vif->drv_conn_state, (int)RWNX_DRV_STATUS_DISCONNECTED);
 			rwnx_external_auth_disable(rwnx_vif);
 		} else {
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)
@@ -909,7 +917,7 @@ static inline int rwnx_rx_sm_connect_ind(struct rwnx_hw *rwnx_hw,
 				, ind->assoc_rsp_ie_len
 				, GFP_ATOMIC);
 #endif /*LINUX_VERSION_CODE >= KERNEL_VERSION(4, 12, 0)*/
-			rwnx_set_conn_state(&rwnx_vif->drv_conn_state, (int)RWNX_DRV_STATUS_CONNECTED);
+			rwnx_set_conn_state(rwnx_vif, &rwnx_vif->drv_conn_state, (int)RWNX_DRV_STATUS_CONNECTED);
 		}
 		rwnx_vif->sta.is_roam = false;
 	}
@@ -1047,7 +1055,7 @@ static inline int rwnx_rx_sm_disconnect_ind(struct rwnx_hw *rwnx_hw,
 	rwnx_chanctx_unlink(rwnx_vif);
 
 	if (rwnx_vif->sta.is_roam == false) {
-		rwnx_set_conn_state(&rwnx_vif->drv_conn_state, (int)RWNX_DRV_STATUS_DISCONNECTED);
+		rwnx_set_conn_state(rwnx_vif, &rwnx_vif->drv_conn_state, (int)RWNX_DRV_STATUS_DISCONNECTED);
 	}
 
 	return 0;

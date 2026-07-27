@@ -6,6 +6,9 @@ endif
 ifeq ($(CONFIG_AIC_INTF_SDIO),y)
 CONFIG_SDIO_PWRCTRL ?= y
 endif
+ifeq ($(CONFIG_AIC_INTF_USB),y)
+CONFIG_PLATFORM_HI = y
+endif
 CONFIG_VRF_DCDC_MODE ?=y
 CONFIG_OOB ?= n
 CONFIG_DPD = y
@@ -26,6 +29,9 @@ ccflags-$(CONFIG_FORCE_DPD_CALIB) += -DCONFIG_FORCE_DPD_CALIB -DCONFIG_DPD
 ccflags-$(CONFIG_AMSDU_RX) += -DCONFIG_AMSDU_RX
 ccflags-$(CONFIG_PREALLOC_TXQ) += -DCONFIG_PREALLOC_TXQ
 ccflags-$(CONFIG_SDIO_F1_FLAG) += -DCONFIG_SDIO_F1_FLAG
+ccflags-$(CONFIG_PLATFORM_HI) += -DCONFIG_PLATFORM_HI
+ccflags-y += -Wno-missing-prototypes
+ccflags-y += -Wno-missing-declarations
 
 obj-m := aic8800_bsp.o
 aic8800_bsp-y := \
@@ -41,7 +47,8 @@ aic8800_bsp-$(CONFIG_AIC_INTF_USB)  += aicusb.o
 aic8800_bsp-$(CONFIG_PREALLOC_TXQ)  += aic_bsp_txq_prealloc.o
 
 # bind verify for vendor modules
-#$(obj)/aic_bsp_helper.o: $(srctree)/$(src)/aic_bsp_helper.c
+localsrcpath := $(if $(filter /%,$(src)),$(src),$(srctree)/$(src))
+#$(obj)/aic_bsp_helper.o: $(localsrcpath)/aic_bsp_helper.c
 #	@$(HOSTCC) $^ -o $@
 #$(obj)/aic_bsp_verify.o: $(obj)/aic_bsp_helper.o FORCE
 #	@echo " " > $(shell dirname $@)/.$(shell basename $@).cmd

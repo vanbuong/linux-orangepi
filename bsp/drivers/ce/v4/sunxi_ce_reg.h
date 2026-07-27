@@ -64,12 +64,20 @@
 #define CE_CMD_HASH_METHOD_SHIFT	0
 #define CE_CMD_RNG_METHOD_SHIFT	8
 #define CE_CMD_HMAC_METHOD_SHIFT	4
+#define CE_SUB_CMD_RELOAD_SHIFT		31
+#define CE_SUB_CMD_RELOAD_OFFSET_SHIFT	16
 
 #define CE_CTL_IV_MODE_SHIFT	8
 #define CE_CTL_HMAC_SHA1_LAST	BIT(12)
 
 #define CE_CTL_IE_SHIFT		16
 #define CE_CTL_IE_MASK 	(0x1 << CE_CTL_IE_SHIFT)
+
+#define CHN  (0)  /* channel id */
+#define IVE  (8)
+#define LPKG (12)  /* last package */
+#define DLAV (13)  /* data length valid */
+#define IE   (16)
 
 #define SS_METHOD_MD5				0
 #define SS_METHOD_SHA1			1
@@ -132,6 +140,8 @@
 
 #define CE_METHOD_IS_HMAC(type) ((type == SS_METHOD_HMAC_SHA1) \
 				|| (type == SS_METHOD_HMAC_SHA256))
+
+#define CE_METHOD_IS_RAES(type) (type == SS_METHOD_RAES)
 
 /* About the symmetric control word */
 
@@ -282,6 +292,7 @@ int ss_flow_err(int flow);
 
 void ss_data_len_set(int len, ce_task_desc_t *task);
 
+void ce_reg_print(void);
 int ss_reg_print(char *buf, int len);
 void ss_keyselect_set(int select, ce_task_desc_t *task);
 void ss_keysize_set(int size, ce_task_desc_t *task);
@@ -292,8 +303,12 @@ void ss_hash_iv_mode_set(int mode, ce_new_task_desc_t *task);
 void ss_hmac_sha1_last(ce_new_task_desc_t *task);
 void ss_hmac_method_set(int type, ce_new_task_desc_t *task);
 void ss_hash_method_set(int type, ce_new_task_desc_t *task);
+void ss_hash_cmd_set(int channel_id, ce_new_task_desc_t *task);
 void ss_rng_method_set(int hash_type, int type, ce_new_task_desc_t *task);
 void ss_hash_rng_ctrl_start(ce_new_task_desc_t *task);
 void ss_hash_data_len_set(int len, ce_new_task_desc_t *task);
+
+void ce_task_addr_set(u8 *vir_addr, phys_addr_t phy_addr, u8 *dst);
+phys_addr_t ce_task_addr_get(u8 *dst);
 
 #endif /* end of _SUNXI_SECURITY_SYSTEM_REG_H_ */

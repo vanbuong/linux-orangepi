@@ -1,5 +1,6 @@
 # SPDX-License-Identifier: GPL-2.0-only
 ccflags-y += -I$(srctree)/$(obj)/sunxi_device/hardware/
+ccflags-y += -I$(srctree)/$(obj)/sunxi_device/hardware/hdcp/dptx/
 ccflags-y += -I$(srctree)/$(obj)/sunxi_device/hardware/lowlevel_lcd/
 ccflags-y += -I$(srctree)/$(obj)/sunxi_device/hardware/lowlevel_tcon/
 ccflags-y += -I$(srctree)/$(obj)/phy/
@@ -51,10 +52,17 @@ sunxidrm-$(CONFIG_AW_DRM_HDMI20) += $(obj_low_hdmi)
 # edp
 sunxidrm-$(CONFIG_AW_DRM_EDP) += sunxi_drm_edp.o
 sunxidrm-$(CONFIG_AW_DRM_EDP) += sunxi_device/sunxi_edp.o
-sunxidrm-$(CONFIG_AW_DRM_DP_HDCP) += sunxi_device/sunxi_edp_hdcp.o
-sunxidrm-$(CONFIG_AW_DRM_DP_HDCP) += lib/src/sha1.o
+sunxidrm-$(CONFIG_AW_DRM_DP_HDCP) += sunxi_device/hdcp/dptx/sunxi_dptx_hdcp.o
+sunxidrm-$(CONFIG_AW_DRM_DP_HDCP) += sunxi_device/hdcp/dptx/sunxi_dptx_hdcp_bigdigits.o
+sunxidrm-$(CONFIG_AW_DRM_DP_HDCP) += sunxi_device/hdcp/dptx/sunxi_dptx_hdcp2x_crypt.o
 sunxidrm-$(CONFIG_AW_DRM_INNO_EDP13) += sunxi_device/hardware/lowlevel_edp/inno_edp13/inno_edp13.o
 sunxidrm-$(CONFIG_AW_DRM_TRILINEAR_EDP14) += sunxi_device/hardware/lowlevel_edp/trilinear_dp14/trilinear_dp14.o
+
+# bridge
+sunxidrm-$(CONFIG_AW_DRM_BRIDGE) += bridge/sunxi_bridge.o
+sunxidrm-$(CONFIG_AW_DRM_BRIDGE_LT8711) += bridge/lt8711.o
+sunxidrm-$(CONFIG_AW_DRM_BRIDGE_GM7123) += bridge/gm7123.o
+sunxidrm-$(CONFIG_SUNXI_SIMPLE_DRM_BRIDGE) += bridge/sunxi_simple_drm_bridge.o
 
 # phy
 obj-$(CONFIG_AW_DRM_PHY) += phy/

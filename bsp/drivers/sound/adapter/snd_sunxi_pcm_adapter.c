@@ -18,7 +18,7 @@
 
 #include "snd_sunxi_log.h"
 #include "snd_sunxi_pcm.h"
-
+#include "snd_sunxi_adapter.h"
 #define SUNXI_DMAENGINE_PCM_DRV_NAME	"sunxi_dmaengine_pcm"
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)

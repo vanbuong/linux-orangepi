@@ -12,6 +12,7 @@
 #include <sunxi-log.h>
 #include <linux/module.h>
 #include <linux/nvmem-consumer.h>
+#include <linux/of.h>
 #include <linux/of_device.h>
 #include <linux/platform_device.h>
 #include <linux/pm_opp.h>
@@ -26,6 +27,8 @@
 #define MAX_VF_VER_LEN    8
 
 #define SUN50IW9_ICPU_MASK     GENMASK(9, 0)
+#define SUN8IW20_SPEED_MASK    GENMASK(15, 0)
+#define SUN20IW1_SPEED_MASK    GENMASK(15, 0)
 
 static struct platform_device *cpufreq_dt_pdev, *sun50i_cpufreq_pdev;
 
@@ -42,6 +45,7 @@ struct cpufreq_nvmem_data {
 };
 
 static struct cpufreq_nvmem_data ver_data;
+static bool cpufreq_nvmem_finished;
 
 struct cpufreq_soc_data {
 	void (*nvmem_xlate)(u32 *versions, char *name);
@@ -50,6 +54,10 @@ struct cpufreq_soc_data {
 	bool has_nvmem_bin;
 	bool has_nvmem_extend_bin;
 };
+
+u32 sunxi_get_vf_index(void);
+bool is_cpufreq_nvmem_finished(void);
+u32 determine_dcxo_clk_source(void);
 
 #if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0)
 static ssize_t dvfs_code_show(struct class *class, struct class_attribute *attr,
@@ -354,38 +362,60 @@ static struct cpufreq_soc_data sun50iw10_soc_data = {
 	.has_nvmem_bin = true,
 };
 
-static void sun8iw20_bin_xlate(bool bin_select, char *name, u32 nv_bin)
+static void sun8iw20_bin_xlate(bool bin_select, bool high_speed, char *name, u32 nv_bin, u32 *versions)
 {
 	int value = 0;
 	u32 bin = (nv_bin >> 12) & 0xf;
 
 	if (bin_select) {
-		if (bin <= 1)
-			value = 1;
-		else
-			value = 0;
-		/* BGA use axx in VF table */
+		if (high_speed) {
+			if (bin <= 1)
+				value = 2;
+			else {
+				sunxi_err(NULL, "%s:%d: unsupport efuse bin:%d\n", __func__, __LINE__, bin);
+				*versions = 0b10000000;
+			}
+		} else {
+			if (bin <= 1)
+				value = 1;
+			else
+				value = 0;
+		}
 		snprintf(name, MAX_NAME_LEN, "a%d", value);
 	} else {
 		value = 0;
-		/* QFN use bxx in VF table */
+		if (high_speed)
+			value = 0;
+		else {
+			sunxi_err(NULL, "%s:%d: undefine specification\n", __func__, __LINE__);
+			*versions = 0b10000000;
+		}
 		snprintf(name, MAX_NAME_LEN, "b%d", value);
 	}
 }
 
 static void sun8iw20_nvmem_xlate(u32 *versions, char *name)
 {
-	switch (ver_data.nv_speed) {
+	switch (ver_data.nv_speed & SUN8IW20_SPEED_MASK) {
 	case 0x6000:
-		sun8iw20_bin_xlate(false, name, ver_data.nv_bin);
+	case 0x6800:
+	case 0x6100:
+	case 0x7200:
+	case 0x7300:
 		*versions = 0b0010;
+		sun8iw20_bin_xlate(false, true, name, ver_data.nv_bin, versions);
+		break;
+	case 0x7c00:
+		*versions = 0b0001;
+		sun8iw20_bin_xlate(true, false, name, ver_data.nv_bin, versions);
 		break;
 	case 0x6400:
 	case 0x7000:
-	case 0x7c00:
+	case 0x2000:
+	case 0x3400:
 	default:
-		sun8iw20_bin_xlate(true, name, ver_data.nv_bin);
 		*versions = 0b0001;
+		sun8iw20_bin_xlate(true, true, name, ver_data.nv_bin, versions);
 		break;
 	}
 	sunxi_debug(NULL, "sun8iw20 match vf:%s, mark:0x%x\n", name, ver_data.nv_speed);
@@ -397,44 +427,37 @@ static struct cpufreq_soc_data sun8iw20_soc_data = {
 	.has_nvmem_bin = true,
 };
 
-static void sun20iw1_bin_xlate(bool bin_select, bool high_speed, char *name, u32 nv_bin)
-{
-	int value = 0;
-	u32 bin = (nv_bin >> 12) & 0xf;
-
-	if (bin_select) {
-		if (bin <= 1)
-			value = 1;
-		else
-			value = 0;
-		/* BGA use axx in VF table */
-		snprintf(name, MAX_NAME_LEN, "a%d", value);
-	} else {
-		if (high_speed)
-			value = 1;
-		else
-			value = 0;
-		/* QFN use bxx in VF table */
-		snprintf(name, MAX_NAME_LEN, "b%d", value);
-	}
-}
 
 static void sun20iw1_nvmem_xlate(u32 *versions, char *name)
 {
-	switch (ver_data.nv_speed) {
-	case 0x5e00:
-		sun20iw1_bin_xlate(false, false, name, ver_data.nv_bin);
-		*versions = 0b0010;
-		break;
+	u32 bin = (ver_data.nv_bin >> 12) & 0xf;
+
+	switch (ver_data.nv_speed & SUN20IW1_SPEED_MASK) {
 	case 0x5c00:
+		if (bin <= 1) {
+			*versions = 0b0100;
+			snprintf(name, MAX_NAME_LEN, "c%d", 1);
+		} else {
+			*versions = 0b0010;
+			snprintf(name, MAX_NAME_LEN, "c%d", 0);
+		}
+		break;
+	case 0x5e00:
+		*versions = 0b0010;
+		snprintf(name, MAX_NAME_LEN, "b%d", 0);
+		break;
 	case 0x7400:
-		sun20iw1_bin_xlate(false, true, name, ver_data.nv_bin);
 		*versions = 0b0001;
+		snprintf(name, MAX_NAME_LEN, "b%d", 1);
 		break;
 	case 0x5000:
 	default:
-		sun20iw1_bin_xlate(true, true, name, ver_data.nv_bin);
 		*versions = 0b0001;
+		if (bin <= 1)
+			snprintf(name, MAX_NAME_LEN, "a%d", 1);
+		else
+			snprintf(name, MAX_NAME_LEN, "a%d", 0);
+		break;
 	}
 	sunxi_debug(NULL, "sun20iw1 match vf:%s, mark:0x%x\n", name, ver_data.nv_speed);
 }
@@ -455,6 +478,12 @@ u32 sunxi_get_vf_index(void)
 	return ver_data.vf_index;
 }
 EXPORT_SYMBOL_GPL(sunxi_get_vf_index);
+
+bool is_cpufreq_nvmem_finished(void)
+{
+	return cpufreq_nvmem_finished;
+}
+EXPORT_SYMBOL_GPL(is_cpufreq_nvmem_finished);
 
 static int get_vf_table_version(void)
 {
@@ -616,30 +645,46 @@ static struct cpufreq_soc_data sun55iw3_soc_data = {
 	.nvmem_xlate = sun55iw3_nvmem_xlate,
 };
 
-#define SUN55IW6_DVFS_EFUSE_OFF     (0x20)
 static void sun55iw6_nvmem_xlate(u32 *versions, char *name)
 {
-	u32 bak_dvfs, dvfs, combi;
+	u32 dvfs;
 	u32 index = 0x0100;
 
-	sunxi_get_module_param_from_sid(&dvfs, SUN55IW6_DVFS_EFUSE_OFF, 4);
-	bak_dvfs = (dvfs >> 24) & 0xff;
-	if (bak_dvfs)
-		combi = bak_dvfs;
-	else
-		combi = (dvfs >> 16) & 0xff;
+	if (sunxi_get_soc_dvfs(&dvfs))
+		sunxi_err(NULL, "failed to get soc dvfs, use default vf table\n");
 
-	match_vf_table(combi, &index);
+	match_vf_table(dvfs, &index);
 
 	sunxi_set_vf_index(index);
 	snprintf(name, MAX_NAME_LEN, "vf%04x", index);
-	ver_data.dvfs_code = (u16)((dvfs >> 4) & 0xffff);
+	ver_data.dvfs_code = (u16)(dvfs & 0xffff);
 	get_vf_table_version();
 	sunxi_debug(NULL, "dvfs: %s, 0x%x, %s\n", ver_data.vf_ver, ver_data.dvfs_code, name);
 }
 
 static struct cpufreq_soc_data sun55iw6_soc_data = {
 	.nvmem_xlate = sun55iw6_nvmem_xlate,
+};
+
+static void sun55iw7_nvmem_xlate(u32 *versions, char *name)
+{
+	u32 dvfs = 0;
+	u32 index = 0;
+
+	if (sunxi_get_soc_dvfs(&dvfs))
+		sunxi_err(NULL, "failed to get soc dvfs, use default vf table\n");
+
+	match_vf_table(dvfs, &index);
+
+	sunxi_set_vf_index(index);
+	snprintf(name, MAX_NAME_LEN, "vf%04x", index);
+	ver_data.dvfs_code = (u16)(dvfs & 0xffff);
+	get_vf_table_version();
+	sunxi_debug(NULL, "dvfs: %s, 0x%x, %s\n", ver_data.vf_ver, ver_data.dvfs_code, name);
+}
+
+static struct cpufreq_soc_data sun55iw7_soc_data = {
+	.nvmem_xlate = sun55iw7_nvmem_xlate,
 };
 
 u32 determine_dcxo_clk_source(void)
@@ -667,7 +712,7 @@ EXPORT_SYMBOL_GPL(determine_dcxo_clk_source);
 static void sun60iw2_nvmem_xlate(u32 *versions, char *name)
 {
 	u32 dvfs;
-	u32 index = 0x0000;
+	u32 index = 0x0100;
 	u32 clock_rate;
 
 	if (sunxi_get_soc_dvfs(&dvfs))
@@ -691,6 +736,93 @@ static void sun60iw2_nvmem_xlate(u32 *versions, char *name)
 
 static struct cpufreq_soc_data sun60iw2_soc_data = {
 	.nvmem_xlate = sun60iw2_nvmem_xlate,
+};
+static void sun251iw1_nvmem_xlate(u32 *versions, char *name)
+{
+	u32 dvfs;
+	u32 index = 0x0000;
+
+	if (sunxi_get_soc_dvfs(&dvfs))
+		sunxi_err(NULL, "failed to get soc dvfs, use default vf table\n");
+
+	match_vf_table(dvfs, &index);
+
+	sunxi_set_vf_index(index);
+	snprintf(name, MAX_NAME_LEN, "vf%04x", index);
+
+	ver_data.dvfs_code = (u16)(dvfs & 0xffff);
+	get_vf_table_version();
+	printk("dvfs: %s, 0x%x, %s\n", ver_data.vf_ver, ver_data.dvfs_code, name);
+}
+
+static struct cpufreq_soc_data sun251iw1_soc_data = {
+	.nvmem_xlate = sun251iw1_nvmem_xlate,
+};
+
+static void sun65iw1_nvmem_xlate(u32 *versions, char *name)
+{
+	u32 dvfs;
+	u32 index = 0x0000;
+	dvfs = index;
+
+	if (sunxi_get_soc_dvfs(&dvfs))
+		sunxi_err(NULL, "failed to get soc dvfs, use default vf table\n");
+
+	match_vf_table(dvfs, &index);
+
+	sunxi_set_vf_index(index);
+	snprintf(name, MAX_NAME_LEN, "vf%04x", index);
+	ver_data.dvfs_code = (u16)(dvfs & 0xffff);
+	get_vf_table_version();
+	sunxi_debug(NULL, "dvfs: %s, 0x%x, %s\n", ver_data.vf_ver, ver_data.dvfs_code, name);
+}
+
+
+static struct cpufreq_soc_data sun65iw1_soc_data = {
+	.nvmem_xlate = sun65iw1_nvmem_xlate,
+};
+
+static void sun8iw22_nvmem_xlate(u32 *versions, char *name)
+{
+	u32 dvfs;
+	u32 index = 0x0000;
+	dvfs = index;
+
+	if (sunxi_get_soc_dvfs(&dvfs))
+		sunxi_err(NULL, "failed to get soc dvfs, use default vf table\n");
+
+	match_vf_table(dvfs, &index);
+
+	sunxi_set_vf_index(index);
+	snprintf(name, MAX_NAME_LEN, "vf%04x", index);
+	ver_data.dvfs_code = (u16)(dvfs & 0xffff);
+	get_vf_table_version();
+	sunxi_debug(NULL, "dvfs: %s, 0x%x, %s\n", ver_data.vf_ver, ver_data.dvfs_code, name);
+}
+
+static struct cpufreq_soc_data sun8iw22_soc_data = {
+	.nvmem_xlate = sun8iw22_nvmem_xlate,
+};
+
+static void sun252iw1_nvmem_xlate(u32 *versions, char *name)
+{
+	u32 dvfs = 0;
+	u32 index = 0x0000;
+
+	if (sunxi_get_soc_dvfs(&dvfs))
+		sunxi_err(NULL, "failed to get soc dvfs, use default vf table\n");
+
+	match_vf_table(dvfs, &index);
+
+	sunxi_set_vf_index(index);
+	snprintf(name, MAX_NAME_LEN, "vf%04x", index);
+	ver_data.dvfs_code = (u16)(dvfs & 0xffff);
+	get_vf_table_version();
+	sunxi_debug(NULL, "dvfs: %s, 0x%x, %s\n", ver_data.vf_ver, ver_data.dvfs_code, name);
+}
+
+static struct cpufreq_soc_data sun252iw1_soc_data = {
+	.nvmem_xlate = sun252iw1_nvmem_xlate,
 };
 
 static const char sun8iw21_ic_index_list[][32] = {
@@ -828,11 +960,31 @@ static int sun50i_cpufreq_get_efuse(const struct cpufreq_soc_data *soc_data,
 	return 0;
 };
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 6, 0)
+static unsigned int vf_test_is_enable(struct device *dev)
+{
+	struct device_node *np;
+	unsigned int vf_test_enable = 0;
+
+	np = of_node_get(dev->of_node);
+
+	/* This must be valid for sure */
+	if (WARN_ON(!np))
+		return 0;
+
+	of_property_read_u32(np, "vf-test-enable", &vf_test_enable);
+
+	of_node_put(np);
+	return vf_test_enable;
+}
+
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0)
 static int sun50i_cpufreq_nvmem_probe(struct platform_device *pdev)
 {
 	const struct of_device_id *match;
 	struct opp_table **opp_tables;
+#if IS_ENABLED(CONFIG_AW_HW_CPUFREQ)
+	int *opp_tokens = NULL;
+#endif
 	unsigned int cpu;
 	int ret;
 
@@ -862,6 +1014,11 @@ static int sun50i_cpufreq_nvmem_probe(struct platform_device *pdev)
 			goto free_opp;
 		}
 
+		if (vf_test_is_enable(cpu_dev) && cpu == 0) {
+			ret = -EBUSY;
+			goto free_opp;
+		}
+
 		if (strlen(ver_data.name)) {
 			opp_tables[cpu] = dev_pm_opp_set_prop_name(cpu_dev,
 								   ver_data.name);
@@ -886,15 +1043,25 @@ static int sun50i_cpufreq_nvmem_probe(struct platform_device *pdev)
 	ret = class_register(&cpufreq_class);
 	if (ret) {
 		sunxi_err(NULL, "failed to cpufreq class register, ret = %d\n", ret);
-		goto free_opp;;
+		goto free_opp;
 	}
 
+#if IS_ENABLED(CONFIG_AW_CPUFREQ_DT)
 	cpufreq_dt_pdev = platform_device_register_simple("cpufreq-dt", -1,
 							  NULL, 0);
 	if (!IS_ERR(cpufreq_dt_pdev)) {
 		platform_set_drvdata(pdev, opp_tables);
+		cpufreq_nvmem_finished = true;
 		return 0;
 	}
+#endif
+
+#if IS_ENABLED(CONFIG_AW_HW_CPUFREQ)
+	platform_set_drvdata(pdev, opp_tokens);
+	cpufreq_nvmem_finished = true;
+	sunxi_err(NULL, "cpufreq nvmem finished\n");
+	return 0;
+#endif
 
 	ret = PTR_ERR(cpufreq_dt_pdev);
 	sunxi_err(NULL, "Failed to register platform device\n");
@@ -970,6 +1137,11 @@ static int sun50i_cpufreq_nvmem_probe(struct platform_device *pdev)
 			goto free_opp;
 		}
 
+		if (vf_test_is_enable(cpu_dev) && cpu == 0) {
+			ret = -EBUSY;
+			goto free_opp;
+		}
+
 		if (strlen(ver_data.name)) {
 			opp_tokens[cpu] = dev_pm_opp_set_prop_name(cpu_dev,
 								   ver_data.name);
@@ -997,12 +1169,22 @@ static int sun50i_cpufreq_nvmem_probe(struct platform_device *pdev)
 		goto free_opp;;
 	}
 
+#if IS_ENABLED(CONFIG_AW_CPUFREQ_DT)
 	cpufreq_dt_pdev = platform_device_register_simple("cpufreq-dt", -1,
 							  NULL, 0);
 	if (!IS_ERR(cpufreq_dt_pdev)) {
 		platform_set_drvdata(pdev, opp_tokens);
+		cpufreq_nvmem_finished = true;
 		return 0;
 	}
+#endif
+
+#if IS_ENABLED(CONFIG_AW_HW_CPUFREQ)
+	platform_set_drvdata(pdev, opp_tokens);
+	cpufreq_nvmem_finished = true;
+	sunxi_err(NULL, "cpufreq nvmem finished\n");
+	return 0;
+#endif
 
 	ret = PTR_ERR(cpufreq_dt_pdev);
 	sunxi_err(NULL, "Failed to register platform device\n");
@@ -1014,8 +1196,11 @@ free_opp:
 
 	return ret;
 }
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 11, 0)
+static void sun50i_cpufreq_nvmem_remove(struct platform_device *pdev)
+#else
 static int sun50i_cpufreq_nvmem_remove(struct platform_device *pdev)
+#endif
 {
 	int *opp_tokens = platform_get_drvdata(pdev);
 	unsigned int cpu;
@@ -1031,7 +1216,10 @@ static int sun50i_cpufreq_nvmem_remove(struct platform_device *pdev)
 	}
 	kfree(opp_tokens);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 11, 0)
+#else
 	return 0;
+#endif
 }
 #endif
 
@@ -1052,6 +1240,12 @@ static const struct of_device_id sun50i_cpufreq_match_list[] = {
 	{.compatible = "arm,sun8iw21p1", .data = &sun8iw21_soc_data,},
 	{.compatible = "arm,sun55iw6p1", .data = &sun55iw6_soc_data,},
 	{.compatible = "arm,sun60iw2p1", .data = &sun60iw2_soc_data,},
+	{.compatible = "arm,sun251iw1p1", .data = &sun251iw1_soc_data,},
+	{.compatible = "arm,sun65iw1p1", .data = &sun65iw1_soc_data,},
+	{.compatible = "arm,sun8iw22p1", .data = &sun8iw22_soc_data,},
+	{.compatible = "riscv,sun252iw1p1", .data = &sun252iw1_soc_data,},
+	{.compatible = "arm64,sun55iw7p1", .data = &sun55iw7_soc_data,},
+	{.compatible = "arm,sun55iw7p1", .data = &sun55iw7_soc_data,},
 	{}
 };
 
@@ -1108,4 +1302,4 @@ module_exit(sun50i_cpufreq_exit);
 MODULE_DESCRIPTION("Sun50i cpufreq driver");
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR("panzhijian <panzhijian@allwinnertech.com>");
-MODULE_VERSION("1.0.0");
+MODULE_VERSION("1.0.6");

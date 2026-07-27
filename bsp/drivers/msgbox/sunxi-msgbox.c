@@ -716,6 +716,7 @@ static const struct of_device_id sunxi_msgbox_of_match[] = {
 	{ .compatible = "allwinner,sun55iw5-msgbox", .data = &sun55iw5_hwdata},
 	{ .compatible = "allwinner,sun60iw2-msgbox", .data = &sun55iw5_hwdata},
 	{ .compatible = "allwinner,sun8iw21-msgbox", .data = &sun55iw5_hwdata},
+	{ .compatible = "allwinner,sun65iw1-msgbox", .data = &sun55iw5_hwdata},
 	{},
 };
 MODULE_DEVICE_TABLE(of, sunxi_msgbox_of_match);
@@ -1022,4 +1023,4 @@ MODULE_AUTHOR("wujiayi <wujiayi@allwinnertech.com>");
 MODULE_AUTHOR("xuminghui <xuminghui@allwinnertech.com>");
 MODULE_AUTHOR("zhaiyaya <zhaiyaya@allwinnertech.com>");
 MODULE_LICENSE("GPL v2");
-MODULE_VERSION("1.1.5");
+MODULE_VERSION("1.1.6");

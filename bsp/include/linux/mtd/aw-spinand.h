@@ -56,6 +56,7 @@ enum ecc_limit_err {
 	BIT4_LIMIT5_TO_8_ERR9_TO_15,
 	BIT4_LIMIT5_TO_8_ERR15,
 	BIT4_BY_LOW2BITS,
+	BIT4_LIMIT5_TO_7_ERR8_LIMIT_12,
 };
 
 struct aw_spinand_chip {

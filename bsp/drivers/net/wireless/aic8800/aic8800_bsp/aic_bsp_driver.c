@@ -569,6 +569,7 @@ int aicbt_patch_table_free(struct aicbt_patch_table **head)
 	*head = NULL;
 	return 0;
 }
+EXPORT_SYMBOL_GPL(aicbt_patch_table_free);
 
 struct aicbt_patch_table *aicbt_patch_table_alloc(const char *filename)
 {
@@ -633,6 +634,7 @@ err:
 	release_firmware(fw);
 	return NULL;
 }
+EXPORT_SYMBOL_GPL(aicbt_patch_table_alloc);
 
 int aicbt_patch_info_unpack(struct aicbt_patch_table *head, struct aicbt_patch_info_t *patch_info)
 {
@@ -644,7 +646,7 @@ int aicbt_patch_info_unpack(struct aicbt_patch_table *head, struct aicbt_patch_i
 		base_len = ((offsetof(struct aicbt_patch_info_t, ext_patch_nb_addr) - offsetof(struct aicbt_patch_info_t, adid_addrinf))/sizeof(uint32_t))/2;
 		printk("%s head->len:%d base_len:%d \r\n", __func__, head->len, base_len);
 
-		if (head->len > base_len){
+		if (head->len > base_len) {
 			patch_info->info_len = base_len;
 			memcpy_len = patch_info->info_len + 1;//include ext patch nb
 		} else {
@@ -663,11 +665,11 @@ int aicbt_patch_info_unpack(struct aicbt_patch_table *head, struct aicbt_patch_i
 			((struct aicbt_patch_info_t *)patch_info_array)->adid_addrinf,
 			((struct aicbt_patch_info_t *)patch_info_array)->addr_adid);
 
-		if (patch_info->ext_patch_nb > 0){
+		if (patch_info->ext_patch_nb > 0) {
 			int index = 0;
 			patch_info->ext_patch_param = (uint32_t *)(head->data + ((memcpy_len) * 2));
 
-			for(index = 0; index < patch_info->ext_patch_nb; index++){
+			for (index = 0; index < patch_info->ext_patch_nb; index++) {
 				printk("%s id:%x addr:%x \r\n", __func__,
 					*(patch_info->ext_patch_param + (index * 2)),
 					*(patch_info->ext_patch_param + (index * 2) + 1));
@@ -677,6 +679,7 @@ int aicbt_patch_info_unpack(struct aicbt_patch_table *head, struct aicbt_patch_i
 	}
 	return 0;
 }
+EXPORT_SYMBOL_GPL(aicbt_patch_info_unpack);
 
 int aicbt_patch_table_load(struct priv_dev *aicdev, struct aicbt_info_t *aicbt_info, struct aicbt_patch_table *head)
 {
@@ -785,26 +788,6 @@ err:
 	return -1;
 }
 
-int aicbsp_driver_btmode_reinit(struct aicbt_info_t *aicbt_info)
-{
-	if (aicbsp_info.btmode >=  AICBT_BTMODE_BT_ONLY_SW && aicbsp_info.btmode != aicbt_info->btmode) {
-		aicbt_info->btmode = aicbsp_info.btmode;
-		printk("Using Android solution btmode = 0x%x\n", aicbt_info->btmode);
-		return 0;
-	}
-	return -1;
-}
-
-int aicbsp_driver_lpm_enable_reinit(struct aicbt_info_t *aicbt_info)
-{
-	if (aicbsp_info.lpm_enable >=  0 && aicbsp_info.lpm_enable != aicbt_info->lpm_enable) {
-		aicbt_info->lpm_enable = aicbsp_info.lpm_enable;
-		printk("Using Android solution lpm_enable = 0x%x\n", aicbt_info->lpm_enable);
-		return 0;
-	}
-	return -1;
-}
-
 int aicbsp_get_feature(struct aicbsp_feature_t *feature)
 {
 	feature->cpmode     = aicbsp_info.cpmode;
@@ -813,6 +796,7 @@ int aicbsp_get_feature(struct aicbsp_feature_t *feature)
 	feature->sdio_phase = aicbsp_info.sdio_phase;
 	feature->hwinfo     = aicbsp_info.hwinfo;
 	feature->fwlog_en   = aicbsp_info.fwlog_en;
+	feature->adap_test  = aicbsp_info.adap_test;
 
 	return 0;
 }
@@ -895,3 +879,140 @@ int aicbsp_resv_mem_deinit(void)
 }
 
 #endif
+
+int aicbsp_parse_key_val(const char *str, const char *key, char *val)
+{
+	const char *p = NULL;
+	const char *dst = NULL;
+	int keysize = 0;
+	int bufsize = 0;
+
+	if (str == NULL || key == NULL || val == NULL)
+		return -1;
+
+	keysize = strlen(key);
+	bufsize = strlen(str);
+	if (bufsize <= keysize)
+		return -1;
+
+	p = str;
+	while (*p != 0 && *p == ' ')
+		p++;
+
+	if (*p == '#')
+		return -1;
+
+	if (str + bufsize - p <= keysize)
+		return -1;
+
+	if (strncmp(p, key, keysize) != 0)
+		return -1;
+
+	p += keysize;
+
+	while (*p != 0 && *p == ' ')
+		p++;
+
+	if (*p != '=')
+		return -1;
+
+	p++;
+	while (*p != 0 && *p == ' ')
+		p++;
+
+	if (*p == '"')
+		p++;
+
+	dst = p;
+	while (*p != 0 && *p != '#')
+		p++;
+
+	p--;
+	while (*p == ' ')
+		p--;
+
+	if (*p == '"')
+		p--;
+
+	while (*p == '\r' || *p == '\n')
+		p--;
+
+	p++;
+	strncpy(val, dst, p - dst);
+	val[p - dst] = 0;
+	return 0;
+}
+EXPORT_SYMBOL_GPL(aicbsp_parse_key_val);
+
+static const struct parse_match_t aicbt_match_tab[] = {
+	MATCH_NODE(struct aicbt_info_t, btmode,         "BTMODE"),
+	MATCH_NODE(struct aicbt_info_t, btport,         "BTPORT"),
+	MATCH_NODE(struct aicbt_info_t, uart_baud,      "UART_BAUD"),
+	MATCH_NODE(struct aicbt_info_t, uart_flowctrl,  "UART_FC"),
+	MATCH_NODE(struct aicbt_info_t, lpm_enable,     "LPM_ENABLE"),
+	MATCH_NODE(struct aicbt_info_t, txpwr_lvl,      "TXPWR_LVL"),
+};
+
+int aicbt_reload_config(const char *filename, struct aicbt_info_t *aicbt_info)
+{
+	const struct firmware *fw = NULL;
+	int ret, i, size, len = 0;
+	char *buffer, *line, *data;
+	char conf[64];
+	long val;
+
+	printk("rwnx_request_firmware, name: %s\n", filename);
+	ret = request_firmware(&fw, filename, NULL);
+
+	if (ret < 0) {
+		pr_err("Load %s fail\n", filename);
+		release_firmware(fw);
+		return -1;
+	}
+
+	size = fw->size;
+	if (size <= 0) {
+		pr_err("wrong size of firmware file\n");
+		release_firmware(fw);
+		return -1;
+	}
+
+	data = vmalloc(size + 1);
+	if (!data) {
+		pr_err("vmalloc fail\n");
+		return -1;
+	}
+
+	memcpy(data, fw->data, size);
+	buffer = data;
+	release_firmware(fw);
+	while (1) {
+		line = buffer;
+		if (*line == 0)
+			break;
+
+		while (*buffer != '\r' && *buffer != '\n' && *buffer != 0 && len++ < size)
+			buffer++;
+
+		while ((*buffer == '\r' || *buffer == '\n') && len++ < size)
+			*buffer++ = 0;
+
+		if (len >= size)
+			*buffer = 0;
+
+		// store value to data struct
+		for (i = 0; i < sizeof(aicbt_match_tab) / sizeof(aicbt_match_tab[0]); i++) {
+			if (aicbsp_parse_key_val(line, aicbt_match_tab[i].keyname, conf) == 0) {
+				if (kstrtol(conf, 0, &val))
+					ret = kstrtol(conf, 16, &val);
+				*(unsigned long *)((unsigned long)aicbt_info + aicbt_match_tab[i].offset) = val;
+				printk("%s, %s = %ld\n",  __func__, aicbt_match_tab[i].keyname, val);
+				break;
+			}
+		}
+	}
+
+	vfree(data);
+	return 0;
+}
+EXPORT_SYMBOL_GPL(aicbt_reload_config);

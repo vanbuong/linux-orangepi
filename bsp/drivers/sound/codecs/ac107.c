@@ -17,7 +17,7 @@
 #include "ac107.h"
 #include "snd_sunxi_log.h"
 #include "snd_sunxi_common.h"
-
+#include "snd_sunxi_adapter.h"
 static unsigned int ac107_ecdb_ch_nums;
 
 static atomic_t g_codec_count = ATOMIC_INIT(0);
@@ -1140,4 +1140,4 @@ module_i2c_driver(ac107_i2c_driver);
 MODULE_DESCRIPTION("ASoC AC107 driver");
 MODULE_AUTHOR("Dby@allwinnertech.com");
 MODULE_LICENSE("GPL");
-MODULE_VERSION("1.0.3");
+MODULE_VERSION("1.0.4");

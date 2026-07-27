@@ -393,11 +393,12 @@ static ssize_t xh2a_memory_allocator_info_show(struct device *dev,
 
 	len = sprintf(buf, "%s memory pool infomation:\n", __func__);
 	len += sprintf(buf + len, "start_addr = 0x%llx\n",
-		       allocator_dev->start_addr);
+		       (unsigned long long)allocator_dev->start_addr);
 	len += sprintf(buf + len, "total_size = 0x%llx\n",
-		       allocator_dev->total_size);
-	len += sprintf(buf + len, "free_size = 0x%llx\n",
-		       allocator_dev->allocator_mempool.free_size);
+		       (unsigned long long)allocator_dev->total_size);
+	len += sprintf(
+		buf + len, "free_size = 0x%llx\n",
+		(unsigned long long)allocator_dev->allocator_mempool.free_size);
 
 	list_for_each_entry_safe(fh_pos, fh_n, &allocator_dev->file_handle_list,
 				 node) {
@@ -408,7 +409,8 @@ static ssize_t xh2a_memory_allocator_info_show(struct device *dev,
 					 &fh_pos->buffer_object_list, node) {
 			len += sprintf(buf + len,
 				       "\t\tbo: addr = 0x%llx, size = 0x%llx\n",
-				       bo_pos->start, bo_pos->size);
+				       (unsigned long long)bo_pos->start,
+				       (unsigned long long)bo_pos->size);
 		}
 		len += sprintf(buf + len, "\n");
 	}
@@ -423,51 +425,6 @@ static struct attribute *xh2a_memory_allocator_attrs[] = {
 	NULL,
 };
 ATTRIBUTE_GROUPS(xh2a_memory_allocator);
-
-static int xh2a_memory_allocator_update_ddr_size(void *handle, uint64_t *size)
-{
-	int ret;
-	uint32_t ddr_chip_quantity, ddr_chip_capacity;
-
-	ret = xh2a_pcie_get_efuse_data(handle, XH2A_EFUSE_SUBTYPE_DDR_0_ROW,
-				       XH2A_EFUSE_SUBTYPE_DDR_0_BIT,
-				       XH2A_EFUSE_SUBTYPE_DDR_0_LENGTH,
-				       &ddr_chip_quantity);
-
-	if (ret != 0) {
-		pr_err("%s: get efuse data failed\n", __func__);
-		*size = 0;
-		return ret;
-	}
-
-	if (ddr_chip_quantity > 6) {
-		pr_err("%s: get invalid ddr chip quantity %d\n", __func__,
-		       ddr_chip_quantity);
-		*size = 0;
-		return -1;
-	}
-
-	ret = xh2a_pcie_get_efuse_data(handle, XH2A_EFUSE_SUBTYPE_DDR_1_ROW,
-				       XH2A_EFUSE_SUBTYPE_DDR_1_BIT,
-				       XH2A_EFUSE_SUBTYPE_DDR_1_LENGTH,
-				       &ddr_chip_capacity);
-
-	if (ret != 0) {
-		pr_err("%s: get efuse data failed\n", __func__);
-		*size = 0;
-		return ret;
-	}
-
-	if (ddr_chip_capacity > 16) {
-		pr_err("%s: get invalid ddr chip capacity %d\n", __func__,
-		       ddr_chip_capacity);
-		*size = 0;
-		return -1;
-	}
-
-	*size = ddr_chip_quantity * ddr_chip_capacity * 0x40000000ULL;
-	return 0;
-}
 
 /*
  * xh2a_memory_allocator_probe_one() - probe for one memory pool
@@ -533,7 +490,7 @@ static int xh2a_memory_allocator_probe_one(void *handle,
 
 	size = mempool_size;
 	if (strcmp(mempool_name, XH2A_MEMORY_ALLOCATOR_MEMPOOL_DDR_NAME) == 0) {
-		ret = xh2a_memory_allocator_update_ddr_size(handle, &size);
+		ret = xh2a_pcie_efuse_update_ddr_size(handle, &size);
 		if ((ret == 0) && (size != 0)) {
 			size -= XH2A_DEVICE_SYSTEM_SIZE;
 		} else {

@@ -78,8 +78,8 @@ static void cmd_complete(struct rwnx_cmd_mgr *cmd_mgr, struct rwnx_cmd *cmd)
 	//RWNX_DBG(RWNX_FN_ENTRY_STR);
 	lockdep_assert_held(&cmd_mgr->lock);
 
-	list_del(&cmd->list);
-	cmd_mgr->queue_sz--;
+	//list_del(&cmd->list);
+	//cmd_mgr->queue_sz--;
 
 	cmd->flags |= RWNX_CMD_FLAG_DONE;
 	if (cmd->flags & RWNX_CMD_FLAG_NONBLOCK) {
@@ -151,19 +151,42 @@ static int cmd_mgr_queue(struct rwnx_cmd_mgr *cmd_mgr, struct rwnx_cmd *cmd)
 	struct aic_usb_dev *usbdev = container_of(cmd_mgr, struct aic_usb_dev, cmd_mgr);
 #endif
 	bool defer_push = false;
+	u8_l empty = 0;
 
 	//RWNX_DBG(RWNX_FN_ENTRY_STR);
 #ifdef CREATE_TRACE_POINTS
 	trace_msg_send(cmd->id);
 #endif
 
+	if (cmd->e2a_msg != NULL) {
+		do {
+			spin_lock_bh(&cmd_mgr->lock);
+			if (cmd_mgr->state == RWNX_CMD_MGR_STATE_CRASHED) {
+				printk(KERN_CRIT"cmd queue crashed\n");
+				cmd->result = -EPIPE;
+				spin_unlock_bh(&cmd_mgr->lock);
+				return -EPIPE;
+			}
+			empty = list_empty(&cmd_mgr->cmds);
+			if (!empty) {
+				spin_unlock_bh(&cmd_mgr->lock);
+				if (in_softirq()) {
+					printk("in_softirq:check cmdqueue empty\n");
+					mdelay(10);
+				} else {
+					printk("check cmdqueue empty\n");
+					msleep(50);
+				}
+			}
+		} while (!empty);//wait for cmd queue empty
+	} else {
 		spin_lock_bh(&cmd_mgr->lock);
-
-	if (cmd_mgr->state == RWNX_CMD_MGR_STATE_CRASHED) {
-		printk(KERN_CRIT"cmd queue crashed\n");
-		cmd->result = -EPIPE;
-		spin_unlock_bh(&cmd_mgr->lock);
-		return -EPIPE;
+		if (cmd_mgr->state == RWNX_CMD_MGR_STATE_CRASHED) {
+			printk(KERN_CRIT"cmd queue crashed\n");
+			cmd->result = -EPIPE;
+			spin_unlock_bh(&cmd_mgr->lock);
+			return -EPIPE;
+		}
 	}
 
 	#ifndef CONFIG_RWNX_FHOST
@@ -218,8 +241,9 @@ static int cmd_mgr_queue(struct rwnx_cmd_mgr *cmd_mgr, struct rwnx_cmd *cmd)
 		//printk("defer push: tkn=%d\r\n", cmd->tkn);
 	}
 
-	spin_unlock_bh(&cmd_mgr->lock);
+	//spin_unlock_bh(&cmd_mgr->lock);
 	if (!defer_push) {
+		spin_unlock_bh(&cmd_mgr->lock);
 		//printk("queue:id=%x, param_len=%u\n",cmd->a2e_msg->id, cmd->a2e_msg->param_len);
 		#ifdef AICWF_SDIO_SUPPORT
 		aicwf_set_cmd_tx((void *)(sdiodev), cmd->a2e_msg, sizeof(struct lmac_msg) + cmd->a2e_msg->param_len);
@@ -230,8 +254,12 @@ static int cmd_mgr_queue(struct rwnx_cmd_mgr *cmd_mgr, struct rwnx_cmd *cmd)
 
 		kfree(cmd->a2e_msg);
 	} else {
-		if (cmd_mgr->queue_sz <= 1)
+		if (cmd_mgr->queue_sz <= 1) {
+			spin_unlock_bh(&cmd_mgr->lock);
 			WAKE_CMD_WORK(cmd_mgr);
+		} else {
+			spin_unlock_bh(&cmd_mgr->lock);
+		}
 		return 0;
 	}
 
@@ -265,6 +293,10 @@ static int cmd_mgr_queue(struct rwnx_cmd_mgr *cmd_mgr, struct rwnx_cmd *cmd)
 			spin_unlock_bh(&cmd_mgr->lock);
 			rwnx_exception_event(cmd_mgr);
 		} else {
+			spin_lock_bh(&cmd_mgr->lock);
+			list_del(&cmd->list);
+			cmd_mgr->queue_sz--;
+			spin_unlock_bh(&cmd_mgr->lock);
 			kfree(cmd);
 			if (!list_empty(&cmd_mgr->cmds))
 				WAKE_CMD_WORK(cmd_mgr);
@@ -381,8 +413,13 @@ void cmd_mgr_task_process(struct work_struct *work)
 				}
 				spin_unlock_bh(&cmd_mgr->lock);
 				rwnx_exception_event(cmd_mgr);
-			} else
+			} else {
+				spin_lock_bh(&cmd_mgr->lock);
+				list_del(&next->list);
+				cmd_mgr->queue_sz--;
+				spin_unlock_bh(&cmd_mgr->lock);
 				kfree(next);
+			}
 		}
 	}
 }
@@ -492,7 +529,7 @@ static void cmd_mgr_drain(struct rwnx_cmd_mgr *cmd_mgr)
 	spin_unlock_bh(&cmd_mgr->lock);
 }
 
-void rwnx_cmd_mgr_init(struct rwnx_cmd_mgr *cmd_mgr)
+int rwnx_cmd_mgr_init(struct rwnx_cmd_mgr *cmd_mgr)
 {
 	RWNX_DBG(RWNX_FN_ENTRY_STR);
 
@@ -510,8 +547,9 @@ void rwnx_cmd_mgr_init(struct rwnx_cmd_mgr *cmd_mgr)
 	cmd_mgr->cmd_wq = create_singlethread_workqueue("cmd_wq");
 	if (!cmd_mgr->cmd_wq) {
 		txrx_err("insufficient memory to create cmd workqueue.\n");
-		return;
+		return -1;
 	}
+	return 0;
 }
 
 void rwnx_cmd_mgr_deinit(struct rwnx_cmd_mgr *cmd_mgr)
@@ -519,8 +557,11 @@ void rwnx_cmd_mgr_deinit(struct rwnx_cmd_mgr *cmd_mgr)
 	cmd_mgr->print(cmd_mgr);
 	cmd_mgr->drain(cmd_mgr);
 	cmd_mgr->print(cmd_mgr);
-	flush_workqueue(cmd_mgr->cmd_wq);
-	destroy_workqueue(cmd_mgr->cmd_wq);
+	if (cmd_mgr->cmd_wq) {
+		flush_workqueue(cmd_mgr->cmd_wq);
+		destroy_workqueue(cmd_mgr->cmd_wq);
+		cmd_mgr->cmd_wq = NULL;
+	}
 	memset(cmd_mgr, 0, sizeof(*cmd_mgr));
 }
 

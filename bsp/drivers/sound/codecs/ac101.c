@@ -18,7 +18,7 @@
 #include "snd_sunxi_log.h"
 #include "snd_sunxi_jack.h"
 #include "snd_sunxi_common.h"
-
+#include "snd_sunxi_adapter.h"
 #include "ac101.h"
 
 #define HEADPHONE_HEADSET_TH 10
@@ -181,7 +181,7 @@ static void sunxi_jack_adv_det_scan_work(void *data, enum snd_jack_types *jack_t
 /* for jack slow plug in */
 static void sunxi_jack_sdbp_scan_work(void *data, enum snd_jack_types *jack_type);
 
-struct sunxi_jack_adv sunxi_jack_adv = {
+static struct sunxi_jack_adv sunxi_jack_adv = {
 	.jack_init	= sunxi_jack_adv_init,
 	.jack_exit	= sunxi_jack_adv_exit,
 	.jack_suspend	= sunxi_jack_adv_suspend,
@@ -817,7 +817,7 @@ static void sunxi_jack_sdbp_scan_work(void *data, enum snd_jack_types *jack_type
 	}
 }
 
-struct sunxi_jack_port sunxi_jack_port = {
+static struct sunxi_jack_port sunxi_jack_port = {
 	.jack_adv = &sunxi_jack_adv,
 };
 
@@ -1787,8 +1787,11 @@ static int ac101_probe(struct snd_soc_component *component)
 	pdata->jack_adv_priv.dev = ac101->dev;
 	sunxi_jack_adv.data = (void *)(&pdata->jack_adv_priv);
 	sunxi_jack_adv.dev = ac101->dev;
-	snd_sunxi_jack_init(&sunxi_jack_port);
-
+	ret = snd_sunxi_jack_init(&sunxi_jack_port);
+	if (ret) {
+		SND_LOG_ERR("jack init failed\n");
+		return ret;
+	}
 	return 0;
 }
 
@@ -2911,4 +2914,4 @@ module_i2c_driver(ac101_i2c_driver);
 MODULE_DESCRIPTION("ASoC AC101 driver");
 MODULE_AUTHOR("lijingpsw@allwinnertech.com");
 MODULE_LICENSE("GPL");
-MODULE_VERSION("1.0.6");
+MODULE_VERSION("1.0.9");

@@ -282,12 +282,7 @@ static SOC_ENUM_SINGLE_DECL(sunxi_dachpf_sta_enum, SND_SOC_NOPM, DACHPF_SHIFT, s
 /* Digital-tlv */
 static const DECLARE_TLV_DB_SCALE(dac_vol_tlv, -7424, 116, 0);
 static const DECLARE_TLV_DB_SCALE(dacl_vol_tlv, -11925, 75, 1);
-
-static const unsigned int lineout_gain_tlv[] = {
-	TLV_DB_RANGE_HEAD(2),
-	0, 1, TLV_DB_SCALE_ITEM(0, 0, 1),
-	2, 31, TLV_DB_SCALE_ITEM(-4350, 150, 1),
-};
+static const DECLARE_TLV_DB_SCALE(lineout_gain_tlv, -4200, 600, 1);
 
 /* TX FUNC */
 static int sunxi_get_tx_hub_mode(struct snd_kcontrol *kcontrol,
@@ -411,7 +406,7 @@ static const struct snd_kcontrol_new sunxi_codec_controls[] = {
 	SOC_ENUM("DAC Output Select", sunxi_dac_enum),
 
 	/* Gain-Analog */
-	SOC_SINGLE_TLV("LINEOUT Gain", SUNXI_DAC_AN_REG, LINEOUT_GAIN, 0x1F, 0, lineout_gain_tlv),
+	SOC_SINGLE_TLV("LINEOUT Gain", SUNXI_DAC_AN_REG, LINEOUT_GAIN, 0x7, 0, lineout_gain_tlv),
 };
 
 static int sunxi_playback_event(struct snd_soc_dapm_widget *w, struct snd_kcontrol *k, int event)
@@ -1214,5 +1209,5 @@ module_exit(sunxi_codec_dev_exit);
 
 MODULE_AUTHOR("wuhao@allwinnertech.com");
 MODULE_LICENSE("GPL");
-MODULE_VERSION("1.0.1");
+MODULE_VERSION("1.0.2");
 MODULE_DESCRIPTION("sunxi soundcard codec of internal-codec");

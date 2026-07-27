@@ -182,7 +182,8 @@ static const struct aicbsp_firmware fw_u02[] = {
 		.bt_patch      = "fw_patch.bin",
 		.bt_table      = "fw_patch_table.bin",
 		.wl_fw         = "fmacfw.bin",
-		.wl_table      = "fmacfw_patch.bin"
+		.wl_table      = "fmacfw_patch.bin",
+		.hw_config     = "aichw.conf",
 	},
 
 	[AICBSP_CPMODE_TEST] = {
@@ -190,7 +191,8 @@ static const struct aicbsp_firmware fw_u02[] = {
 		.bt_adid       = "fw_adid.bin",
 		.bt_patch      = "fw_patch.bin",
 		.bt_table      = "fw_patch_table.bin",
-		.wl_fw         = "fmacfw_rf.bin"
+		.wl_fw         = "fmacfw_rf.bin",
+		.hw_config     = "aichw.conf",
 	},
 };
 
@@ -201,7 +203,8 @@ static const struct aicbsp_firmware fw_u03[] = {
 		.bt_patch      = "fw_patch_u03.bin",
 		.bt_table      = "fw_patch_table_u03.bin",
 		.wl_fw         = "fmacfw.bin",
-		.wl_table      = "fmacfw_patch.bin"
+		.wl_table      = "fmacfw_patch.bin",
+		.hw_config     = "aichw.conf",
 	},
 
 	[AICBSP_CPMODE_TEST] = {
@@ -209,7 +212,8 @@ static const struct aicbsp_firmware fw_u03[] = {
 		.bt_adid       = "fw_adid_u03.bin",
 		.bt_patch      = "fw_patch_u03.bin",
 		.bt_table      = "fw_patch_table_u03.bin",
-		.wl_fw         = "fmacfw_rf.bin"
+		.wl_fw         = "fmacfw_rf.bin",
+		.hw_config     = "aichw.conf",
 	},
 };
 
@@ -221,7 +225,8 @@ static const struct aicbsp_firmware fw_u02[] = {
 		.bt_adid       = "fw_adid.bin",
 		.bt_patch      = "fw_patch.bin",
 		.bt_table      = "fw_patch_table.bin",
-		.wl_fw         = "fmacfw_usb.bin"
+		.wl_fw         = "fmacfw_usb.bin",
+		.hw_config     = "usb/aichw.conf",
 	},
 
 	[AICBSP_CPMODE_TEST] = {
@@ -229,7 +234,8 @@ static const struct aicbsp_firmware fw_u02[] = {
 		.bt_adid       = "fw_adid.bin",
 		.bt_patch      = "fw_patch.bin",
 		.bt_table      = "fw_patch_table.bin",
-		.wl_fw         = "fmacfw_rf_usb.bin"
+		.wl_fw         = "fmacfw_rf_usb.bin",
+		.hw_config     = "usb/aichw.conf",
 	},
 };
 
@@ -239,7 +245,8 @@ static const struct aicbsp_firmware fw_u03[] = {
 		.bt_adid       = "fw_adid_u03.bin",
 		.bt_patch      = "fw_patch_u03.bin",
 		.bt_table      = "fw_patch_table_u03.bin",
-		.wl_fw         = "fmacfw_usb.bin"
+		.wl_fw         = "fmacfw_usb.bin",
+		.hw_config     = "usb/aichw.conf",
 	},
 
 	[AICBSP_CPMODE_TEST] = {
@@ -247,7 +254,8 @@ static const struct aicbsp_firmware fw_u03[] = {
 		.bt_adid       = "fw_adid_u03.bin",
 		.bt_patch      = "fw_patch_u03.bin",
 		.bt_table      = "fw_patch_table_u03.bin",
-		.wl_fw         = "fmacfw_rf_usb.bin"
+		.wl_fw         = "fmacfw_rf_usb.bin",
+		.hw_config     = "usb/aichw.conf",
 	},
 };
 #endif
@@ -280,8 +288,7 @@ static int aicbt_init(struct priv_dev *aicdev)
 		return -1;
 	}
 
-	aicbsp_driver_btmode_reinit(&aicbt_info);
-	aicbsp_driver_lpm_enable_reinit(&aicbt_info);
+	aicbt_reload_config(aicbsp_firmware_list[aicbsp_info.cpmode].hw_config, &aicbt_info);
 
 	ret = aicbt_patch_info_unpack(head, &patch_info);
 	if (ret) {

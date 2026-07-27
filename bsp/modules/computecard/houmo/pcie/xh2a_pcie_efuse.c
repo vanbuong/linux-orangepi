@@ -68,3 +68,49 @@ int xh2a_pcie_get_efuse_data(void *handle, uint32_t row_offset,
 	return 0;
 }
 EXPORT_SYMBOL(xh2a_pcie_get_efuse_data);
+
+int xh2a_pcie_efuse_update_ddr_size(void *handle, uint64_t *size)
+{
+	int ret;
+	uint32_t ddr_chip_quantity, ddr_chip_capacity;
+
+	ret = xh2a_pcie_get_efuse_data(handle, XH2A_EFUSE_SUBTYPE_DDR_0_ROW,
+				       XH2A_EFUSE_SUBTYPE_DDR_0_BIT,
+				       XH2A_EFUSE_SUBTYPE_DDR_0_LENGTH,
+				       &ddr_chip_quantity);
+
+	if (ret != 0) {
+		pr_err("%s: get efuse data failed\n", __func__);
+		*size = 0;
+		return ret;
+	}
+
+	if (ddr_chip_quantity > 6) {
+		pr_err("%s: get invalid ddr chip quantity %d\n", __func__,
+		       ddr_chip_quantity);
+		*size = 0;
+		return -1;
+	}
+
+	ret = xh2a_pcie_get_efuse_data(handle, XH2A_EFUSE_SUBTYPE_DDR_1_ROW,
+				       XH2A_EFUSE_SUBTYPE_DDR_1_BIT,
+				       XH2A_EFUSE_SUBTYPE_DDR_1_LENGTH,
+				       &ddr_chip_capacity);
+
+	if (ret != 0) {
+		pr_err("%s: get efuse data failed\n", __func__);
+		*size = 0;
+		return ret;
+	}
+
+	if (ddr_chip_capacity > 16) {
+		pr_err("%s: get invalid ddr chip capacity %d\n", __func__,
+		       ddr_chip_capacity);
+		*size = 0;
+		return -1;
+	}
+
+	*size = ddr_chip_quantity * ddr_chip_capacity * 0x40000000ULL;
+	return 0;
+}
+EXPORT_SYMBOL(xh2a_pcie_efuse_update_ddr_size);

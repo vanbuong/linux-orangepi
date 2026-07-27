@@ -49,7 +49,12 @@ void aicbsp_device_exit(void)
 }
 
 static struct device_match_entry aicdev_match_table[] = {
-	{0xa69c, 0x8800, PRODUCT_ID_AIC8800D,   "aic8800d",   0, 0}, // 8800d in bootloader mode
+	{USB_VENDOR_ID_AIC, USB_DEVICE_ID_AIC_8800,    PRODUCT_ID_AIC8800D,    "aic8800d",   0, 0}, // 8800d in bootloader mode
+	{USB_VENDOR_ID_AIC, USB_DEVICE_ID_AIC_8801,    PRODUCT_ID_AIC8801,     "aic8801",    0, 0}, // 8801 in bootloader mode
+	{USB_VENDOR_ID_AIC, USB_DEVICE_ID_AIC_8800D80, PRODUCT_ID_AIC8800D80,  "aic8800d80", 0, 0}, // 8800d80 in bootloader mode
+	{USB_VENDOR_ID_AIC, USB_DEVICE_ID_AIC_8800D81, PRODUCT_ID_AIC8800D81,  "aic8800d81", 0, 0}, // 8800d81 in bootloader mode
+	{USB_VENDOR_ID_AIC, USB_DEVICE_ID_AIC_8800D40, PRODUCT_ID_AIC8800D80,  "aic8800d40", 0, 0}, // 8800d40 in bootloader mode
+	{USB_VENDOR_ID_AIC, USB_DEVICE_ID_AIC_8800D41, PRODUCT_ID_AIC8800D81,  "aic8800d41", 0, 0}, // 8800d41 in bootloader mode
 };
 
 static struct device_match_entry *aic_matched_ic;
@@ -399,6 +404,10 @@ int aicwf_busrx_thread(void *data)
 		}
 		if (bus_if->state == BUS_DOWN_ST) {
 			bsp_dbg("bus down");
+			while (!kthread_should_stop()) {
+				msleep(100);
+			}
+			bsp_dbg("kthread_should_stop down");
 			break;
 		}
 
@@ -822,18 +831,26 @@ static int aicwf_parse_usb(struct priv_dev *aicdev, struct usb_interface *interf
 	}
 
 #ifdef CONFIG_USB_MSG_EP
-	if (aicdev->msg_out_pipe == 0) {
-		bsp_err("No TX Msg (out) Bulk EP found\n");
-		aicdev->use_msg_ep = 0;
-	} else {
+	if (aicdev->msg_out_pipe != 0 &&
+		(aicbsp_info.chipinfo->chipid == PRODUCT_ID_AIC8801 ||
+		 aicbsp_info.chipinfo->chipid == PRODUCT_ID_AIC8800D81)) {
+		printk("TX Msg Bulk EP found\n");
 		aicdev->use_msg_ep = 1;
+	} else {
+		aicdev->use_msg_ep = 0;
 	}
 #endif
 
-	if (usb->speed == USB_SPEED_HIGH)
+	if (usb->speed == USB_SPEED_SUPER)
+		bsp_dbg("Aic supper speed USB device detected\n");
+	else if (usb->speed == USB_SPEED_HIGH)
 		bsp_dbg("Aic high speed USB device detected\n");
-	else
+	else if (usb->speed == USB_SPEED_FULL)
 		bsp_dbg("Aic full speed USB device detected\n");
+	else if (usb->speed == USB_SPEED_LOW)
+		bsp_dbg("Aic low speed USB device detected\n");
+	else
+		bsp_dbg("Aic NG speed USB device detected\n");
 
 exit:
 	return ret;
@@ -845,6 +862,17 @@ static struct aicwf_bus_ops aicwf_usb_bus_ops = {
 	.txdata = aicwf_usb_bus_txdata,
 	.txmsg = aicwf_usb_bus_txmsg,
 };
+
+static int aicwf_send_reboot(struct priv_dev *aicdev)
+{
+	int ret = 0;
+	u32 delay = 2 *1000; //1s
+
+	printk("%s enter \r\n", __func__);
+
+	ret = rwnx_send_dbg_start_app_req(aicdev, delay, HOST_START_APP_REBOOT, NULL);
+	return ret;
+}
 
 static int aicwf_usb_probe(struct usb_interface *intf, const struct usb_device_id *id)
 {
@@ -862,6 +890,13 @@ static int aicwf_usb_probe(struct usb_interface *intf, const struct usb_device_i
 		id->bInterfaceClass,
 		id->bInterfaceSubClass,
 		id->bInterfaceProtocol);
+
+	if (fw_loaded == 1 &&
+		(id->idProduct == USB_DEVICE_ID_AIC_8801 ||
+		 id->idProduct == USB_DEVICE_ID_AIC_8800D81 ||
+		 id->idProduct == USB_DEVICE_ID_AIC_8800D41)) {
+		return -1;
+	}
 
 	aic_matched_ic = NULL;
 	for (i = 0; i < sizeof(aicdev_match_table) / sizeof(aicdev_match_table[0]); i++) {
@@ -941,8 +976,10 @@ static int aicwf_usb_probe(struct usb_interface *intf, const struct usb_device_i
 		goto out_free_bus;
 	}
 
-	if (fw_loaded == 0 && id->idProduct == USB_DEVICE_ID_AIC_8801) {
-		rwnx_send_dbg_start_app_req(aicdev, 2000, HOST_START_APP_REBOOT, NULL);
+	if (fw_loaded == 0 &&
+		(id->idProduct == USB_DEVICE_ID_AIC_8801 ||
+		 id->idProduct == USB_DEVICE_ID_AIC_8800D81)) {
+		aicwf_send_reboot(aicdev);
 		goto out_free_bus;
 	}
 
@@ -1010,8 +1047,12 @@ static int aicwf_usb_reset_resume(struct usb_interface *intf)
 }
 
 static struct usb_device_id aicwf_usb_id_table[] = {
-	{USB_DEVICE(USB_VENDOR_ID_AIC, USB_DEVICE_ID_AIC)},
+	{USB_DEVICE(USB_VENDOR_ID_AIC, USB_DEVICE_ID_AIC_8800)},
 	{USB_DEVICE(USB_VENDOR_ID_AIC, USB_DEVICE_ID_AIC_8801)},
+	{USB_DEVICE(USB_VENDOR_ID_AIC, USB_DEVICE_ID_AIC_8800D80)},
+	{USB_DEVICE(USB_VENDOR_ID_AIC, USB_DEVICE_ID_AIC_8800D81)},
+	{USB_DEVICE(USB_VENDOR_ID_AIC, USB_DEVICE_ID_AIC_8800D40)},
+	{USB_DEVICE(USB_VENDOR_ID_AIC, USB_DEVICE_ID_AIC_8800D41)},
 	{}
 };
 

@@ -49,13 +49,13 @@ struct xh2a_ipu_group;
 
 void xh2a_ipu_booter_pre_startup(struct xh2a_ipu_device *ipu_dev);
 
-void xh2a_ipu_hw_startup(struct xh2a_ipu_device *ipu_dev);
+void xh2a_ipu_hw_startup(struct xh2a_ipu_device *ipu_dev, bool is_reset);
 
-void xh2a_ipu_hw_shutdown(struct xh2a_ipu_device *ipu_dev);
+void xh2a_ipu_hw_shutdown(struct xh2a_ipu_device *ipu_dev, bool is_reset);
 
 int xh2a_ipu_get_efuse_info(struct xh2a_ipu_device *ipu_dev);
 
-void xh2a_ipu_booter_get_hw_context(struct xh2a_ipu_device *ipu_device,
+void xh2a_ipu_booter_get_hw_context(struct xh2a_ipu_device *ipu_dev,
 				    uint32_t *result);
 
 void xh2a_booter_queue_enqueue_group(struct xh2a_ipu_device *ipu_dev,
@@ -69,7 +69,7 @@ void xh2a_booter_queue_trigger(struct xh2a_ipu_device *ipu_dev,
 void xh2a_booter_queue_clear_intr(struct xh2a_ipu_device *ipu_dev,
 				  struct xh2a_ipu_booter_queue *queue);
 
-bool xh2a_booter_queue_get_intr_flag(struct xh2a_ipu_device *ipu_device,
+bool xh2a_booter_queue_get_intr_flag(struct xh2a_ipu_device *ipu_dev,
 				     struct xh2a_ipu_booter_queue *queue);
 
 bool xh2a_booter_queue_is_full(struct xh2a_ipu_device *ipu_dev,
@@ -86,8 +86,9 @@ uint32_t xh2a_booter_queue_remain_space(struct xh2a_ipu_booter_queue *queue);
 void xh2a_dump_debug_regs(struct xh2a_ipu_device *ipu_dev,
 			  struct xh2a_ipu_group *group);
 
-void xh2a_ipu_update_load(struct xh2a_ipu_device *ipu_device,
-			  uint32_t load_value);
+void xh2a_ipu_update_load(struct xh2a_ipu_device *ipu_dev, uint32_t load_value);
+
+void xh2a_ipu_read_device_temp(struct xh2a_ipu_device *ipu_dev);
 
 static inline uint32_t xh2a_ipu_calc_queue_delta(uint32_t left, uint32_t right)
 {

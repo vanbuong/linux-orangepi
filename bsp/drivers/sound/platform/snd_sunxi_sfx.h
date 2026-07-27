@@ -26,9 +26,18 @@
 #elif IS_ENABLED(CONFIG_ARCH_SUN251IW1)
 #define SUNXI_AUDIO_SFX_REG             (0x02030000)
 #define SUNXI_AUDIO_SFX_REG_SIZE        (0x34c)
+#elif IS_ENABLED(CONFIG_ARCH_SUN252IW1)
+#define SUNXI_AUDIO_SFX_REG             (0x02030000)
+#define SUNXI_AUDIO_SFX_REG_SIZE        (0x348)
 #elif IS_ENABLED(CONFIG_ARCH_SUN8IW22)
 #define SUNXI_AUDIO_SFX_REG             (0x02030000)
 #define SUNXI_AUDIO_SFX_REG_SIZE        (0x320)
+#elif IS_ENABLED(CONFIG_ARCH_SUN55IW7)
+#define SUNXI_AUDIO_SFX_REG             (0x02908000)
+#define SUNXI_AUDIO_SFX_REG_SIZE        (0x354)
+#else
+#define SUNXI_AUDIO_SFX_REG             (0x0)
+#define SUNXI_AUDIO_SFX_REG_SIZE        (0x0)
 #endif
 
 #endif /* __SND_SUNXI_SFX_H */

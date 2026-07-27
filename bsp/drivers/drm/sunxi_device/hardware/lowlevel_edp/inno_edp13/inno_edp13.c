@@ -11,8 +11,8 @@
 */
 
 #include "../../../sunxi_edp.h"
+#include "../../../hdcp/dptx/sunxi_dptx_hdcp.h"
 #include "inno_edp13.h"
-//#include "../edp_lowlevel.h"
 #include <linux/pinctrl/consumer.h>
 #include <linux/delay.h>
 #include <linux/io.h>
@@ -187,7 +187,7 @@ static void edp_resistance_init(struct sunxi_edp_hw_desc *edp_hw)
 	writel(reg_val, edp_hw->reg_base + REG_EDP_RES1000_CFG);
 }
 
-void edp_aux_16m_config(struct sunxi_edp_hw_desc *edp_hw, u64 bit_rate)
+static void edp_aux_16m_config(struct sunxi_edp_hw_desc *edp_hw, u64 bit_rate)
 {
 	u32 bit_clock = 0;
 	u32 div_16m = 0;
@@ -232,7 +232,7 @@ void edp_aux_16m_config(struct sunxi_edp_hw_desc *edp_hw, u64 bit_rate)
 	writel(reg_val, edp_hw->reg_base + REG_EDP_AUX_ISEL_MAINSET);
 }
 
-void edp_corepll_config(struct sunxi_edp_hw_desc *edp_hw, u64 bit_rate)
+static void edp_corepll_config(struct sunxi_edp_hw_desc *edp_hw, u64 bit_rate)
 {
 	u32 reg_val;
 	u32 index;
@@ -282,7 +282,7 @@ void edp_corepll_config(struct sunxi_edp_hw_desc *edp_hw, u64 bit_rate)
 	writel(reg_val, edp_hw->reg_base + REG_EDP_ANA_PLL_FBDIV);
 }
 
-s32 pixpll_cal(u32 pixel_clk, struct recommand_pixpll *pixpll)
+static s32 pixpll_cal(u32 pixel_clk, struct recommand_pixpll *pixpll)
 {
 	u32 pre_div = 0, fbdiv = 0;
 	u32 frac_div = 0, frac = 0, try_cnt = 0;
@@ -356,7 +356,7 @@ s32 pixpll_cal(u32 pixel_clk, struct recommand_pixpll *pixpll)
 
 }
 
-s32 edp_pixpll_cfg(struct sunxi_edp_hw_desc *edp_hw, u32 pixel_clk)
+static s32 edp_pixpll_cfg(struct sunxi_edp_hw_desc *edp_hw, u32 pixel_clk)
 {
 	u32 reg_val;
 	s32 ret = 0;
@@ -411,7 +411,7 @@ s32 edp_pixpll_cfg(struct sunxi_edp_hw_desc *edp_hw, u32 pixel_clk)
 	return RET_OK;
 }
 
-void edp_set_misc(struct sunxi_edp_hw_desc *edp_hw, u32 misc0_val, u32 misc1_val)
+static void edp_set_misc(struct sunxi_edp_hw_desc *edp_hw, u32 misc0_val, u32 misc1_val)
 {
 	u32 reg_val;
 
@@ -426,7 +426,7 @@ void edp_set_misc(struct sunxi_edp_hw_desc *edp_hw, u32 misc0_val, u32 misc1_val
 	writel(reg_val, edp_hw->reg_base + REG_EDP_MSA_MISC1);
 }
 
-void edp_video_stream_enable(struct sunxi_edp_hw_desc *edp_hw)
+static void edp_video_stream_enable(struct sunxi_edp_hw_desc *edp_hw)
 {
 	u32 reg_val;
 
@@ -435,7 +435,7 @@ void edp_video_stream_enable(struct sunxi_edp_hw_desc *edp_hw)
 	writel(reg_val, edp_hw->reg_base + REG_EDP_VIDEO_STREAM_EN);
 }
 
-void edp_video_stream_disable(struct sunxi_edp_hw_desc *edp_hw)
+static void edp_video_stream_disable(struct sunxi_edp_hw_desc *edp_hw)
 {
 	u32 reg_val;
 
@@ -444,7 +444,7 @@ void edp_video_stream_disable(struct sunxi_edp_hw_desc *edp_hw)
 	writel(reg_val, edp_hw->reg_base + REG_EDP_VIDEO_STREAM_EN);
 }
 
-void inno_set_training_pattern(struct sunxi_edp_hw_desc *edp_hw, u32 pattern)
+static void inno_set_training_pattern(struct sunxi_edp_hw_desc *edp_hw, u32 pattern)
 {
 	u32 reg_val;
 
@@ -453,7 +453,7 @@ void inno_set_training_pattern(struct sunxi_edp_hw_desc *edp_hw, u32 pattern)
 	writel(reg_val, edp_hw->reg_base + REG_EDP_CAPACITY);
 }
 
-void edp_audio_stream_vblank_setting(struct sunxi_edp_hw_desc *edp_hw, bool enable)
+static void edp_audio_stream_vblank_setting(struct sunxi_edp_hw_desc *edp_hw, bool enable)
 {
 	u32 reg_val;
 
@@ -462,7 +462,7 @@ void edp_audio_stream_vblank_setting(struct sunxi_edp_hw_desc *edp_hw, bool enab
 	writel(reg_val, edp_hw->reg_base + REG_EDP_AUDIO_VBLANK_EN);
 }
 
-void edp_audio_timestamp_vblank_setting(struct sunxi_edp_hw_desc *edp_hw, bool enable)
+static void edp_audio_timestamp_vblank_setting(struct sunxi_edp_hw_desc *edp_hw, bool enable)
 {
 	u32 reg_val;
 
@@ -471,7 +471,7 @@ void edp_audio_timestamp_vblank_setting(struct sunxi_edp_hw_desc *edp_hw, bool e
 	writel(reg_val, edp_hw->reg_base + REG_EDP_AUDIO_VBLANK_EN);
 }
 
-void edp_audio_stream_hblank_setting(struct sunxi_edp_hw_desc *edp_hw, bool enable)
+static void edp_audio_stream_hblank_setting(struct sunxi_edp_hw_desc *edp_hw, bool enable)
 {
 	u32 reg_val;
 
@@ -480,7 +480,7 @@ void edp_audio_stream_hblank_setting(struct sunxi_edp_hw_desc *edp_hw, bool enab
 	writel(reg_val, edp_hw->reg_base + REG_EDP_AUDIO_HBLANK_EN);
 }
 
-void edp_audio_timestamp_hblank_setting(struct sunxi_edp_hw_desc *edp_hw, bool enable)
+static void edp_audio_timestamp_hblank_setting(struct sunxi_edp_hw_desc *edp_hw, bool enable)
 {
 	u32 reg_val;
 
@@ -489,7 +489,7 @@ void edp_audio_timestamp_hblank_setting(struct sunxi_edp_hw_desc *edp_hw, bool e
 	writel(reg_val, edp_hw->reg_base + REG_EDP_AUDIO_HBLANK_EN);
 }
 
-void edp_audio_interface_config(struct sunxi_edp_hw_desc *edp_hw, u32 interface)
+static void edp_audio_interface_config(struct sunxi_edp_hw_desc *edp_hw, u32 interface)
 {
 	u32 reg_val;
 
@@ -498,7 +498,7 @@ void edp_audio_interface_config(struct sunxi_edp_hw_desc *edp_hw, u32 interface)
 	writel(reg_val, edp_hw->reg_base + REG_EDP_AUDIO);
 }
 
-void edp_audio_channel_config(struct sunxi_edp_hw_desc *edp_hw, u32 chn_num)
+static void edp_audio_channel_config(struct sunxi_edp_hw_desc *edp_hw, u32 chn_num)
 {
 	u32 reg_val;
 
@@ -521,7 +521,7 @@ void edp_audio_channel_config(struct sunxi_edp_hw_desc *edp_hw, u32 chn_num)
 	writel(reg_val, edp_hw->reg_base + REG_EDP_AUDIO);
 }
 
-void edp_audio_mute_config(struct sunxi_edp_hw_desc *edp_hw, bool mute)
+static void edp_audio_mute_config(struct sunxi_edp_hw_desc *edp_hw, bool mute)
 {
 
 	u32 reg_val;
@@ -531,7 +531,7 @@ void edp_audio_mute_config(struct sunxi_edp_hw_desc *edp_hw, bool mute)
 	writel(reg_val, edp_hw->reg_base + REG_EDP_AUDIO);
 }
 
-void edp_audio_data_width_config(struct sunxi_edp_hw_desc *edp_hw, u32 data_width)
+static void edp_audio_data_width_config(struct sunxi_edp_hw_desc *edp_hw, u32 data_width)
 {
 
 	u32 reg_val;
@@ -549,9 +549,18 @@ void edp_audio_data_width_config(struct sunxi_edp_hw_desc *edp_hw, u32 data_widt
 		break;
 	}
 	writel(reg_val, edp_hw->reg_base + REG_EDP_AUDIO);
+
 }
 
-void edp_audio_soft_reset(struct sunxi_edp_hw_desc *edp_hw)
+static void edp_audio_clear_sdp_valid_flag(struct sunxi_edp_hw_desc *edp_hw)
+{
+	u32 reg_val;
+	reg_val = readl(edp_hw->reg_base + REG_EDP_AUDIO_CFG);
+	reg_val = SET_BITS(8, 8, reg_val, 0x0);
+	writel(reg_val, edp_hw->reg_base + REG_EDP_AUDIO_CFG);
+}
+
+static void edp_audio_soft_reset(struct sunxi_edp_hw_desc *edp_hw)
 {
 	u32 reg_val;
 
@@ -562,7 +571,7 @@ void edp_audio_soft_reset(struct sunxi_edp_hw_desc *edp_hw)
 	writel(reg_val, edp_hw->reg_base + REG_EDP_RESET);
 }
 
-void edp_set_input_video_mapping(struct sunxi_edp_hw_desc *edp_hw, enum edp_video_mapping_e mapping)
+static void edp_set_input_video_mapping(struct sunxi_edp_hw_desc *edp_hw, enum edp_video_mapping_e mapping)
 {
 	u32 reg_val;
 	u32 mapping_val;
@@ -635,7 +644,7 @@ void edp_set_input_video_mapping(struct sunxi_edp_hw_desc *edp_hw, enum edp_vide
 	edp_set_misc(edp_hw, misc0_val, misc1_val);
 }
 
-s32 edp_bist_test(struct sunxi_edp_hw_desc *edp_hw, struct edp_tx_core *edp_core)
+static __maybe_unused s32 edp_bist_test(struct sunxi_edp_hw_desc *edp_hw, struct edp_tx_core *edp_core)
 {
 	u32 reg_val;
 	s32 ret;
@@ -682,7 +691,7 @@ s32 edp_bist_test(struct sunxi_edp_hw_desc *edp_hw, struct edp_tx_core *edp_core
 	return RET_OK;
 }
 
-void edp_controller_soft_reset(struct sunxi_edp_hw_desc *edp_hw)
+static void edp_controller_soft_reset(struct sunxi_edp_hw_desc *edp_hw)
 {
 	u32 reg_val;
 
@@ -694,7 +703,7 @@ void edp_controller_soft_reset(struct sunxi_edp_hw_desc *edp_hw)
 	writel(reg_val, edp_hw->reg_base + REG_EDP_RESET);
 }
 
-void edp_main_link_reset(struct sunxi_edp_hw_desc *edp_hw)
+static void edp_main_link_reset(struct sunxi_edp_hw_desc *edp_hw)
 {
 	u32 reg_val;
 
@@ -704,26 +713,40 @@ void edp_main_link_reset(struct sunxi_edp_hw_desc *edp_hw)
 	writel(reg_val, edp_hw->reg_base + REG_EDP_CAPACITY);
 }
 
-void edp_hpd_irq_enable(struct sunxi_edp_hw_desc *edp_hw)
+static void edp_hpd_irq_enable(struct sunxi_edp_hw_desc *edp_hw)
 {
 	writel(0x1, edp_hw->reg_base + REG_EDP_HPD_INT);
 	writel(0x6, edp_hw->reg_base + REG_EDP_HPD_EN);
 }
 
-void edp_hpd_irq_disable(struct sunxi_edp_hw_desc *edp_hw)
+static void edp_hpd_irq_disable(struct sunxi_edp_hw_desc *edp_hw)
 {
 	writel(0x0, edp_hw->reg_base + REG_EDP_HPD_INT);
 	writel(0x0, edp_hw->reg_base + REG_EDP_HPD_EN);
 }
 
-void edp_hpd_enable(struct sunxi_edp_hw_desc *edp_hw)
+/* ignore when inno ip, edp_hpd voltage myst be  >= 2.0v */
+static s32 inno_hpd_voltage_ignore(struct sunxi_edp_hw_desc *edp_hw, bool en)
 {
 	u32 reg_val;
+	reg_val = readl(edp_hw->reg_base + REG_EDP_HPD_SCALE);
+	reg_val = SET_BITS(4, 1, reg_val, (en ? 1 : 0));
+	writel(reg_val, edp_hw->reg_base + REG_EDP_HPD_SCALE);
+	return 0;
+}
+
+static void edp_hpd_enable(struct sunxi_edp_hw_desc *edp_hw)
+{
+	//u32 reg_val;
 	u32 reg_val1;
 
-	reg_val = readl(edp_hw->reg_base + REG_EDP_HPD_SCALE);
-	reg_val = SET_BITS(3, 1, reg_val, 1);
-	writel(reg_val, edp_hw->reg_base + REG_EDP_HPD_SCALE);
+	/*
+	 * only for digital simulation, otherwise would cause
+	 * hpd signal dead-lock
+	 */
+	//reg_val = readl(edp_hw->reg_base + REG_EDP_HPD_SCALE);
+	//reg_val = SET_BITS(3, 1, reg_val, 1);
+	//writel(reg_val, edp_hw->reg_base + REG_EDP_HPD_SCALE);
 
 	/* only hpd enable need, irq is not necesssary*/
 	reg_val1 = readl(edp_hw->reg_base + REG_EDP_HPD_EN);
@@ -732,17 +755,21 @@ void edp_hpd_enable(struct sunxi_edp_hw_desc *edp_hw)
 	edp_hpd_irq_enable(edp_hw);
 }
 
-void edp_hpd_disable(struct sunxi_edp_hw_desc *edp_hw)
+static __maybe_unused void edp_hpd_disable(struct sunxi_edp_hw_desc *edp_hw)
 {
-	u32 reg_val;
+	//u32 reg_val;
 
-	reg_val = readl(edp_hw->reg_base + REG_EDP_HPD_SCALE);
-	reg_val = SET_BITS(3, 1, reg_val, 0);
-	writel(reg_val, edp_hw->reg_base + REG_EDP_HPD_SCALE);
+	/*
+	 * only for digital simulation, otherwise would cause
+	 * hpd signal dead-lock
+	 */
+	//reg_val = readl(edp_hw->reg_base + REG_EDP_HPD_SCALE);
+	//reg_val = SET_BITS(3, 1, reg_val, 0);
+	//writel(reg_val, edp_hw->reg_base + REG_EDP_HPD_SCALE);
 	edp_hpd_irq_disable(edp_hw);
 }
 
-bool inno_get_hotplug_change(struct sunxi_edp_hw_desc *edp_hw)
+static bool inno_get_hotplug_change(struct sunxi_edp_hw_desc *edp_hw)
 {
 	u32 int_event_en = 0;
 	u32 int_en = 0;
@@ -760,7 +787,7 @@ bool inno_get_hotplug_change(struct sunxi_edp_hw_desc *edp_hw)
 	return false;
 }
 
-s32 inno_get_hotplug_state(struct sunxi_edp_hw_desc *edp_hw)
+static s32 inno_get_hotplug_state(struct sunxi_edp_hw_desc *edp_hw)
 {
 	bool hpd_plugin;
 	bool hpd_plugout;
@@ -783,24 +810,24 @@ s32 inno_get_hotplug_state(struct sunxi_edp_hw_desc *edp_hw)
 }
 
 
-void inno_irq_handle(struct sunxi_edp_hw_desc *edp_hw, struct edp_tx_core *edp_core)
+static void inno_irq_handle(struct sunxi_edp_hw_desc *edp_hw, struct edp_tx_core *edp_core)
 {
 }
 
-s32 inno_irq_enable(struct sunxi_edp_hw_desc *edp_hw, u32 irq_id)
+static s32 inno_irq_enable(struct sunxi_edp_hw_desc *edp_hw, u32 irq_id)
 {
 	edp_hpd_irq_enable(edp_hw);
 	return 0;
 }
 
-s32 inno_irq_disable(struct sunxi_edp_hw_desc *edp_hw, u32 irq_id)
+static s32 inno_irq_disable(struct sunxi_edp_hw_desc *edp_hw, u32 irq_id)
 {
 	/*fixme: irq is not need?*/
 	//edp_hpd_irq_disable();
 	return 0;
 }
 
-s32 edp_aux_read(struct sunxi_edp_hw_desc *edp_hw, s32 addr, s32 len, char *buf)
+static s32 edp_aux_read(struct sunxi_edp_hw_desc *edp_hw, u32 addr, u32 len, char *buf)
 {
 	u32 reg_val[4];
 	u32 regval = 0;
@@ -847,7 +874,6 @@ s32 edp_aux_read(struct sunxi_edp_hw_desc *edp_hw, s32 addr, s32 len, char *buf)
 		*/
 		/* wait for AUX_REPLY*/
 		//fixme
-		regval = readl(edp_hw->reg_base + REG_EDP_AUX_TIMEOUT);
 		while (((readl(edp_hw->reg_base + REG_EDP_AUX_TIMEOUT) >> 16) & 0x3) != 0) {
 			if (timeout >= 50000) {
 				EDP_LOW_DBG("edp_aux_read wait AUX_REPLY timeout, request:0x%x\n",
@@ -859,6 +885,16 @@ s32 edp_aux_read(struct sunxi_edp_hw_desc *edp_hw, s32 addr, s32 len, char *buf)
 		}
 
 		regval = readl(edp_hw->reg_base + REG_EDP_AUX_TIMEOUT);
+
+		/* check if panel prepared */
+		if (regval == 0) {
+			EDP_LOW_DBG("edp_aux_read read 0, maybe because of panel not prepared. request:0x%x\n",
+				edp_hw->cur_aux_request);
+			msleep(50);
+			ret = RET_AUX_TIMEOUT;
+			goto CLR_EVENT;
+		}
+
 		/* not ensure, need confirm from inno */
 		if (((regval >> 24) & 0xf) == 0xe) {
 			EDP_LOW_DBG("edp_aux_read recieve without STOP, request:0x%x\n",
@@ -901,7 +937,7 @@ CLR_EVENT:
 	return ret;
 }
 
-s32 edp_aux_write(struct sunxi_edp_hw_desc *edp_hw, s32 addr, s32 len, char *buf)
+static s32 edp_aux_write(struct sunxi_edp_hw_desc *edp_hw, u32 addr, u32 len, char *buf)
 {
 	u32 reg_val[4];
 	u32 regval = 0;
@@ -981,6 +1017,16 @@ s32 edp_aux_write(struct sunxi_edp_hw_desc *edp_hw, s32 addr, s32 len, char *buf
 		}
 
 		regval = readl(edp_hw->reg_base + REG_EDP_AUX_TIMEOUT);
+
+		/* check if panel prepared */
+		if (regval == 0) {
+			EDP_LOW_DBG("edp_aux_read read 0, maybe because of panel not prepared. request:0x%x\n",
+				edp_hw->cur_aux_request);
+			msleep(50);
+			ret = RET_AUX_TIMEOUT;
+			goto CLR_EVENT;
+		}
+
 		/* not ensure, need confirm from inno */
 		if (((regval >> 24) & 0xf) == 0xe) {
 			EDP_LOW_DBG("edp_aux_read recieve without STOP, request:0x%x\n",
@@ -1011,7 +1057,7 @@ CLR_EVENT:
 	return ret;
 }
 
-s32 edp_aux_i2c_read(struct sunxi_edp_hw_desc *edp_hw, s32 addr, s32 len, char *buf)
+static s32 edp_aux_i2c_read(struct sunxi_edp_hw_desc *edp_hw, u32 addr, u32 len, char *buf)
 {
 	u32 reg_val[4];
 	u32 regval = 0;
@@ -1037,7 +1083,7 @@ s32 edp_aux_i2c_read(struct sunxi_edp_hw_desc *edp_hw, s32 addr, s32 len, char *
 		regval = 0;
 		regval |= (block_len - 1);
 		regval = SET_BITS(8, 20, regval, addr);
-		regval = SET_BITS(28, 4, regval, AUX_I2C_READ);
+		regval = SET_BITS(28, 4, regval, AUX_I2C_READ_MOT);
 		edp_hw->cur_aux_request = regval;
 		EDP_LOW_DBG("[%s] aux_cmd: 0x%x\n", __func__, regval);
 		writel(regval, edp_hw->reg_base + REG_EDP_PHY_AUX);
@@ -1067,6 +1113,7 @@ s32 edp_aux_i2c_read(struct sunxi_edp_hw_desc *edp_hw, s32 addr, s32 len, char *
 		}
 
 		regval = readl(edp_hw->reg_base + REG_EDP_AUX_TIMEOUT);
+
 		/* not ensure, need confirm from inno */
 		if (((regval >> 24) & 0xf) == 0xe) {
 			EDP_LOW_DBG("edp_aux_read recieve without STOP, request:0x%x\n", edp_hw->cur_aux_request);
@@ -1078,7 +1125,8 @@ s32 edp_aux_i2c_read(struct sunxi_edp_hw_desc *edp_hw, s32 addr, s32 len, char *
 			EDP_LOW_DBG("edp_aux_i2c_read recieve AUX_REPLY_NACK, request:0x%x\n", edp_hw->cur_aux_request);
 			ret = RET_AUX_NACK;
 			goto CLR_EVENT;
-		} else if ((regval >> 4) == AUX_REPLY_I2C_DEFER) {
+		} else if (((regval >> 4) == AUX_REPLY_I2C_DEFER) ||
+				((regval >> 4) == AUX_REPLY_DEFER)) {
 			EDP_LOW_DBG("edp_aux_i2c_read recieve AUX_REPLY_I2C_DEFER, request:0x%x\n", edp_hw->cur_aux_request);
 			ret = RET_AUX_DEFER;
 			goto CLR_EVENT;
@@ -1106,7 +1154,7 @@ CLR_EVENT:
 	return ret;
 }
 
-s32 edp_aux_i2c_write(struct sunxi_edp_hw_desc *edp_hw, s32 addr, s32 len, char *buf)
+static s32 edp_aux_i2c_write(struct sunxi_edp_hw_desc *edp_hw, u32 addr, u32 len, char *buf)
 {
 	u32 reg_val[4];
 	u32 regval = 0;
@@ -1151,7 +1199,7 @@ s32 edp_aux_i2c_write(struct sunxi_edp_hw_desc *edp_hw, s32 addr, s32 len, char 
 		regval = 0;
 		regval |= (data_len - 1);
 		regval = SET_BITS(8, 20, regval, addr);
-		regval = SET_BITS(28, 4, regval, AUX_I2C_WRITE);
+		regval = SET_BITS(28, 4, regval, AUX_I2C_WRITE_MOT);
 		edp_hw->cur_aux_request = regval;
 		EDP_LOW_DBG("[%s] aux_cmd: 0x%x\n", __func__, regval);
 		writel(regval, edp_hw->reg_base + REG_EDP_PHY_AUX);
@@ -1182,6 +1230,7 @@ s32 edp_aux_i2c_write(struct sunxi_edp_hw_desc *edp_hw, s32 addr, s32 len, char 
 		}
 
 		regval = readl(edp_hw->reg_base + REG_EDP_AUX_TIMEOUT);
+
 		/* not ensure, need confirm from inno */
 		if (((regval >> 24) & 0xf) == 0xe) {
 			EDP_LOW_DBG("edp_aux_read recieve without STOP, request:0x%x\n", edp_hw->cur_aux_request);
@@ -1193,7 +1242,8 @@ s32 edp_aux_i2c_write(struct sunxi_edp_hw_desc *edp_hw, s32 addr, s32 len, char 
 			EDP_LOW_DBG("edp_aux_i2c_write recieve AUX_REPLY_NACK, request:0x%x\n", edp_hw->cur_aux_request);
 			ret = RET_AUX_NACK;
 			goto CLR_EVENT;
-		} else if ((regval >> 4) == AUX_REPLY_I2C_DEFER) {
+		} else if (((regval >> 4) == AUX_REPLY_I2C_DEFER) ||
+				((regval >> 4) == AUX_REPLY_DEFER)) {
 			EDP_LOW_DBG("edp_aux_i2c_write recieve AUX_REPLY_I2C_DEFER, request:0x%x\n", edp_hw->cur_aux_request);
 			ret = RET_AUX_DEFER;
 			goto CLR_EVENT;
@@ -1209,27 +1259,27 @@ CLR_EVENT:
 	return ret;
 }
 
-s32 inno_aux_read(struct sunxi_edp_hw_desc *edp_hw, s32 addr, s32 len, char *buf)
+static s32 inno_aux_read(struct sunxi_edp_hw_desc *edp_hw, u32 addr, u32 len, char *buf)
 {
 	return edp_aux_read(edp_hw, addr, len, buf);
 }
 
-s32 inno_aux_write(struct sunxi_edp_hw_desc *edp_hw, s32 addr, s32 len, char *buf)
+static s32 inno_aux_write(struct sunxi_edp_hw_desc *edp_hw, u32 addr, u32 len, char *buf)
 {
 	return edp_aux_write(edp_hw, addr, len, buf);
 }
 
-s32 inno_aux_i2c_read(struct sunxi_edp_hw_desc *edp_hw, s32 i2c_addr, s32 addr, s32 len, char *buf)
+static s32 inno_aux_i2c_read(struct sunxi_edp_hw_desc *edp_hw, u32 i2c_addr, u32 addr, u32 len, char *buf)
 {
 	return edp_aux_i2c_read(edp_hw, i2c_addr, len, buf);
 }
 
-s32 inno_aux_i2c_write(struct sunxi_edp_hw_desc *edp_hw, s32 i2c_addr, s32 addr, s32 len, char *buf)
+static s32 inno_aux_i2c_write(struct sunxi_edp_hw_desc *edp_hw, u32 i2c_addr, u32 addr, u32 len, char *buf)
 {
 	return edp_aux_i2c_write(edp_hw, i2c_addr, len, buf);
 }
 
-s32 inno_aux_read_ext(struct sunxi_edp_hw_desc *edp_hw, s32 addr, s32 len, char *buf)
+static s32 inno_aux_read_ext(struct sunxi_edp_hw_desc *edp_hw, u32 addr, u32 len, char *buf)
 {
 	u32 retry_cnt = 0;
 	s32 ret = 0;
@@ -1252,7 +1302,7 @@ s32 inno_aux_read_ext(struct sunxi_edp_hw_desc *edp_hw, s32 addr, s32 len, char 
 	return ret;
 }
 
-s32 inno_aux_i2c_read_ext(struct sunxi_edp_hw_desc *edp_hw, s32 i2c_addr, s32 len, char *buf)
+static s32 inno_aux_i2c_read_ext(struct sunxi_edp_hw_desc *edp_hw, u32 i2c_addr, u32 len, char *buf)
 {
 	u32 retry_cnt = 0;
 	s32 ret = 0;
@@ -1275,7 +1325,7 @@ s32 inno_aux_i2c_read_ext(struct sunxi_edp_hw_desc *edp_hw, s32 i2c_addr, s32 le
 	return ret;
 }
 
-s32 inno_aux_i2c_write_ext(struct sunxi_edp_hw_desc *edp_hw, s32 i2c_addr, s32 len, char *buf)
+static s32 inno_aux_i2c_write_ext(struct sunxi_edp_hw_desc *edp_hw, u32 i2c_addr, u32 len, char *buf)
 {
 	u32 retry_cnt = 0;
 	s32 ret = 0;
@@ -1299,7 +1349,7 @@ s32 inno_aux_i2c_write_ext(struct sunxi_edp_hw_desc *edp_hw, s32 i2c_addr, s32 l
 }
 
 
-s32 edp_transfer_unit_config(struct sunxi_edp_hw_desc *edp_hw, u32 bpp, u32 lane_cnt, u64 bit_rate, u32 pixel_clk)
+static s32 edp_transfer_unit_config(struct sunxi_edp_hw_desc *edp_hw, u32 bpp, u32 lane_cnt, u64 bit_rate, u32 pixel_clk)
 {
 	u32 reg_val;
 	u32 pack_data_rate;
@@ -1323,7 +1373,14 @@ s32 edp_transfer_unit_config(struct sunxi_edp_hw_desc *edp_hw, u32 bpp, u32 lane
 	EDP_LOW_DBG("[edp_transfer_unit]: pack_data_rate:%d\n", pack_data_rate);
 	valid_symbol = LS_PER_TU * (pack_data_rate / bandwidth);
 
-	if (valid_symbol > (62 * pre_div)) {
+	/* The original calculation formula, due to the loss of decimal precision,
+	 * might theoretically have a sufficient bit rate to power a screen of a certain resolution,
+	 * but the actual calculated result might not meet this requirement.
+	 * Therefore, we try to avoid division operations here and increase the maximum TU number from 62 to 63,
+	 * theoretically up to a maximum of 64.
+	 */
+
+	if ((LS_PER_TU * bpp * pixel_clk)   >  (63 * pre_div * 8 * lane_cnt * bandwidth)) {
 		EDP_ERR("valid symbol now: %d, should less than 62\n", (valid_symbol / pre_div));
 		EDP_ERR("Try to enlarge lane count or lane rate!\n");
 		return RET_FAIL;
@@ -1349,7 +1406,7 @@ s32 edp_transfer_unit_config(struct sunxi_edp_hw_desc *edp_hw, u32 bpp, u32 lane
 }
 
 
-void edp_set_link_clk_cyc(struct sunxi_edp_hw_desc *edp_hw, u32 lane_cnt, u64 bit_rate, u32 pixel_clk)
+static void edp_set_link_clk_cyc(struct sunxi_edp_hw_desc *edp_hw, u32 lane_cnt, u64 bit_rate, u32 pixel_clk)
 {
 	u32 reg_val;
 	u32 hblank;
@@ -1371,14 +1428,14 @@ void edp_set_link_clk_cyc(struct sunxi_edp_hw_desc *edp_hw, u32 lane_cnt, u64 bi
 	writel(reg_val, edp_hw->reg_base + REG_EDP_HBLANK_LINK_CYC);
 }
 
-s32 inno_init_early(struct sunxi_edp_hw_desc *edp_hw)
+static s32 inno_init_early(struct sunxi_edp_hw_desc *edp_hw)
 {
 	mutex_init(&edp_hw->aux_lock);
 
 	return RET_OK;
 }
 
-s32 inno_controller_init(struct sunxi_edp_hw_desc *edp_hw, struct edp_tx_core *edp_core)
+static s32 inno_controller_init(struct sunxi_edp_hw_desc *edp_hw, struct edp_tx_core *edp_core)
 {
 	s32 ret = 0;
 
@@ -1397,13 +1454,14 @@ s32 inno_controller_init(struct sunxi_edp_hw_desc *edp_hw, struct edp_tx_core *e
 	 */
 	edp_aux_16m_config(edp_hw, BIT_RATE_2G7);
 	edp_corepll_config(edp_hw, BIT_RATE_2G7);
+	inno_hpd_voltage_ignore(edp_hw, edp_core->ignore_hpd_vol);
 	usleep_range(500, 1000);
 
 	return ret;
 }
 
 
-s32 inno_enable(struct sunxi_edp_hw_desc *edp_hw, struct edp_tx_core *edp_core)
+static s32 inno_enable(struct sunxi_edp_hw_desc *edp_hw, struct edp_tx_core *edp_core)
 {
 	u64 bit_rate;
 
@@ -1420,7 +1478,7 @@ s32 inno_enable(struct sunxi_edp_hw_desc *edp_hw, struct edp_tx_core *edp_core)
 	return RET_OK;
 }
 
-s32 inno_disable(struct sunxi_edp_hw_desc *edp_hw, struct edp_tx_core *edp_core)
+static s32 inno_disable(struct sunxi_edp_hw_desc *edp_hw, struct edp_tx_core *edp_core)
 {
 	edp_video_stream_disable(edp_hw);
 	edp_main_link_reset(edp_hw);
@@ -1428,86 +1486,86 @@ s32 inno_disable(struct sunxi_edp_hw_desc *edp_hw, struct edp_tx_core *edp_core)
 	return 0;
 }
 
-void inno_scrambling_enable(struct sunxi_edp_hw_desc *edp_hw, bool enable)
+static void inno_scrambling_enable(struct sunxi_edp_hw_desc *edp_hw, bool enable)
 {
 }
 
-u64 inno_get_max_rate(struct sunxi_edp_hw_desc *edp_hw)
+static u64 inno_get_max_rate(struct sunxi_edp_hw_desc *edp_hw)
 {
 	return BIT_RATE_2G7;
 }
 
-u32 inno_get_max_lane(struct sunxi_edp_hw_desc *edp_hw)
+static u32 inno_get_max_lane(struct sunxi_edp_hw_desc *edp_hw)
 {
 	return 4;
 }
 
-bool inno_support_tps3(struct sunxi_edp_hw_desc *edp_hw)
+static bool inno_support_tps3(struct sunxi_edp_hw_desc *edp_hw)
 {
 	return false;
 }
 
-bool inno_support_fast_train(struct sunxi_edp_hw_desc *edp_hw)
+static bool inno_support_fast_train(struct sunxi_edp_hw_desc *edp_hw)
 {
 	return false;
 }
 
-bool inno_support_audio(struct sunxi_edp_hw_desc *edp_hw)
+static bool inno_support_audio(struct sunxi_edp_hw_desc *edp_hw)
 {
 	return true;
 }
 
-bool inno_support_psr(struct sunxi_edp_hw_desc *edp_hw)
+static bool inno_support_psr(struct sunxi_edp_hw_desc *edp_hw)
 {
 	return false;
 }
 
-bool inno_support_psr2(struct sunxi_edp_hw_desc *edp_hw)
+static bool inno_support_psr2(struct sunxi_edp_hw_desc *edp_hw)
 {
 	return false;
 }
 
-bool inno_support_ssc(struct sunxi_edp_hw_desc *edp_hw)
+static bool inno_support_ssc(struct sunxi_edp_hw_desc *edp_hw)
 {
 	return true;
 }
 
-bool inno_support_assr(struct sunxi_edp_hw_desc *edp_hw)
+static bool inno_support_assr(struct sunxi_edp_hw_desc *edp_hw)
 {
 	return true;
 }
 
-bool inno_support_mst(struct sunxi_edp_hw_desc *edp_hw)
+static bool inno_support_mst(struct sunxi_edp_hw_desc *edp_hw)
 {
 	return false;
 }
 
-bool inno_support_fec(struct sunxi_edp_hw_desc *edp_hw)
+static bool inno_support_fec(struct sunxi_edp_hw_desc *edp_hw)
 {
 	return false;
 }
 
-bool inno_support_hdcp1x(struct sunxi_edp_hw_desc *edp_hw)
+static __maybe_unused bool inno_support_hdcp1x(struct sunxi_edp_hw_desc *edp_hw)
 {
 	return false;
 }
 
-bool inno_support_hw_hdcp1x(struct sunxi_edp_hw_desc *edp_hw)
+static __maybe_unused bool inno_support_hw_hdcp1x(struct sunxi_edp_hw_desc *edp_hw)
 {
 	return false;
 }
 
-bool inno_support_hdcp2x(struct sunxi_edp_hw_desc *edp_hw)
+static __maybe_unused bool inno_support_hdcp2x(struct sunxi_edp_hw_desc *edp_hw)
 {
 	return false;
 }
 
-bool inno_support_hw_hdcp2x(struct sunxi_edp_hw_desc *edp_hw)
+static __maybe_unused bool inno_support_hw_hdcp2x(struct sunxi_edp_hw_desc *edp_hw)
 {
 	return false;
 }
 
-s32 edp_read_edid(struct sunxi_edp_hw_desc *edp_hw,  u8 *edid, size_t len)
+static s32 edp_read_edid(struct sunxi_edp_hw_desc *edp_hw,  u8 *edid, size_t len)
 {
 	s32 i;
 	s32 ret;
@@ -1524,8 +1582,8 @@ s32 edp_read_edid(struct sunxi_edp_hw_desc *edp_hw,  u8 *edid, size_t len)
 	return 0;
 }
 
-s32 inno_read_edid_block(struct sunxi_edp_hw_desc *edp_hw,
-			 u8 *raw_edid, unsigned int block_id, size_t len)
+static s32 inno_read_edid_block(struct sunxi_edp_hw_desc *edp_hw,
+				u8 *raw_edid, unsigned int block_id, size_t len)
 {
 	char g_tx_buf[16];
 
@@ -1538,8 +1596,8 @@ s32 inno_read_edid_block(struct sunxi_edp_hw_desc *edp_hw,
 
 }
 
-void edp_set_video_timings(struct sunxi_edp_hw_desc *edp_hw,
-			   struct disp_video_timings *timings)
+static void edp_set_video_timings(struct sunxi_edp_hw_desc *edp_hw,
+				  struct disp_video_timings *timings)
 {
 	u32 reg_val;
 
@@ -1578,7 +1636,7 @@ void edp_set_video_timings(struct sunxi_edp_hw_desc *edp_hw,
 	writel(reg_val, edp_hw->reg_base + REG_EDP_VSW_FRONT_PORCH);
 }
 
-s32 inno_set_video_format(struct sunxi_edp_hw_desc *edp_hw, struct edp_tx_core *edp_core)
+static s32 inno_set_video_format(struct sunxi_edp_hw_desc *edp_hw, struct edp_tx_core *edp_core)
 {
 	u32 colordepth;
 	u32 color_fmt;
@@ -1650,8 +1708,8 @@ s32 inno_set_video_format(struct sunxi_edp_hw_desc *edp_hw, struct edp_tx_core *
 
 }
 
-s32 inno_set_video_timings(struct sunxi_edp_hw_desc *edp_hw,
-			   struct disp_video_timings *tmgs)
+static s32 inno_set_video_timings(struct sunxi_edp_hw_desc *edp_hw,
+				  struct disp_video_timings *tmgs)
 {
 	u32 pixel_clk = tmgs->pixel_clk;
 	s32 ret = 0;
@@ -1666,8 +1724,8 @@ s32 inno_set_video_timings(struct sunxi_edp_hw_desc *edp_hw,
 	return RET_OK;
 }
 
-s32 inno_set_transfer_config(struct sunxi_edp_hw_desc *edp_hw,
-			     struct edp_tx_core *edp_core)
+static s32 inno_set_transfer_config(struct sunxi_edp_hw_desc *edp_hw,
+				    struct edp_tx_core *edp_core)
 {
 	struct disp_video_timings *tmgs = &edp_core->timings;
 	u32 pixel_clk = tmgs->pixel_clk;
@@ -1685,18 +1743,18 @@ s32 inno_set_transfer_config(struct sunxi_edp_hw_desc *edp_hw,
 	return RET_OK;
 }
 
-s32 inno_audio_enable(struct sunxi_edp_hw_desc *edp_hw)
+static s32 inno_audio_enable(struct sunxi_edp_hw_desc *edp_hw)
 {
 	edp_audio_timestamp_hblank_setting(edp_hw, true);
 	edp_audio_timestamp_vblank_setting(edp_hw, true);
 	edp_audio_stream_hblank_setting(edp_hw, true);
 	edp_audio_stream_vblank_setting(edp_hw, true);
-	edp_audio_soft_reset(edp_hw);
+	edp_audio_clear_sdp_valid_flag(edp_hw);
 
 	return RET_OK;
 }
 
-s32 inno_audio_disable(struct sunxi_edp_hw_desc *edp_hw)
+static s32 inno_audio_disable(struct sunxi_edp_hw_desc *edp_hw)
 {
 	edp_audio_timestamp_hblank_setting(edp_hw, false);
 	edp_audio_timestamp_vblank_setting(edp_hw, false);
@@ -1706,7 +1764,7 @@ s32 inno_audio_disable(struct sunxi_edp_hw_desc *edp_hw)
 	return RET_OK;
 }
 
-s32 inno_audio_config(struct sunxi_edp_hw_desc *edp_hw, int interface,
+static s32 inno_audio_config(struct sunxi_edp_hw_desc *edp_hw, int interface,
 		      int chn_cnt, int data_width, int data_rate)
 {
 	edp_audio_interface_config(edp_hw, interface);
@@ -1716,8 +1774,9 @@ s32 inno_audio_config(struct sunxi_edp_hw_desc *edp_hw, int interface,
 	return RET_OK;
 }
 
-s32 inno_audio_mute(struct sunxi_edp_hw_desc *edp_hw, bool enable, int direction)
+static s32 inno_audio_mute(struct sunxi_edp_hw_desc *edp_hw, bool enable, int direction)
 {
+	edp_audio_soft_reset(edp_hw);
 	edp_audio_mute_config(edp_hw, enable);
 
 	return RET_OK;
@@ -1725,7 +1784,7 @@ s32 inno_audio_mute(struct sunxi_edp_hw_desc *edp_hw, bool enable, int direction
 
 
 /*
-s32 edp_hal_audio_set_para(edp_audio_t *para)
+static s32 edp_hal_audio_set_para(edp_audio_t *para)
 {
 	edp_audio_interface_config(para->interface);
 	edp_audio_channel_config(para->chn_cnt);
@@ -1736,7 +1795,7 @@ s32 edp_hal_audio_set_para(edp_audio_t *para)
 }
 */
 
-s32 inno_ssc_enable(struct sunxi_edp_hw_desc *edp_hw, bool enable)
+static s32 inno_ssc_enable(struct sunxi_edp_hw_desc *edp_hw, bool enable)
 {
 	u32 reg_val;
 	u32 index;
@@ -1759,7 +1818,7 @@ s32 inno_ssc_enable(struct sunxi_edp_hw_desc *edp_hw, bool enable)
 	return RET_OK;
 }
 
-bool inno_ssc_is_enabled(struct sunxi_edp_hw_desc *edp_hw)
+static bool inno_ssc_is_enabled(struct sunxi_edp_hw_desc *edp_hw)
 {
 	u32 reg_val;
 
@@ -1772,7 +1831,7 @@ bool inno_ssc_is_enabled(struct sunxi_edp_hw_desc *edp_hw)
 	return false;
 }
 
-s32 inno_ssc_get_mode(struct sunxi_edp_hw_desc *edp_hw)
+static s32 inno_ssc_get_mode(struct sunxi_edp_hw_desc *edp_hw)
 {
 	u32 reg_val;
 
@@ -1782,7 +1841,7 @@ s32 inno_ssc_get_mode(struct sunxi_edp_hw_desc *edp_hw)
 	return reg_val;
 }
 
-s32 inno_ssc_set_mode(struct sunxi_edp_hw_desc *edp_hw, u32 mode)
+static s32 inno_ssc_set_mode(struct sunxi_edp_hw_desc *edp_hw, u32 mode)
 {
 	u32 reg_val;
 	u32 reg_val1;
@@ -1810,19 +1869,19 @@ s32 inno_ssc_set_mode(struct sunxi_edp_hw_desc *edp_hw, u32 mode)
 }
 
 
-s32 inno_psr_enable(struct sunxi_edp_hw_desc *edp_hw, bool enable)
+static s32 inno_psr_enable(struct sunxi_edp_hw_desc *edp_hw, bool enable)
 {
 	EDP_ERR("psr isn't support\n");
 	return RET_FAIL;
 }
 
-bool inno_psr_is_enabled(struct sunxi_edp_hw_desc *edp_hw)
+static bool inno_psr_is_enabled(struct sunxi_edp_hw_desc *edp_hw)
 {
 	EDP_ERR("psr isn't support\n");
 	return false;
 }
 
-s32 inno_assr_enable(struct sunxi_edp_hw_desc *edp_hw, bool enable)
+static s32 inno_assr_enable(struct sunxi_edp_hw_desc *edp_hw, bool enable)
 {
 	u32 reg_val;
 
@@ -1839,8 +1898,8 @@ s32 inno_assr_enable(struct sunxi_edp_hw_desc *edp_hw, bool enable)
 	return RET_OK;
 }
 
-s32 inno_set_pattern(struct sunxi_edp_hw_desc *edp_hw,
-		     u32 pattern, u32 lane_cnt)
+static s32 inno_set_pattern(struct sunxi_edp_hw_desc *edp_hw,
+			    u32 pattern, u32 lane_cnt)
 {
 	if (pattern > 6)
 		pattern = 6;
@@ -1856,7 +1915,7 @@ s32 inno_set_pattern(struct sunxi_edp_hw_desc *edp_hw,
 	return RET_OK;
 }
 
-s32 inno_get_color_fmt(struct sunxi_edp_hw_desc *edp_hw)
+static s32 inno_get_color_fmt(struct sunxi_edp_hw_desc *edp_hw)
 {
 	u32 reg_val;
 
@@ -1897,7 +1956,7 @@ s32 inno_get_color_fmt(struct sunxi_edp_hw_desc *edp_hw)
 }
 
 
-u32 inno_get_pixclk(struct sunxi_edp_hw_desc *edp_hw)
+static u32 inno_get_pixclk(struct sunxi_edp_hw_desc *edp_hw)
 {
 	u32 reg_val;
 	u32 fb_div;
@@ -1928,7 +1987,7 @@ u32 inno_get_pixclk(struct sunxi_edp_hw_desc *edp_hw)
 	return pixclk * 1000000;
 }
 
-u32 inno_get_pattern(struct sunxi_edp_hw_desc *edp_hw)
+static u32 inno_get_pattern(struct sunxi_edp_hw_desc *edp_hw)
 {
 	u32 reg_val;
 
@@ -1942,8 +2001,8 @@ u32 inno_get_pattern(struct sunxi_edp_hw_desc *edp_hw)
 	return reg_val;
 }
 
-s32 inno_get_lane_para(struct sunxi_edp_hw_desc *edp_hw,
-		       struct edp_lane_para *tmp_lane_para)
+static s32 inno_get_lane_para(struct sunxi_edp_hw_desc *edp_hw,
+			      struct edp_lane_para *tmp_lane_para)
 {
 	u32 reg_val;
 	u32 regval;
@@ -2065,12 +2124,12 @@ s32 inno_get_lane_para(struct sunxi_edp_hw_desc *edp_hw,
 	return RET_OK;
 }
 
-u32 inno_get_tu_size(struct sunxi_edp_hw_desc *edp_hw)
+static u32 inno_get_tu_size(struct sunxi_edp_hw_desc *edp_hw)
 {
 	return LS_PER_TU;
 }
 
-u32 inno_get_tu_valid_symbol(struct sunxi_edp_hw_desc *edp_hw)
+static u32 inno_get_tu_valid_symbol(struct sunxi_edp_hw_desc *edp_hw)
 {
 	u32 reg_val;
 	u32 regval;
@@ -2086,7 +2145,7 @@ u32 inno_get_tu_valid_symbol(struct sunxi_edp_hw_desc *edp_hw)
 	return valid_symbol;
 }
 
-bool inno13_audio_is_enabled(struct sunxi_edp_hw_desc *edp_hw)
+static bool inno13_audio_is_enabled(struct sunxi_edp_hw_desc *edp_hw)
 {
 	u32 reg_val;
 	u32 regval0;
@@ -2108,7 +2167,7 @@ bool inno13_audio_is_enabled(struct sunxi_edp_hw_desc *edp_hw)
 	return false;
 }
 
-u32 inno_get_audio_if(struct sunxi_edp_hw_desc *edp_hw)
+static u32 inno_get_audio_if(struct sunxi_edp_hw_desc *edp_hw)
 {
 	u32 reg_val;
 
@@ -2118,7 +2177,7 @@ u32 inno_get_audio_if(struct sunxi_edp_hw_desc *edp_hw)
 	return reg_val;
 }
 
-bool inno_audio_is_muted(struct sunxi_edp_hw_desc *edp_hw)
+static bool inno_audio_is_muted(struct sunxi_edp_hw_desc *edp_hw)
 {
 	u32 reg_val;
 
@@ -2128,12 +2187,12 @@ bool inno_audio_is_muted(struct sunxi_edp_hw_desc *edp_hw)
 	return reg_val ? true : false;
 }
 
-u32 inno_get_audio_max_channel(struct sunxi_edp_hw_desc *edp_hw)
+static u32 inno_get_audio_max_channel(struct sunxi_edp_hw_desc *edp_hw)
 {
 	return 8;
 }
 
-u32 inno_get_audio_chn_cnt(struct sunxi_edp_hw_desc *edp_hw)
+static u32 inno_get_audio_chn_cnt(struct sunxi_edp_hw_desc *edp_hw)
 {
 	u32 reg_val;
 
@@ -2148,7 +2207,7 @@ u32 inno_get_audio_chn_cnt(struct sunxi_edp_hw_desc *edp_hw)
 		return 8;
 }
 
-u32 inno_get_audio_date_width(struct sunxi_edp_hw_desc *edp_hw)
+static u32 inno_get_audio_date_width(struct sunxi_edp_hw_desc *edp_hw)
 {
 	u32 reg_val;
 
@@ -2163,14 +2222,14 @@ u32 inno_get_audio_date_width(struct sunxi_edp_hw_desc *edp_hw)
 		return 24;
 }
 
-s32 inno_link_start(struct sunxi_edp_hw_desc *edp_hw)
+static s32 inno_link_start(struct sunxi_edp_hw_desc *edp_hw)
 {
 	edp_video_stream_enable(edp_hw);
 
 	return RET_OK;
 }
 
-s32 inno_link_stop(struct sunxi_edp_hw_desc *edp_hw)
+static s32 inno_link_stop(struct sunxi_edp_hw_desc *edp_hw)
 {
 	edp_video_stream_disable(edp_hw);
 	edp_main_link_reset(edp_hw);
@@ -2178,9 +2237,9 @@ s32 inno_link_stop(struct sunxi_edp_hw_desc *edp_hw)
 	return RET_OK;
 }
 
-s32 inno_query_transfer_unit(struct sunxi_edp_hw_desc *edp_hw,
-				struct edp_tx_core *edp_core,
-				struct disp_video_timings *tmgs)
+static s32 inno_query_transfer_unit(struct sunxi_edp_hw_desc *edp_hw,
+				    struct edp_tx_core *edp_core,
+				    struct disp_video_timings *tmgs)
 {
 	u32 pack_data_rate;
 	u32 valid_symbol;
@@ -2212,7 +2271,14 @@ s32 inno_query_transfer_unit(struct sunxi_edp_hw_desc *edp_hw,
 	pack_data_rate = (bpp * pixel_clk / 8) / lane_cnt;
 	valid_symbol = LS_PER_TU * (pack_data_rate / bandwidth);
 
-	if (valid_symbol > (62 * pre_div)) {
+	/* The original calculation formula, due to the loss of decimal precision,
+	 * might theoretically have a sufficient bit rate to power a screen of a certain resolution,
+	 * but the actual calculated result might not meet this requirement.
+	 * Therefore, we try to avoid division operations here and increase the maximum TU number from 62 to 63,
+	 * theoretically up to a maximum of 64.
+	 */
+
+	if ((LS_PER_TU * bpp * pixel_clk)   >  (63 * pre_div * 8 * lane_cnt * bandwidth)) {
 		EDP_ERR("out of valid symbol limit(lane:%d bit_rate:%lld pixel_clk:%d symbol_limit:62 symbol_now:%d\n",
 				lane_cnt, bit_rate, pixel_clk, valid_symbol / 1000);
 		EDP_ERR("check if lane_cnt or lane_rate can be enlarged!\n");
@@ -2229,7 +2295,8 @@ s32 inno_query_transfer_unit(struct sunxi_edp_hw_desc *edp_hw,
  * 1: high voltage level, for dp display that may follow with voltage attenuation
  * 2: width scope voltage, cover some low and high voltahe
  */
-void inno_set_lane_sw_pre(struct sunxi_edp_hw_desc *edp_hw, u32 lane_id, u32 sw, u32 pre, u32 param_type)
+static void inno_set_lane_sw_pre(struct sunxi_edp_hw_desc *edp_hw,
+				 u32 lane_id, u32 sw, u32 pre, u32 param_type)
 {
 	u32 sw_lv = training_param_table[param_type][sw][pre].sw_lv;
 	u32 pre_lv = training_param_table[param_type][sw][pre].pre_lv;
@@ -2279,7 +2346,7 @@ void inno_set_lane_sw_pre(struct sunxi_edp_hw_desc *edp_hw, u32 lane_id, u32 sw,
 		EDP_WRN("%s: lane number is not support!\n", __func__);
 }
 
-void inno_set_lane_rate(struct sunxi_edp_hw_desc *edp_hw, u64 bit_rate)
+static void inno_set_lane_rate(struct sunxi_edp_hw_desc *edp_hw, u64 bit_rate)
 {
 	u32 reg_val;
 
@@ -2299,7 +2366,7 @@ void inno_set_lane_rate(struct sunxi_edp_hw_desc *edp_hw, u64 bit_rate)
 	writel(reg_val, edp_hw->reg_base + REG_EDP_CAPACITY);
 }
 
-void inno_set_lane_cnt(struct sunxi_edp_hw_desc *edp_hw, u32 lane_cnt)
+static void inno_set_lane_cnt(struct sunxi_edp_hw_desc *edp_hw, u32 lane_cnt)
 {
 	u32 reg_val;
 
@@ -2330,7 +2397,7 @@ void inno_set_lane_cnt(struct sunxi_edp_hw_desc *edp_hw, u32 lane_cnt)
 	writel(reg_val, edp_hw->reg_base + REG_EDP_CAPACITY);
 }
 
-bool inno_check_controller_error(struct sunxi_edp_hw_desc *edp_hw)
+static bool inno_check_controller_error(struct sunxi_edp_hw_desc *edp_hw)
 {
 	u32 reg_val, reg_val1;
 
@@ -2350,7 +2417,7 @@ bool inno_check_controller_error(struct sunxi_edp_hw_desc *edp_hw)
 		return false;
 }
 
-void inno_enhance_frame_enable(struct sunxi_edp_hw_desc *edp_hw, bool enable)
+static void inno_enhance_frame_enable(struct sunxi_edp_hw_desc *edp_hw, bool enable)
 {
 	u32 reg_val;
 
@@ -2365,12 +2432,12 @@ void inno_enhance_frame_enable(struct sunxi_edp_hw_desc *edp_hw, bool enable)
 	}
 }
 
-bool inno_support_enhance_frame(struct sunxi_edp_hw_desc *edp_hw)
+static bool inno_support_enhance_frame(struct sunxi_edp_hw_desc *edp_hw)
 {
 	return true;
 }
 
-bool inno_set_tcon_tv_use_edp_inner_clk(struct sunxi_edp_hw_desc *edp_hw, u32 bypass)
+static bool inno_set_tcon_tv_use_edp_inner_clk(struct sunxi_edp_hw_desc *edp_hw, u32 bypass)
 {
 	u32 reg_val;
 	reg_val = readl(edp_hw->reg_base + REG_EDP_ANA_PIXPLL_FBDIV);

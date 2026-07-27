@@ -23,9 +23,12 @@
 #include <linux/regulator/consumer.h>
 #include <linux/dmaengine.h>
 #include <linux/reset.h>
+#include <linux/kfifo.h>
 #include <sunxi-dma.h>
 #include <linux/ktime.h>
 #include <sunxi-gpio.h>
+#include <linux/circ_buf.h>
+
 #ifdef CONFIG_AW_AMP_SYS_RSC_MANAGER
 #include <linux/sunxi_amp_rsc.h>
 #endif
@@ -45,9 +48,6 @@ enum rs485_rcv_mode {
 	RS485_RCV_AAD		= 2,
 	RS485_RCV_MAX		= 3
 };
-
-#define SERIAL_CIRC_CNT_TO_END(xmit) \
-	CIRC_CNT_TO_END(xmit->head, xmit->tail, UART_XMIT_SIZE)
 
 static inline bool sunxi_is_console_port(struct uart_port *port)
 {
@@ -310,7 +310,6 @@ static inline void serial_out_lowbyte(struct uart_port *port, unsigned int value
 
 extern void sunxi_uart_enable_ier_thri(struct uart_port *port);
 extern void sunxi_uart_disable_ier_thri(struct uart_port *port);
-
 extern void sunxi_uart_stop_dma_rx(struct sunxi_uart_port *uart_port);
 extern void sunxi_uart_stop_dma_tx(struct sunxi_uart_port *uart_port);
 extern void sunxi_uart_release_dma_tx(struct sunxi_uart_port *uart_port);
@@ -323,5 +322,20 @@ extern int sunxi_uart_start_dma_rx(struct sunxi_uart_port *uart_port);
 extern int sunxi_uart_init_dma(struct sunxi_uart_port *uart_port);
 
 struct platform_device *sunxi_uart_get_pdev(int uart_id);
+
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 7, 0))
+typedef u8 sunxi_uart_xmit;
+typedef u8 sunxi_uart_xmit_fifo;
+#else
+typedef struct circ_buf sunxi_uart_xmit;
+typedef char sunxi_uart_xmit_fifo;
+#endif
+sunxi_uart_xmit *sunxi_uart_get_xmit(struct uart_port *port);
+sunxi_uart_xmit_fifo *sunxi_uart_get_xmit_fifo(struct uart_port *port, sunxi_uart_xmit *xmit);
+void sunxi_uart_set_xmit_fifo(struct uart_port *port, sunxi_uart_xmit *xmit, void *new);
+bool sunxi_uart_is_xmit_empty(struct uart_port *port, sunxi_uart_xmit *xmit);
+unsigned int sunxi_uart_circ_cnt_to_end(struct uart_port *port, sunxi_uart_xmit *xmit);
+int sunxi_uart_get_ch(struct uart_port *port, sunxi_uart_xmit *xmit, unsigned char *c);
+int sunxi_uart_circ_chars_pending(sunxi_uart_xmit *xmit, struct uart_port *port);
 
 #endif /* end of _SUNXI_UART_NG_H_ */

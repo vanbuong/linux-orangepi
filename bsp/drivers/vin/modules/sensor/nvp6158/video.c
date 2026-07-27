@@ -1128,6 +1128,8 @@ int nvp6158_set_portmode(const unsigned char chip, const unsigned char portsel, 
 		gpio_i2c_write(chipaddr, 0xC9, 0x88);
 		gpio_i2c_write(chipaddr, 0xCD, 0x45);
 		gpio_i2c_write(chipaddr, 0xCE, 0x45);
+		gpio_i2c_write(chipaddr, 0x70, 0x55); /* Drive Strength */
+		gpio_i2c_write(chipaddr, 0x71, 0x55); /* Drive Strength */
 		break;
 	case NVP6158_OUTMODE_2MUX_FHD:
 		gpio_i2c_write(chipaddr, 0xFF, 0x00);
@@ -1230,9 +1232,11 @@ int nvp6158_set_portmode(const unsigned char chip, const unsigned char portsel, 
 		gpio_i2c_write(chipaddr, 0xC5, 0xFE);
 		gpio_i2c_write(chipaddr, 0xC8, 0x88);
 		gpio_i2c_write(chipaddr, 0xC9, 0x88);
-		gpio_i2c_write(chipaddr, 0xCD, 0x53); /* change 0x48 to 0x53 */
-		gpio_i2c_write(chipaddr, 0xCE, 0x53); /* change 0x48 to 0x53 */
+		gpio_i2c_write(chipaddr, 0xCD, 0x48);
+		gpio_i2c_write(chipaddr, 0xCE, 0x48);
 		gpio_i2c_write(chipaddr, 0xCA, 0x66);
+		gpio_i2c_write(chipaddr, 0x70, 0x44); /* Drive Strength */
+		gpio_i2c_write(chipaddr, 0x71, 0x44); /* Drive Strength */
 #endif
 		break;
 	case NVP6158_OUTMODE_2MUX_MIX:

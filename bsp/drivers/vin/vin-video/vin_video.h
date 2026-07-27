@@ -167,7 +167,7 @@ struct vin_buffer {
 	struct dma_buf_attachment *attachment;
 	struct sg_table *sgt;
 	int dmabuf_fd;
-	dma_addr_t dma_address;
+	vin_dma_addr_t dma_address;
 #endif
 };
 

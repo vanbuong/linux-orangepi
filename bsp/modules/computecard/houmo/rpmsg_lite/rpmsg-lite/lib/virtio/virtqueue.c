@@ -988,11 +988,7 @@ static int32_t vq_ring_must_notify_host(struct virtqueue *vq)
 	/* coco end */
 
 #if defined(RL_ENV_XH2A_HOST) && (RL_ENV_XH2A_HOST == 1)
-	return (((platform_r16_remote(env_get_platform_context(vq->env),
-				      (uint64_t)&vq->vq_ring.used->flags) &
-		  ((uint16_t)VRING_USED_F_NO_NOTIFY)) == 0U) ?
-			1 :
-			0);
+	return 1;
 #else
 	return (((vq->vq_ring.used->flags &
 		  ((uint16_t)VRING_USED_F_NO_NOTIFY)) == 0U) ?

@@ -54,6 +54,9 @@ struct vipp_reg {
 	VIPP_MODULE_EN_REG_t *vipp_module_en;
 	VIPP_SCALER_CFG_REG_t *vipp_scaler_cfg;
 	VIPP_SCALER_OUTPUT_SIZE_REG_t *vipp_scaler_output_size;
+	VIPP_SCALER_CFG1_REG_t *vipp_scaler_cfg1;
+	VIPP_DS_CFG_REG_t *vipp_ds_cfg;
+	VIPP_DS_OUTPUT_SIZE_REG_t *vipp_ds_output_size;
 	VIPP_OUTPUT_FMT_REG_t *vipp_output_fmt;
 	VIPP_CROP_START_POSITION_REG_t *vipp_crop_start;
 	VIPP_CROP_SIZE_REG_t *vipp_crop_size;
@@ -73,7 +76,7 @@ struct vipp_reg {
 };
 struct vipp_reg vipp_reg_load_addr[VIN_MAX_SCALER];
 
-int vipp_set_base_addr(unsigned int id, unsigned long addr)
+int vipp_set_base_addr(unsigned int id, vin_dma_addr_t addr)
 {
 	if (id > VIN_MAX_SCALER - 1)
 		return -1;
@@ -163,42 +166,53 @@ unsigned int vipp_get_irq_en(unsigned int id, unsigned int irq_flag)
 void vipp_get_status(unsigned int id, struct vipp_status *status)
 {
 	unsigned int reg_val = vin_reg_readl(vipp_base[id] + VIPP_INT_STATUS_REG_OFF);
+	unsigned int irq_enable = vin_reg_readl(vipp_base[id] + VIPP_INT_BYPASS_REG_OFF);
 
-	status->id_lost_pd = (reg_val & VIPP_ID_LOST_PD_MASK) >> VIPP_ID_LOST_PD;
-	status->ahb_mbus_w_pd = (reg_val & VIPP_AHB_MBUS_W_PD_MASK) >> VIPP_AHB_MBUS_W_PD;
+	status->id_lost_pd = (reg_val & VIPP_ID_LOST_PD_MASK) >> VIPP_ID_LOST_PD & (irq_enable & VIPP_ID_LOST_PD_MASK) >> VIPP_ID_LOST_PD;
+	status->ahb_mbus_w_pd = (reg_val & VIPP_AHB_MBUS_W_PD_MASK) >> VIPP_AHB_MBUS_W_PD & (irq_enable & VIPP_AHB_MBUS_W_PD_MASK) >> VIPP_AHB_MBUS_W_PD;
 
-	status->chn0_reg_load_pd = (reg_val & VIPP_CHN0_REG_LOAD_PD_MASK) >> VIPP_CHN0_REG_LOAD_PD;
-	status->chn0_frame_lost_pd = (reg_val & VIPP_CHN0_FRM_LOST_PD_MASK) >> VIPP_CHN0_FRM_LOST_PD;
-	status->chn0_hblank_short_pd = (reg_val & VIPP_CHN0_HB_SHORT_PD_MASK) >> VIPP_CHN0_HB_SHORT_PD;
-	status->chn0_para_not_ready_pd = (reg_val & VIPP_CHN0_PAPA_NOTREADY_PD_MASK) >> VIPP_CHN0_PAPA_NOTREADY_PD;
-	status->chn0_hshort_pd = (reg_val & VIPP_CHN0_HSHORT_PD_MASK) >> VIPP_CHN0_HSHORT_PD;
-	status->chn0_vshort_pd = (reg_val & VIPP_CHN0_VSHORT_PD_MASK) >> VIPP_CHN0_VSHORT_PD;
+	status->chn0_reg_load_pd = (reg_val & VIPP_CHN0_REG_LOAD_PD_MASK) >> VIPP_CHN0_REG_LOAD_PD & (irq_enable & VIPP_CHN0_REG_LOAD_PD_MASK) >> VIPP_CHN0_REG_LOAD_PD;
+	status->chn0_frame_lost_pd = (reg_val & VIPP_CHN0_FRM_LOST_PD_MASK) >> VIPP_CHN0_FRM_LOST_PD & (irq_enable & VIPP_CHN0_FRM_LOST_PD_MASK) >> VIPP_CHN0_FRM_LOST_PD;
+	status->chn0_hblank_short_pd = (reg_val & VIPP_CHN0_HB_SHORT_PD_MASK) >> VIPP_CHN0_HB_SHORT_PD & (irq_enable & VIPP_CHN0_HB_SHORT_PD_MASK) >> VIPP_CHN0_HB_SHORT_PD;
+	status->chn0_para_not_ready_pd = (reg_val & VIPP_CHN0_PAPA_NOTREADY_PD_MASK) >> VIPP_CHN0_PAPA_NOTREADY_PD & (irq_enable  & VIPP_CHN0_PAPA_NOTREADY_PD_MASK) >> VIPP_CHN0_PAPA_NOTREADY_PD;
+	status->chn0_hshort_pd = (reg_val & VIPP_CHN0_HSHORT_PD_MASK) >> VIPP_CHN0_HSHORT_PD & (irq_enable & VIPP_CHN0_HSHORT_PD_MASK) >> VIPP_CHN0_HSHORT_PD;
+	status->chn0_vshort_pd = (reg_val & VIPP_CHN0_VSHORT_PD_MASK) >> VIPP_CHN0_VSHORT_PD & (irq_enable & VIPP_CHN0_VSHORT_PD_MASK) >> VIPP_CHN0_VSHORT_PD;
 
-	status->chn1_reg_load_pd = (reg_val & VIPP_CHN1_REG_LOAD_PD_MASK) >> VIPP_CHN1_REG_LOAD_PD;
-	status->chn1_frame_lost_pd = (reg_val & VIPP_CHN1_FRM_LOST_PD_MASK) >> VIPP_CHN1_FRM_LOST_PD;
-	status->chn1_hblank_short_pd = (reg_val & VIPP_CHN1_HB_SHORT_PD_MASK) >> VIPP_CHN1_HB_SHORT_PD;
-	status->chn1_para_not_ready_pd = (reg_val & VIPP_CHN1_PAPA_NOTREADY_PD_MASK) >> VIPP_CHN1_PAPA_NOTREADY_PD;
-	status->chn1_hshort_pd = (reg_val & VIPP_CHN1_HSHORT_PD_MASK) >> VIPP_CHN1_HSHORT_PD;
-	status->chn1_vshort_pd = (reg_val & VIPP_CHN1_VSHORT_PD_MASK) >> VIPP_CHN1_VSHORT_PD;
+	status->chn1_reg_load_pd = (reg_val & VIPP_CHN1_REG_LOAD_PD_MASK) >> VIPP_CHN1_REG_LOAD_PD & (irq_enable & VIPP_CHN1_REG_LOAD_PD_MASK) >> VIPP_CHN1_REG_LOAD_PD;
+	status->chn1_frame_lost_pd = (reg_val & VIPP_CHN1_FRM_LOST_PD_MASK) >> VIPP_CHN1_FRM_LOST_PD & (irq_enable & VIPP_CHN1_FRM_LOST_PD_MASK) >> VIPP_CHN1_FRM_LOST_PD;
+	status->chn1_hblank_short_pd = (reg_val & VIPP_CHN1_HB_SHORT_PD_MASK) >> VIPP_CHN1_HB_SHORT_PD & (irq_enable & VIPP_CHN1_HB_SHORT_PD_MASK) >> VIPP_CHN1_HB_SHORT_PD ;
+	status->chn1_para_not_ready_pd = (reg_val & VIPP_CHN1_PAPA_NOTREADY_PD_MASK) >> VIPP_CHN1_PAPA_NOTREADY_PD & (irq_enable & VIPP_CHN1_PAPA_NOTREADY_PD_MASK) >> VIPP_CHN1_PAPA_NOTREADY_PD;
+	status->chn1_hshort_pd = (reg_val & VIPP_CHN1_HSHORT_PD_MASK) >> VIPP_CHN1_HSHORT_PD & (irq_enable & VIPP_CHN1_HSHORT_PD_MASK) >> VIPP_CHN1_HSHORT_PD;
+	status->chn1_vshort_pd = (reg_val & VIPP_CHN1_VSHORT_PD_MASK) >> VIPP_CHN1_VSHORT_PD & (irq_enable & VIPP_CHN1_VSHORT_PD_MASK) >> VIPP_CHN1_VSHORT_PD;
 
-	status->chn2_reg_load_pd = (reg_val & VIPP_CHN2_REG_LOAD_PD_MASK) >> VIPP_CHN2_REG_LOAD_PD;
-	status->chn2_frame_lost_pd = (reg_val & VIPP_CHN2_FRM_LOST_PD_MASK) >> VIPP_CHN2_FRM_LOST_PD;
-	status->chn2_hblank_short_pd = (reg_val & VIPP_CHN2_HB_SHORT_PD_MASK) >> VIPP_CHN2_HB_SHORT_PD;
-	status->chn2_para_not_ready_pd = (reg_val & VIPP_CHN2_PAPA_NOTREADY_PD_MASK) >> VIPP_CHN2_PAPA_NOTREADY_PD;
-	status->chn2_hshort_pd = (reg_val & VIPP_CHN2_HSHORT_PD_MASK) >> VIPP_CHN2_HSHORT_PD;
-	status->chn2_vshort_pd = (reg_val & VIPP_CHN2_VSHORT_PD_MASK) >> VIPP_CHN2_VSHORT_PD;
+	status->chn2_reg_load_pd = (reg_val & VIPP_CHN2_REG_LOAD_PD_MASK) >> VIPP_CHN2_REG_LOAD_PD & (irq_enable & VIPP_CHN2_REG_LOAD_PD_MASK) >> VIPP_CHN2_REG_LOAD_PD;
+	status->chn2_frame_lost_pd = (reg_val & VIPP_CHN2_FRM_LOST_PD_MASK) >> VIPP_CHN2_FRM_LOST_PD & (irq_enable & VIPP_CHN2_FRM_LOST_PD_MASK) >> VIPP_CHN2_FRM_LOST_PD;
+	status->chn2_hblank_short_pd = (reg_val & VIPP_CHN2_HB_SHORT_PD_MASK) >> VIPP_CHN2_HB_SHORT_PD & (irq_enable & VIPP_CHN2_HB_SHORT_PD_MASK) >> VIPP_CHN2_HB_SHORT_PD;
+	status->chn2_para_not_ready_pd = (reg_val & VIPP_CHN2_PAPA_NOTREADY_PD_MASK) >> VIPP_CHN2_PAPA_NOTREADY_PD & (irq_enable & VIPP_CHN2_PAPA_NOTREADY_PD_MASK) >> VIPP_CHN2_PAPA_NOTREADY_PD;
+	status->chn2_hshort_pd = (reg_val & VIPP_CHN2_HSHORT_PD_MASK) >> VIPP_CHN2_HSHORT_PD & (irq_enable & VIPP_CHN2_HSHORT_PD_MASK) >> VIPP_CHN2_HSHORT_PD;
+	status->chn2_vshort_pd = (reg_val & VIPP_CHN2_VSHORT_PD_MASK) >> VIPP_CHN2_VSHORT_PD & (irq_enable & VIPP_CHN2_VSHORT_PD_MASK) >> VIPP_CHN2_VSHORT_PD;
 
-	status->chn3_reg_load_pd = (reg_val & VIPP_CHN3_REG_LOAD_PD_MASK) >> VIPP_CHN3_REG_LOAD_PD;
-	status->chn3_frame_lost_pd = (reg_val & VIPP_CHN3_FRM_LOST_PD_MASK) >> VIPP_CHN3_FRM_LOST_PD;
-	status->chn3_hblank_short_pd = (reg_val & VIPP_CHN3_HB_SHORT_PD_MASK) >> VIPP_CHN3_HB_SHORT_PD;
-	status->chn3_para_not_ready_pd = (reg_val & VIPP_CHN3_PAPA_NOTREADY_PD_MASK) >> VIPP_CHN3_PAPA_NOTREADY_PD;
-	status->chn3_hshort_pd = (reg_val & VIPP_CHN3_HSHORT_PD_MASK) >> VIPP_CHN3_HSHORT_PD;
-	status->chn3_vshort_pd = (reg_val & VIPP_CHN3_VSHORT_PD_MASK) >> VIPP_CHN3_VSHORT_PD;
+	status->chn3_reg_load_pd = (reg_val & VIPP_CHN3_REG_LOAD_PD_MASK) >> VIPP_CHN3_REG_LOAD_PD & (irq_enable & VIPP_CHN3_REG_LOAD_PD_MASK) >> VIPP_CHN3_REG_LOAD_PD;
+	status->chn3_frame_lost_pd = (reg_val & VIPP_CHN3_FRM_LOST_PD_MASK) >> VIPP_CHN3_FRM_LOST_PD & (irq_enable & VIPP_CHN3_FRM_LOST_PD_MASK) >> VIPP_CHN3_FRM_LOST_PD;
+	status->chn3_hblank_short_pd = (reg_val & VIPP_CHN3_HB_SHORT_PD_MASK) >> VIPP_CHN3_HB_SHORT_PD & (irq_enable & VIPP_CHN3_HB_SHORT_PD_MASK) >> VIPP_CHN3_HB_SHORT_PD;
+	status->chn3_para_not_ready_pd = (reg_val & VIPP_CHN3_PAPA_NOTREADY_PD_MASK) >> VIPP_CHN3_PAPA_NOTREADY_PD & (irq_enable & VIPP_CHN3_PAPA_NOTREADY_PD_MASK) >> VIPP_CHN3_PAPA_NOTREADY_PD;
+	status->chn3_hshort_pd = (reg_val & VIPP_CHN3_HSHORT_PD_MASK) >> VIPP_CHN3_HSHORT_PD & (irq_enable & VIPP_CHN3_HSHORT_PD_MASK) >> VIPP_CHN3_HSHORT_PD;
+	status->chn3_vshort_pd = (reg_val & VIPP_CHN3_VSHORT_PD_MASK) >> VIPP_CHN3_VSHORT_PD & (irq_enable & VIPP_CHN3_VSHORT_PD_MASK) >> VIPP_CHN3_VSHORT_PD;
 }
 
 void vipp_clear_status(unsigned int id, enum vipp_status_sel sel)
 {
 	vin_reg_writel(vipp_base[id] + VIPP_INT_STATUS_REG_OFF, sel);
+}
+
+unsigned int vipp_get_sub_id(unsigned int id)
+{
+	return (vin_reg_readl(vipp_base[id] + VIPP_RETURN_INF_REG_OFF) & VIPP_SUB_ID_MASK) >> VIPP_SUB_ID;
+}
+
+unsigned int vipp_get_sub_st(unsigned int id)
+{
+	return (vin_reg_readl(vipp_base[id] + VIPP_RETURN_INF_REG_OFF) & VIPP_SUB_ST_MASK) >> VIPP_SUB_ST;
 }
 
 /*
@@ -261,13 +275,13 @@ void vipp_chn_bypass_mode(unsigned int id, unsigned int mode)
 	__vipp_chn_bypass_mode(id, mode, vipp_virtual_find_ch[id]);
 }
 
-static void __vipp_set_reg_load_addr(unsigned int id, unsigned long dma_addr, unsigned int ch)
+static void __vipp_set_reg_load_addr(unsigned int id, vin_dma_addr_t dma_addr, unsigned int ch)
 {
 	vin_reg_writel(vipp_base[id] + VIPP_REG_LOAD_ADDR_REG_OFF + VIPP_CH_OFFSET + ch * VIPP_CH_AMONG_OFFSET,
 			dma_addr >> VIPP_ADDR_BIT_R_SHIFT);
 }
 
-void vipp_set_reg_load_addr(unsigned int id, unsigned long dma_addr)
+void vipp_set_reg_load_addr(unsigned int id, vin_dma_addr_t dma_addr)
 {
 	__vipp_set_reg_load_addr(id, dma_addr, vipp_virtual_find_ch[id]);
 }
@@ -275,7 +289,7 @@ void vipp_set_reg_load_addr(unsigned int id, unsigned long dma_addr)
 /*
  * Detail information of load function
  */
-int vipp_map_reg_load_addr(unsigned int id, unsigned long vaddr)
+int vipp_map_reg_load_addr(unsigned int id, vin_dma_addr_t vaddr)
 {
 	if (id > VIN_MAX_SCALER - 1)
 		return -1;
@@ -283,6 +297,9 @@ int vipp_map_reg_load_addr(unsigned int id, unsigned long vaddr)
 	vipp_reg_load_addr[id].vipp_module_en = (VIPP_MODULE_EN_REG_t *)(vaddr + VIPP_LOAD_OFFSET + VIPP_MODULE_EN_REG_OFF);
 	vipp_reg_load_addr[id].vipp_scaler_cfg = (VIPP_SCALER_CFG_REG_t *)(vaddr + VIPP_LOAD_OFFSET + VIPP_SC_CFG_REG_OFF);
 	vipp_reg_load_addr[id].vipp_scaler_output_size = (VIPP_SCALER_OUTPUT_SIZE_REG_t *)(vaddr + VIPP_LOAD_OFFSET + VIPP_SC_SIZE_REG_OFF);
+	vipp_reg_load_addr[id].vipp_scaler_cfg1 = (VIPP_SCALER_CFG1_REG_t *)(vaddr + VIPP_LOAD_OFFSET + VIPP_SC_CFG1_REG_OFF);
+	vipp_reg_load_addr[id].vipp_ds_cfg = (VIPP_DS_CFG_REG_t *)(vaddr + VIPP_LOAD_OFFSET + VIPP_DS_CFG_REG_OFF);
+	vipp_reg_load_addr[id].vipp_ds_output_size = (VIPP_DS_OUTPUT_SIZE_REG_t *)(vaddr + VIPP_LOAD_OFFSET + VIPP_DS_SIZE_REG_OFF);
 	vipp_reg_load_addr[id].vipp_output_fmt = (VIPP_OUTPUT_FMT_REG_t *)(vaddr + VIPP_LOAD_OFFSET + VIPP_MODE_REG_OFF);
 	vipp_reg_load_addr[id].vipp_crop_start = (VIPP_CROP_START_POSITION_REG_t *)(vaddr + VIPP_LOAD_OFFSET + VIPP_CROP_START_REG_OFF);
 	vipp_reg_load_addr[id].vipp_cgc_gain_ctrl = (VIPP_CGC_GAIN_CTRL_REG_t *)(vaddr + VIPP_LOAD_OFFSET + VIPP_CGC_GAIN_CTRL_REG_OFF);
@@ -354,6 +371,12 @@ void vipp_scaler_en(unsigned int id, unsigned int en)
 	vin_reg_writel(vipp_base[id] + VIPP_LOAD_OFFSET + VIPP_MODULE_EN_REG_OFF, vipp_module_en.dwval);
 #endif
 }
+
+void vipp_downsample_en(unsigned int id, unsigned int en)
+{
+	vipp_reg_load_addr[id].vipp_module_en->bits.ds_en = en;
+}
+
 void vipp_chroma_ds_en(unsigned int id, unsigned int en)
 {
 	if (id > MAX_OSD_NUM - 1)
@@ -369,6 +392,7 @@ void vipp_scaler_cfg(unsigned int id, struct vipp_scaler_config *cfg)
 	vipp_reg_load_addr[id].vipp_scaler_cfg->bits.sc_xratio = cfg->sc_x_ratio;
 	vipp_reg_load_addr[id].vipp_scaler_cfg->bits.sc_yratio = cfg->sc_y_ratio;
 	vipp_reg_load_addr[id].vipp_scaler_cfg->bits.sc_weight_shift = cfg->sc_w_shift;
+	vipp_reg_load_addr[id].vipp_scaler_cfg1->bits.sc_ratio_precision = cfg->sc_ratio_precision;
 #else
 	VIPP_SCALER_CFG_REG_t vipp_scaler_cfg;
 
@@ -379,6 +403,19 @@ void vipp_scaler_cfg(unsigned int id, struct vipp_scaler_config *cfg)
 	vin_reg_writel(vipp_base[id] + VIPP_LOAD_OFFSET + VIPP_SC_CFG_REG_OFF, vipp_scaler_cfg.dwval);
 	vin_reg_clr_set(vipp_base[id] + VIPP_LOAD_OFFSET + VIPP_MODE_REG_OFF, 0x1 << 2, cfg->sc_out_fmt << 2);
 #endif
+}
+
+void vipp_downsample_cfg(unsigned int id, struct vipp_ds_config *cfg)
+{
+	vipp_reg_load_addr[id].vipp_ds_cfg->bits.ds_phase = cfg->ds_phase;
+	vipp_reg_load_addr[id].vipp_ds_cfg->bits.ds_h_num = cfg->ds_h_num;
+	vipp_reg_load_addr[id].vipp_ds_cfg->bits.ds_w_num = cfg->ds_w_num;
+}
+
+void vipp_downsample_output_size(unsigned int id, struct vipp_ds_size *size)
+{
+	vipp_reg_load_addr[id].vipp_ds_output_size->bits.ds_width = size->ds_width;
+	vipp_reg_load_addr[id].vipp_ds_output_size->bits.ds_height = size->ds_height;
 }
 
 void vipp_scaler_output_fmt(unsigned int id, enum vipp_format fmt)
@@ -420,7 +457,7 @@ void vipp_output_fmt_cfg(unsigned int id, enum vipp_format fmt)
 void vipp_osd_cfg(unsigned int id, struct vipp_osd_config *cfg)
 {
 	vipp_reg_load_addr[id].vipp_orl_control->bits.orl_num = cfg->osd_orl_num + 1;
-	vipp_reg_load_addr[id].vipp_orl_control->bits.orl_width = cfg->osd_orl_width;
+	vipp_reg_load_addr[id].vipp_orl_control->bits.orl_width = cfg->osd_orl_width - 1;
 }
 
 void vipp_set_crop(unsigned int id, struct vipp_crop *crop)
@@ -456,17 +493,17 @@ void vipp_set_osd_ov_update(unsigned int id, enum vipp_update_flag flag)
 void vipp_set_osd_cv_update(unsigned int id, enum vipp_update_flag flag)
 {
 }
-void vipp_set_osd_para_load_addr(unsigned int id, unsigned long dma_addr)
+void vipp_set_osd_para_load_addr(unsigned int id, vin_dma_addr_t dma_addr)
 {
 }
-int vipp_map_osd_para_load_addr(unsigned int id, unsigned long vaddr)
+int vipp_map_osd_para_load_addr(unsigned int id, vin_dma_addr_t vaddr)
 {
 	return 0;
 }
-void vipp_set_osd_stat_load_addr(unsigned int id, unsigned long dma_addr)
+void vipp_set_osd_stat_load_addr(unsigned int id, vin_dma_addr_t dma_addr)
 {
 }
-void vipp_set_osd_bm_load_addr(unsigned int id, unsigned long dma_addr)
+void vipp_set_osd_bm_load_addr(unsigned int id, vin_dma_addr_t dma_addr)
 {
 }
 void vipp_osd_en(unsigned int id, unsigned int en)

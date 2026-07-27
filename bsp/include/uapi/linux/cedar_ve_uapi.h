@@ -69,8 +69,7 @@ enum IOCTL_CMD {
 	IOCTL_UNMAP_DMA_BUF,
 
 	/* for fush cache range since kernel 5.4 */
-	IOCTL_FLUSH_CACHE_RANGE,
-	IOCTL_INVALID_CACHE_RANGE,
+	IOCTL_FLUSH_CACHE_RANGE = 0x506,
 
 	/* for debug */
 	IOCTL_SET_PROC_INFO,
@@ -103,6 +102,8 @@ enum IOCTL_CMD {
 
 	/*for check rv ve finish*/
 	IOCTL_RV_STOP = 0x900,
+
+	IOCTL_INVALID_CACHE_RANGE = 0x917,
 };
 
 struct cedarv_env_infomation {

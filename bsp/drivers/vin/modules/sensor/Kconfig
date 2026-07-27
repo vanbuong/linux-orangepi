@@ -52,6 +52,10 @@ config SENSOR_GC6133
 	tristate "use gc6133 driver"
 	default n
 
+config SENSOR_GC6153
+	tristate "use gc6153 driver"
+	default n
+
 config SENSOR_BF30A2
 	tristate "use bf30a2 driver"
 	default n
@@ -250,6 +254,10 @@ config SENSOR_LT7911D
 config SENSOR_OV13850
 	tristate "use ov13850 driver"
 	default n
+
+config SENSOR_OV13B10
+        tristate "use ov13b10 driver"
+        default n
 
 config SENSOR_LT6911C
 	tristate "use lt6911c driver"

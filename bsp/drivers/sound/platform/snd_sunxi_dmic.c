@@ -1003,7 +1003,11 @@ err_devm_kzalloc:
 	return ret;
 }
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 11, 0)
+static void sunxi_dmic_dev_remove(struct platform_device *pdev)
+#else
 static int sunxi_dmic_dev_remove(struct platform_device *pdev)
+#endif
 {
 	struct device *dev = &pdev->dev;
 	struct device_node *np = pdev->dev.of_node;
@@ -1038,7 +1042,11 @@ static int sunxi_dmic_dev_remove(struct platform_device *pdev)
 
 	SND_LOG_DEBUG("unregister dmic platform success\n");
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 11, 0)
+	return;
+#else
 	return 0;
+#endif
 }
 
 static const struct of_device_id sunxi_dmic_of_match[] = {
@@ -1057,7 +1065,7 @@ static struct platform_driver sunxi_dmic_driver = {
 	.remove	= sunxi_dmic_dev_remove,
 };
 
-int __init sunxi_dmic_dev_init(void)
+static int __init sunxi_dmic_dev_init(void)
 {
 	int ret;
 
@@ -1070,7 +1078,7 @@ int __init sunxi_dmic_dev_init(void)
 	return ret;
 }
 
-void __exit sunxi_dmic_dev_exit(void)
+static void __exit sunxi_dmic_dev_exit(void)
 {
 	platform_driver_unregister(&sunxi_dmic_driver);
 }
@@ -1080,5 +1088,5 @@ module_exit(sunxi_dmic_dev_exit);
 
 MODULE_AUTHOR("Dby@allwinnertech.com");
 MODULE_LICENSE("GPL");
-MODULE_VERSION("1.0.11");
+MODULE_VERSION("1.0.12");
 MODULE_DESCRIPTION("sunxi soundcard platform of dmic");

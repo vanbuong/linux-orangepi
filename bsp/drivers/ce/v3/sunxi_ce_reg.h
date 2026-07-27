@@ -116,6 +116,7 @@
 #define SS_METHOD_SHA512			21
 #define SS_METHOD_HMAC_SHA1			22
 #define SS_METHOD_HMAC_SHA256		23
+#define SS_METHOD_SM3				24
 #define SS_METHOD_RSA				32
 #define SS_METHOD_DH				SS_METHOD_RSA
 #ifdef SS_SUPPORT_CE_V3_1
@@ -304,6 +305,8 @@ void ss_ecc_op_mode_set(int mode, ce_task_desc_t *task);
 
 void ss_cts_last(ce_task_desc_t *task);
 void ss_hmac_sha1_last(ce_task_desc_t *task);
+void ss_hash_method_set(int *type, ce_task_desc_t *task);
+void ss_hash_cmd_set(ce_task_desc_t *task);
 
 void ss_xts_first(ce_task_desc_t *task);
 void ss_xts_last(ce_task_desc_t *task);
@@ -312,6 +315,10 @@ void ss_method_set(int dir, int type, ce_task_desc_t *task);
 
 void ss_aes_mode_set(int mode, ce_task_desc_t *task);
 void ss_cfb_bitwidth_set(int bitwidth, ce_task_desc_t *task);
+void ss_ctr_bitwidth_set(unsigned char *ctr_addr, int bitwidth, ce_task_desc_t *task);
+
+void ce_task_addr_set(u8 *vir_addr, phys_addr_t phy_addr, u8 *dst);
+phys_addr_t ce_task_addr_get(u8 *dst);
 
 void ss_wait_idle(void);
 void ss_ctrl_start(ce_task_desc_t *task);
@@ -321,6 +328,7 @@ int ss_flow_err(int flow);
 void ss_data_len_set(int len, ce_task_desc_t *task);
 
 int ss_reg_print(char *buf, int len);
+void ce_reg_print(void);
 void ss_keyselect_set(int select, ce_task_desc_t *task);
 void ss_keysize_set(int size, ce_task_desc_t *task);
 

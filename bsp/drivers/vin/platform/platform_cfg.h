@@ -73,6 +73,12 @@
 
 #define CSI_VE_ONLINE_VIDEO 0
 
+#if IS_ENABLED(CONFIG_ARCH_SUN300IW1)
+#define vin_dma_addr_t unsigned long
+#else
+#define vin_dma_addr_t dma_addr_t
+#endif
+
 #ifndef FPGA_VER
 #include <linux/clk.h>
 //#include <sunxi-clk.h>
@@ -142,6 +148,8 @@ enum isp_platform {
 #include "sun60iw1_vin_cfg.h"
 #elif IS_ENABLED(CONFIG_ARCH_SUN60IW2)
 #include "sun60iw2_vin_cfg.h"
+#elif IS_ENABLED(CONFIG_ARCH_SUN65IW1)
+#include "sun65iw1_vin_cfg.h"
 #endif
 
 #define MOV_ROUND_UP(x, n)	(((x) + (1 << (n)) - 1) >> (n))

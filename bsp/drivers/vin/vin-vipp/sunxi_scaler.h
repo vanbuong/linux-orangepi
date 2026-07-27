@@ -47,6 +47,14 @@ struct scaler_para {
 	u32 height;
 };
 
+struct ds_para {
+	u32 ds_phase;
+	u32 w_num;
+	u32 h_num;
+	u32 width;
+	u32 height;
+};
+
 struct scaler_dev {
 	struct v4l2_subdev subdev;
 	struct media_pad scaler_pads[SCALER_PAD_NUM];
@@ -61,6 +69,7 @@ struct scaler_dev {
 		struct v4l2_rect active;
 	} crop;
 	struct scaler_para para;
+	struct ds_para ds_para;
 	void __iomem *base;
 	unsigned char is_empty;
 	unsigned char noneed_register;

@@ -522,8 +522,29 @@ int sunxi_fbdev_plane_update(struct fbdev_config *config)
 	reinit_completion(&scrtc_fbdev->flush_done);
 	if (lock)
 		drm_modeset_unlock_all(dev);
-	if (!update)
-		wait_for_completion(&scrtc_fbdev->flush_done);
+	if (!update) {
+		unsigned long timeout;
+
+		timeout = wait_for_completion_timeout(&scrtc_fbdev->flush_done,
+						     msecs_to_jiffies(200));
+		if (!timeout) {
+			if (lock)
+				drm_modeset_lock_all(dev);
+			if (completion_done(&scrtc_fbdev->flush_done) ||
+			    !scrtc_fbdev->fbdev_flush_pending) {
+				if (lock)
+					drm_modeset_unlock_all(dev);
+				goto out;
+			}
+			scrtc_fbdev->fbdev_flush_pending = false;
+			if (lock)
+				drm_modeset_unlock_all(dev);
+			DRM_ERROR("fbdev plane update timeout, hw_id=%d ch=%d\n",
+				  scrtc_fbdev->hw_id, scrtc_fbdev->fbdev_chn_id);
+			return -ETIMEDOUT;
+		}
+	}
+out:
 	DRM_DEBUG_DRIVER("[SUNXI-DE] fbdev plane update finish self_update :%d\n", update);
 	return 0;
 }

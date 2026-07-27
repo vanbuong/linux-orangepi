@@ -2,7 +2,7 @@
 
 comment"Choose one according to the actual usage"
 
-menu "CE Drivers"
+menu "CE Drivers(CE Legacy)"
 	depends on AW_BSP
 
 config AW_CE_SOCKET
@@ -13,6 +13,7 @@ config AW_CE_SOCKET
 
 config AW_CE_IOCTL
 	tristate "CE support the systemcall interface for user api"
+	depends on !AW_CE_SOCKET
 	help
 	  Allwinner Sunxi SoC provides the CryptoEngine encryption accelerator
 	  in IOCTL mode. Select this if you want to use it.
@@ -24,7 +25,7 @@ config AW_HWRNG_DRIVER
 	 Support for Sunxi hwrng driver, which can Supports hardware random number generation.
 
 config AW_CE_SOCKET_SECURE_KEY
-	tristate "Support socket AF_ALG API for CE secure key(HUK, SSK, ...) crypt/decrypt"
+	tristate "Enable CE secure-key crypto via AF_ALG (HUK/SSK)"
 	help
 	  Allwinner Sunxi SoC provides the AF_ALG API with socket, CryptoEngine crypto
 	  accelerator using the secure key. Select this if you want to use it.

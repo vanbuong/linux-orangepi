@@ -46,10 +46,10 @@ config AW_PCK600_DOMAINS
 
 	 If unsure, say N.
 
-config AW_POWER_DOMAIN_TEST
-	tristate "Allwinner power domain test"
+config AW_POWER_DOMAIN_PWRCTL
+	tristate "Allwinner power domain power ctl"
 	depends on PM
 	help
-	 Say y here to enable power domain test driver.
+	 Say y here to enable power domain power ctl driver.
 
 endmenu

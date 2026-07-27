@@ -39,7 +39,7 @@ struct snd_sunxi_sfx {
 	unsigned long phys_addr_size;
 };
 
-static struct snd_sunxi_sfx suxni_sfx = {
+static struct snd_sunxi_sfx sunxi_sfx = {
 	.sfx_dev_name = "snd_sfx_mgmt_dev",
 	.sfx_class_name = "snd_sfx_mgmt",
 	.sfx_device_name = "sfx_mgmt",
@@ -96,6 +96,10 @@ int snd_sunxi_hw_effect_init(struct snd_sunxi_sfx *sfx)
 
 	if (IS_ERR_OR_NULL(sfx)) {
 		SND_LOG_ERR("snd_sunxi_sfx is NULL\n");
+		return -1;
+	}
+	if (sfx->phys_addr == 0 && sfx->phys_addr_size == 0) {
+		SND_LOG_ERR("snd_sunxi_sfx addr and size is 0\n");
 		return -1;
 	}
 	if (IS_ERR_OR_NULL(sfx->sfx_dev_name)
@@ -167,12 +171,12 @@ void snd_sunxi_hw_effect_exit(struct snd_sunxi_sfx *sfx)
 
 int __init sunxi_sfx_dev_init(void)
 {
-	return snd_sunxi_hw_effect_init(&suxni_sfx);
+	return snd_sunxi_hw_effect_init(&sunxi_sfx);
 }
 
 void __exit sunxi_sfx_dev_exit(void)
 {
-	snd_sunxi_hw_effect_exit(&suxni_sfx);
+	snd_sunxi_hw_effect_exit(&sunxi_sfx);
 }
 
 module_init(sunxi_sfx_dev_init);
@@ -180,5 +184,5 @@ module_exit(sunxi_sfx_dev_exit);
 
 MODULE_AUTHOR("Dby@allwinnertech.com");
 MODULE_LICENSE("GPL");
-MODULE_VERSION("1.0.1");
+MODULE_VERSION("1.0.2");
 MODULE_DESCRIPTION("sunxi soundcard of sound effects");

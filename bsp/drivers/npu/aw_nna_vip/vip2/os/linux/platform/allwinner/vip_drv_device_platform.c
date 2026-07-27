@@ -518,14 +518,14 @@ static int match_vf_table(u32 combi, u32 *index)
 
 static void get_vf_index(void)
 {
-	// u32 dvfs;
+	u32 dvfs;
 
-	// if (sunxi_get_soc_dvfs(&dvfs))
-	// 	PRINTK("failed to get soc dvfs, use default vf table\n");
+	if (sunxi_get_soc_dvfs(&dvfs))
+		PRINTK("failed to get soc dvfs, use default vf table\n");
 
-	match_vf_table(0, &aw_driver.vf_index);
+	match_vf_table(dvfs, &aw_driver.vf_index);
 
-	PRINTK("current dvfs: %x, vf index: %x\n", 0, aw_driver.vf_index);
+	PRINTK("current dvfs: %x, vf index: %x\n", dvfs, aw_driver.vf_index);
 }
 
 #define MAX_NAME_LEN	64
@@ -1288,10 +1288,10 @@ vip_int32_t vipdrv_drv_adjust_param(
 	}
 
 	err = of_property_read_u32_index(pdev->dev.of_node, "npu-vfgear", 0, &aw_driver.set_vf);
-	PRINTK("-------- npu set_vf: %x\n", aw_driver.set_vf);
 	if (err != 0) {
 		PRINTK("Get NPU VF GEAR FAIL!\n");
 	}
+	PRINTK("npu set_vf: %x\n", aw_driver.set_vf);
 
 	check_smc_set_freq();
 	get_vf_index();

@@ -130,9 +130,16 @@ struct xh2a_ipu_device {
 	atomic_t dev_initialized;
 	atomic_t dev_removed;
 	struct kref dev_refcnt;
+
+	atomic_t reset_flag;
+	atomic_t sync_cnt;
+	struct mutex reset_mutex;
+	wait_queue_head_t group_sync_wq;
 };
 
 struct xh2a_ipu_device *xh2a_ipu_device_create(void *handle);
 void xh2a_ipu_device_destroy(struct xh2a_ipu_device *ipu_dev);
+int xh2a_ipu_prepare_fullchip_reset(void *handle);
+void xh2a_ipu_abort_fullchip_reset(void *handle);
 
 #endif /* _XH2A_IPU_DEVICE_H_ */

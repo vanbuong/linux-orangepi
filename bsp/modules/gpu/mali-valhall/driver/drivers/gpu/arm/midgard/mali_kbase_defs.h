@@ -1019,10 +1019,12 @@ struct kbase_device {
 	unsigned int nr_regulators;
 #if (KERNEL_VERSION(6, 0, 0) <= LINUX_VERSION_CODE)
 	int token;
+	int prop_name_token;
 #elif (KERNEL_VERSION(4, 10, 0) <= LINUX_VERSION_CODE)
 	struct opp_table *opp_table;
 #endif /* (KERNEL_VERSION(6, 0, 0) <= LINUX_VERSION_CODE) */
 #endif /* CONFIG_REGULATOR */
+	bool independent_power;
 	char devname[DEVNAME_SIZE];
 	u32  id;
 

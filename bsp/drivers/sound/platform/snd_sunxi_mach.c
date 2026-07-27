@@ -50,8 +50,8 @@ static int asoc_simple_hw_params(struct snd_pcm_substream *substream,
 	struct snd_soc_dai *codec_dai;
 	struct snd_soc_dai *cpu_dai = sunxi_adpt_rtd_cpu_dai(rtd);
 	struct asoc_simple_priv *priv = snd_soc_card_get_drvdata(rtd->card);
-	struct snd_soc_dai_link *dai_link = simple_priv_to_link(priv, rtd->num);
-	struct simple_dai_props *dai_props = simple_priv_to_props(priv, rtd->num);
+	struct snd_soc_dai_link *dai_link = simple_priv_to_link(priv, RTD_NUM(rtd));
+	struct simple_dai_props *dai_props = simple_priv_to_props(priv, RTD_NUM(rtd));
 	struct asoc_simple_dai *dais = priv->dais;
 	unsigned int mclk = 0;
 	unsigned int cpu_pll_clk;
@@ -1158,14 +1158,20 @@ err:
 
 	return ret;
 }
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 11, 0)
+static void asoc_simple_remove(struct platform_device *pdev)
+#else
 static int asoc_simple_remove(struct platform_device *pdev)
+#endif
 {
 	struct snd_soc_card *card = platform_get_drvdata(pdev);
 
 	SND_LOG_DEBUG("\n");
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 11, 0)
+	asoc_simple_clean_reference(card);
+#else
 	return asoc_simple_clean_reference(card);
+#endif
 }
 
 static const struct of_device_id snd_soc_sunxi_of_match[] = {
@@ -1184,7 +1190,7 @@ static struct platform_driver sunxi_soundcard_machine_driver = {
 	.remove	= asoc_simple_remove,
 };
 
-int __init sunxi_soundcard_machine_dev_init(void)
+static int __init sunxi_soundcard_machine_dev_init(void)
 {
 	int ret;
 
@@ -1197,7 +1203,7 @@ int __init sunxi_soundcard_machine_dev_init(void)
 	return ret;
 }
 
-void __exit sunxi_soundcard_machine_dev_exit(void)
+static void __exit sunxi_soundcard_machine_dev_exit(void)
 {
 	platform_driver_unregister(&sunxi_soundcard_machine_driver);
 }
@@ -1207,5 +1213,5 @@ module_exit(sunxi_soundcard_machine_dev_exit);
 
 MODULE_AUTHOR("Dby@allwinnertech.com");
 MODULE_LICENSE("GPL");
-MODULE_VERSION("1.0.7");
+MODULE_VERSION("1.0.8");
 MODULE_DESCRIPTION("sunxi soundcard machine");

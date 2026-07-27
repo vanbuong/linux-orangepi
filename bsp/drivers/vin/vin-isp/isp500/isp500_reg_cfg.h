@@ -288,10 +288,10 @@ void bsp_isp_set_input_fmt(unsigned long id, unsigned int fmt);
 void bsp_isp_set_size(unsigned long id, struct isp_size_settings *size);
 unsigned int bsp_isp_load_update_flag(unsigned long id);
 
-void bsp_isp_set_wdr_addr0(unsigned long id, dma_addr_t addr);
-void bsp_isp_set_wdr_addr1(unsigned long id, dma_addr_t addr);
-void bsp_isp_set_d3d_addr0(unsigned long id, dma_addr_t addr);
-void bsp_isp_set_d3d_addr1(unsigned long id, dma_addr_t addr);
+void bsp_isp_set_wdr_addr0(unsigned long id, vin_dma_addr_t addr);
+void bsp_isp_set_wdr_addr1(unsigned long id, vin_dma_addr_t addr);
+void bsp_isp_set_d3d_addr0(unsigned long id, vin_dma_addr_t addr);
+void bsp_isp_set_d3d_addr1(unsigned long id, vin_dma_addr_t addr);
 void bsp_isp_set_fifo_mode(unsigned long id, unsigned int mode);
 void bsp_isp_min_ddr_size(unsigned long id, unsigned int size);
 void bsp_isp_fifo_raw_write(unsigned long id, unsigned int depth);

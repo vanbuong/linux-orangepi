@@ -26,6 +26,7 @@ static const struct of_device_id pmu_ext_i2c_of_match_table[] = {
 	{ .compatible = "ext,axp1530", .data = (void *)AXP1530_ID },
 	{ .compatible = "ext,aw37501", .data = (void *)AW37501_ID },
 	{ .compatible = "ext,ocp2131", .data = (void *)OCP2131_ID },
+	{ .compatible = "ext,sy8810",  .data = (void *)SY8810_ID },
 	{ /* sentinel */ }
 };
 MODULE_DEVICE_TABLE(of, pmu_ext_i2c_of_match_table);

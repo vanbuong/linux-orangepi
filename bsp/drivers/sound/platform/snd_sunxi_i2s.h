@@ -181,17 +181,17 @@ struct sunxi_i2s;
 
 /* To adapt diffent reg / bits */
 struct sunxi_i2s_quirks {
-	unsigned int slot_num_max;
+	u32 slot_num_max;
 
-	unsigned int *audio_reg_addrs;
-	unsigned int audio_reg_size;
-	unsigned int reg_max;
+	u32 *audio_reg_addrs;
+	u32 audio_reg_size;
+	u32 reg_max;
 
 	bool rx_sync_en;
 
-	int (*set_channel_enable)(struct sunxi_i2s *i2s, int stream, unsigned int channels);
-	int (*set_daifmt_format)(struct sunxi_i2s *i2s, unsigned int format);
-	int (*set_channels_map)(struct sunxi_i2s *i2s, unsigned int channels);
+	int (*set_channel_enable)(struct sunxi_i2s *i2s, int stream, u32 channels);
+	int (*set_daifmt_format)(struct sunxi_i2s *i2s, u32 format);
+	int (*set_channels_map)(struct sunxi_i2s *i2s, u32 channels);
 };
 
 struct sunxi_i2s_mem {
@@ -216,8 +216,8 @@ struct sunxi_i2s_dts {
 	size_t capture_cma;
 	size_t capture_fifo_size;
 
-	unsigned int dai_type;
-	unsigned int tdm_num;
+	u32 dai_type;
+	u32 tdm_num;
 
 	/* "tx-pin"
 	 * 1. tx pin enable setting.
@@ -259,8 +259,37 @@ struct sunxi_i2s_dts {
 	/* quirks to adapt diffent chip */
 	const struct sunxi_i2s_quirks *quirks;
 
-	unsigned int clk_keep;
-	unsigned int clk_en_post_delay;
+	u32 clk_en_post_delay;
+
+	/*
+	 * "clk-mode": means support clk as needed.
+	 * clk-mode = <0>: not need pre-support clk
+	 * clk-mode = <1>: need pre-support clk during probe
+	 *
+	 * "clk-mode-mclk-freq": means mclk freq needed.
+	 * eg. clk-mode-mclk-freq = <24576000>
+	 *
+	 * "clk-mode-lrck-freq": means lrck freq needed.
+	 * eg. clk-mode-lrck-freq = <48000>
+	 *
+	 * "clk-mode-slots" and "clk-mode-slots": used to cal bclk freq
+	 *
+	 * "daifmt": means I2S params, set params depend on codec need.
+	 * I2S params include:
+	 * eg.
+	 * 	clk-mode-format = "i2s";
+	 * 	clk-mode-frame-inversion;
+	 * 	clk-mode-bitclock-inversion;
+	 * 	clk-mode-frame-master;
+	 * 	clk-mode-bitclock-master;
+	 */
+	u32 clk_mode;				/* read from dts */
+	u32 clk_mode_mclk_freq;		/* read from dts */
+	u32 clk_mode_lrck_freq;		/* read from dts */
+	u32 clk_mode_bclk_freq;
+	u32 clk_mode_daifmt;
+	u32 clk_mode_slots;			/* read from dts */
+	u32 clk_mode_slot_width;		/* read from dts */
 };
 
 struct sunxi_audio_status {
@@ -279,11 +308,11 @@ enum SUNXI_I2S_DAI_FMT_SEL {
 };
 
 struct sunxi_i2s_dai_fmt {
-	unsigned int pllclk_freq;
-	unsigned int moduleclk_freq;
-	unsigned int fmt;
-	unsigned int slots;
-	unsigned int slot_width;
+	u32 pllclk_freq;
+	u32 moduleclk_freq;
+	u32 fmt;
+	u32 slots;
+	u32 slot_width;
 	u32 data_late;
 	bool tx_lsb_first;
 	bool rx_lsb_first;
@@ -291,7 +320,7 @@ struct sunxi_i2s_dai_fmt {
 
 struct sunxi_i2s_clk_sta {
 	struct mutex clk_mutex;
-	unsigned int old_rate;
+	u32 old_rate;
 	u32 p_work;
 	u32 c_work;
 };
@@ -325,7 +354,7 @@ struct sunxi_i2s {
 	bool show_reg_all;
 
 	/* pa config */
-	unsigned int pa_pin_max;
+	u32 pa_pin_max;
 	struct snd_sunxi_pacfg *pa_cfg;
 };
 
@@ -335,6 +364,6 @@ int snd_i2s_clk_bus_enable(void *clk_orig);
 int snd_i2s_clk_enable(void *clk_orig);
 void snd_i2s_clk_bus_disable(void *clk_orig);
 void snd_i2s_clk_disable(void *clk_orig);
-int snd_i2s_clk_rate(void *clk_orig, unsigned int freq_in, unsigned int freq_out);
+int snd_i2s_clk_rate(void *clk_orig, u32 freq_in, u32 freq_out);
 
 #endif /* __SND_SUNXI_I2S_H */

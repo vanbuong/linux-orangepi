@@ -2457,10 +2457,6 @@ static int sunxi_gmac_rx(struct sunxi_gmac *chip, int limit)
 		if (status == discard_frame || frame_len > SUNXI_GMAC_MAX_MTU_SZ) {
 			sunxi_err(chip->dev, "Get error pkt\n");
 			chip->ndev->stats.rx_errors++;
-			if (chip->rx_skb[entry]) {
-				dev_kfree_skb_any(chip->rx_skb[entry]);
-				chip->rx_skb[entry] = NULL;
-			}
 
 			if (chip->skb) {
 				dev_kfree_skb_any(chip->skb);

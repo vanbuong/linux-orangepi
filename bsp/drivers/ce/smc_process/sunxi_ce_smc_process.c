@@ -39,7 +39,7 @@ static int ce_aes_setkey(struct crypto_skcipher *tfm, const u8 *key,
 	return 0;
 }
 
-static int ce_aes_cbc_huk_encrypt(struct skcipher_request *req)
+static int ce_aes_cbc_encrypt(struct skcipher_request *req, enum secure_key_type key_type)
 {
 	u8 *back_src = NULL, *back_dst = NULL;
 	int ret = 0;
@@ -63,7 +63,7 @@ static int ce_aes_cbc_huk_encrypt(struct skcipher_request *req)
 		goto out;
 	}
 
-	smc_tee_secure_key_encrypt(back_dst, back_src, req->cryptlen, CE_KEY_SELECT_HUK);
+	smc_tee_secure_key_encrypt(back_dst, back_src, req->cryptlen, key_type);
 
 	/* copy data back to scatterlist */
 	scatterwalk_map_and_copy(back_dst, req->dst, 0, req->cryptlen, 1);
@@ -77,7 +77,7 @@ out:
 	return ret;
 }
 
-static int ce_aes_cbc_huk_decrypt(struct skcipher_request *req)
+static int ce_aes_cbc_decrypt(struct skcipher_request *req, enum secure_key_type key_type)
 {
 	u8 *back_src = NULL, *back_dst = NULL;
 	int ret = 0;
@@ -100,7 +100,7 @@ static int ce_aes_cbc_huk_decrypt(struct skcipher_request *req)
 		goto out;
 	}
 
-	smc_tee_secure_key_decrypt(back_dst, back_src, req->cryptlen, CE_KEY_SELECT_HUK);
+	smc_tee_secure_key_decrypt(back_dst, back_src, req->cryptlen, key_type);
 
 	/* copy data back to scatterlist */
 	scatterwalk_map_and_copy(back_dst, req->dst, 0, req->cryptlen, 1);
@@ -112,6 +112,26 @@ out:
 		kfree(back_src);
 
 	return ret;
+}
+
+static int ce_aes_cbc_huk_encrypt(struct skcipher_request *req)
+{
+	return ce_aes_cbc_encrypt(req, CE_KEY_SELECT_HUK);
+}
+
+static int ce_aes_cbc_huk_decrypt(struct skcipher_request *req)
+{
+	return ce_aes_cbc_decrypt(req, CE_KEY_SELECT_HUK);
+}
+
+static int ce_aes_cbc_ssk_encrypt(struct skcipher_request *req)
+{
+	return ce_aes_cbc_encrypt(req, CE_KEY_SELECT_SSK);
+}
+
+static int ce_aes_cbc_ssk_decrypt(struct skcipher_request *req)
+{
+	return ce_aes_cbc_decrypt(req, CE_KEY_SELECT_SSK);
 }
 
 static int sunxi_ce_skcipher_init(struct crypto_skcipher *tfm)
@@ -147,6 +167,7 @@ static void sunxi_ce_skcipher_exit(struct crypto_skcipher *tfm)
 
 static struct sunxi_crypto_tmp sunxi_ce_algs[] = {
 	DECLARE_SS_AES_ALG(AES, aes, cbc, huk, AES_BLOCK_SIZE, AES_MIN_KEY_SIZE),
+	DECLARE_SS_AES_ALG(AES, aes, cbc, ssk, AES_BLOCK_SIZE, AES_MIN_KEY_SIZE),
 };
 
 static int sunxi_ce_alg_register(void)
@@ -229,5 +250,5 @@ module_exit(sunxi_ce_exit);
 
 MODULE_DESCRIPTION("SUNXI CE Use Secure Key Driver");
 MODULE_LICENSE("GPL");
-MODULE_VERSION("1.0.0");
+MODULE_VERSION("1.0.1");
 MODULE_AUTHOR("ssd");

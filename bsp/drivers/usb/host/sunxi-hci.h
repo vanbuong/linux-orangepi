@@ -50,6 +50,7 @@ extern struct atomic_notifier_head usb_pm_notifier_list;
 #endif
 
 #define STANDBY_TIMEOUT 30000
+#define RESUME_VBUS_DELAY_MS 300
 
 /*
  * Support Low-power mode USB standby.

@@ -627,7 +627,7 @@ static void sunxi_ohci_resume_work(struct work_struct *work)
 	struct sunxi_hci_hcd *sunxi_ohci = NULL;
 
 	sunxi_ohci = container_of(work, struct sunxi_hci_hcd, resume_work);
-
+	msleep(RESUME_VBUS_DELAY_MS);
 	sunxi_ohci_set_vbus(sunxi_ohci, 1);
 }
 
@@ -846,4 +846,4 @@ MODULE_DESCRIPTION(DRIVER_DESC);
 MODULE_LICENSE("GPL v2");
 MODULE_ALIAS("platform:" SUNXI_OHCI_NAME);
 MODULE_AUTHOR("javen");
-MODULE_VERSION("1.0.12");
+MODULE_VERSION("1.0.13");

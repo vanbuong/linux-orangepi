@@ -30,7 +30,15 @@
 #include <linux/dmapool.h>
 
 #include "sunxi_ce_cdev.h"
+#ifdef SS_SUPPORT_CE_V5
 #include "v5/sunxi_ce_reg.h"
+#elif defined(SS_SUPPORT_CE_V4)
+#include "v4/sunxi_ce_reg.h"
+#elif defined(SS_SUPPORT_CE_V1)
+#include "v1/sunxi_ce_reg.h"
+#else
+#include "v3/sunxi_ce_reg.h"
+#endif
 
 #include <linux/of.h>
 #include <linux/of_irq.h>
@@ -145,14 +153,14 @@ static s32 sunxi_get_ce_device_node(struct device_node **pnode, void __iomem **b
 
 static int sunxi_ce_hw_init(sunxi_ce_cdev_t *p_cdev)
 {
-	int ret = 0;
+	int err = 0;
 #ifndef SET_CE_CLKFRE_MODE2
 	u32 gen_clkrate;
 #endif
 
-	ret = sunxi_get_ce_device_node(&p_cdev->pnode, &p_cdev->base_addr, SUNXI_CE_DEV_NODE_NAME);
-	if (ret) {
-		SS_ERR("sunxi_get_ce_device_node fail, return %x\n", ret);
+	err = sunxi_get_ce_device_node(&p_cdev->pnode, &p_cdev->base_addr, SUNXI_CE_DEV_NODE_NAME);
+	if (err) {
+		SS_ERR("sunxi_get_ce_device_node fail, return %x\n", err);
 		return -EINVAL;
 	}
 
@@ -205,7 +213,8 @@ static int sunxi_ce_hw_init(sunxi_ce_cdev_t *p_cdev)
 	/* deassert ce reset */
 	if (reset_control_deassert(p_cdev->reset)) {
 		SS_ERR("Couldn't deassert reset\n");
-		return -EBUSY;
+		err = -EBUSY;
+		goto err0;
 	}
 
 	if (!IS_ERR_OR_NULL(p_cdev->pclk)) {
@@ -216,27 +225,40 @@ static int sunxi_ce_hw_init(sunxi_ce_cdev_t *p_cdev)
 	/* enable ce gating */
 	if (clk_prepare_enable(p_cdev->bus_clk)) {
 		SS_ERR("Couldn't enable bus gating\n");
-		return -EBUSY;
+		err = -EBUSY;
+		goto err0;
 	}
 
 	/* enable ce clk */
 	if (clk_prepare_enable(p_cdev->ce_clk)) {
 		SS_ERR("Couldn't enable ce clock\n");
-		return -EBUSY;
+		err = -EBUSY;
+		goto err1;
+	}
+
+	/* set parent clock */
+	if (!IS_ERR_OR_NULL(p_cdev->pclk)) {
+		if (clk_set_parent(p_cdev->ce_clk, p_cdev->pclk)) {
+			SS_ERR("Set parent clock fail\n");
+		};
 	}
 
 	/* enable ce mbus_clock */
 	if (!IS_ERR_OR_NULL(p_cdev->mbus_clk)) {
 		if (clk_prepare_enable(p_cdev->mbus_clk)) {
 			SS_ERR("Couldn't enable ce mbus clock\n");
-			return -EBUSY;
+			err = -EBUSY;
+			goto err2;
 		}
 	}
 
 	/* enable ce sys clk */
 	if (!IS_ERR_OR_NULL(p_cdev->ce_sys_clk)) {
-		if (clk_prepare_enable(p_cdev->ce_sys_clk))
+		if (clk_prepare_enable(p_cdev->ce_sys_clk)) {
 			SS_ERR("Couldn't enable ce sys clock\n");
+			err = -EBUSY;
+			goto err3;
+		}
 	}
 
 	sunxi_ce_res_request(p_cdev);
@@ -246,7 +268,22 @@ static int sunxi_ce_hw_init(sunxi_ce_cdev_t *p_cdev)
 	ss_trng_dbl_ent_en();
 #endif
 
-	return 0;
+#ifdef SS_SUPPORT_CE_V5
+	p_cdev->low_power_mode = of_property_read_bool(p_cdev->pnode, "low-power-mode");
+	if (p_cdev->low_power_mode)
+		ss_low_power_en();
+#endif
+
+	return err;
+err3:
+	clk_disable_unprepare(p_cdev->mbus_clk);
+err2:
+	clk_disable_unprepare(p_cdev->ce_clk);
+err1:
+	clk_disable_unprepare(p_cdev->bus_clk);
+err0:
+	reset_control_put(p_cdev->reset);
+	return err;
 }
 
 static int sunxi_ce_hw_exit(void)
@@ -266,9 +303,6 @@ static int sunxi_ce_hw_exit(void)
 	sunxi_ce_res_release(ce_cdev);
 	return 0;
 }
-
-static u64 sunxi_ss_dma_mask = DMA_BIT_MASK(64);
-
 
 static int sunxi_ce_open(struct inode *inode, struct file *file)
 {
@@ -301,6 +335,11 @@ static int sunxi_copy_from_user(u8 **src, u32 size)
 {
 	int ret = -1;
 	u8 *tmp = NULL;
+
+	if (size == 0) {
+		*src = NULL;
+		return 0;
+	}
 
 	tmp = kzalloc(size, GFP_KERNEL);
 	if (!tmp) {
@@ -356,11 +395,17 @@ static void sunxi_ce_channel_free(int id)
 static int ce_release_resources(void *req_ctx, ulong cmd)
 {
 	crypto_aes_req_ctx_t *aes_req_ctx = (crypto_aes_req_ctx_t *)req_ctx;
+#if !defined(SS_SUPPORT_CE_V3_1)
 	crypto_hash_req_ctx_t *hash_req_ctx = (crypto_hash_req_ctx_t *)req_ctx;
 	crypto_rng_req_ctx_t *rng_req_ctx = (crypto_rng_req_ctx_t *)req_ctx;
-#ifdef SS_SUPPORT_CE_V5
+#endif
+#ifdef SS_SUPPORT_CE_V1
+	crypto_crc_req_ctx_t *crc_req_ctx = (crypto_crc_req_ctx_t *)req_ctx;
+#endif
+#if defined(SS_SUPPORT_CE_V5) || defined(SS_SUPPORT_CE_V4)
 	crypto_rsa_req_ctx_t *rsa_req_ctx = (crypto_rsa_req_ctx_t *)req_ctx;
 	crypto_ecc_req_ctx_t *ecc_req_ctx = (crypto_ecc_req_ctx_t *)req_ctx;
+	crypto_sm2_req_ctx_t *sm2_req_ctx = (crypto_sm2_req_ctx_t *)req_ctx;
 #endif
 	switch (cmd) {
 	case CE_IOC_AES_CRYPTO:
@@ -386,43 +431,7 @@ static int ce_release_resources(void *req_ctx, ulong cmd)
 
 		ce_dev_unlock();
 		break;
-#ifdef SS_SUPPORT_CE_V5
-	case CE_IOC_RSA_CRYPTO:
-		if (!rsa_req_ctx) {
-			SS_ERR("input is NULL\n");
-			return -EINVAL;
-		}
-
-		if (rsa_req_ctx->sign_buffer)
-			kfree(rsa_req_ctx->sign_buffer);
-		if (rsa_req_ctx->pkey_buffer)
-			kfree(rsa_req_ctx->pkey_buffer);
-		if (rsa_req_ctx->dst_buffer)
-			kfree(rsa_req_ctx->dst_buffer);
-		if (rsa_req_ctx)
-			kfree(rsa_req_ctx);
-		ce_dev_unlock();
-
-		break;
-	case CE_IOC_ECC_CRYPTO:
-		if (!ecc_req_ctx) {
-			SS_ERR("input is NULL\n");
-			return -EINVAL;
-		}
-
-		if (ecc_req_ctx->dst_buffer)
-			kfree(ecc_req_ctx->dst_buffer);
-		if (ecc_req_ctx->src_buffer)
-			kfree(ecc_req_ctx->src_buffer);
-		if (ecc_req_ctx->key_buffer)
-			kfree(ecc_req_ctx->key_buffer);
-		if (ecc_req_ctx->iv_buffer)
-			kfree(ecc_req_ctx->iv_buffer);
-		if (ecc_req_ctx)
-			kfree(ecc_req_ctx);
-		ce_dev_unlock();
-
-		break;
+#if !defined(SS_SUPPORT_CE_V3_1)
 	case CE_IOC_HASH_CRYPTO:
 		if (!hash_req_ctx) {
 			SS_ERR("input is NULL\n");
@@ -459,6 +468,79 @@ static int ce_release_resources(void *req_ctx, ulong cmd)
 			kfree(rng_req_ctx);
 
 		ce_dev_unlock();
+		break;
+#endif
+#ifdef SS_SUPPORT_CE_V1
+	case CE_IOC_CRC_CRYPTO:
+		if (!crc_req_ctx) {
+			SS_ERR("input is NULL\n");
+			return -EINVAL;
+		}
+
+		if (crc_req_ctx->src_buffer)
+			kfree(crc_req_ctx->src_buffer);
+		if (crc_req_ctx->dst_buffer)
+			kfree(crc_req_ctx->dst_buffer);
+		if (crc_req_ctx)
+			kfree(crc_req_ctx);
+
+		ce_dev_unlock();
+		break;
+#endif
+#if defined(SS_SUPPORT_CE_V5) || defined(SS_SUPPORT_CE_V4)
+	case CE_IOC_RSA_CRYPTO:
+		if (!rsa_req_ctx) {
+			SS_ERR("input is NULL\n");
+			return -EINVAL;
+		}
+
+		if (rsa_req_ctx->sign_buffer)
+			kfree(rsa_req_ctx->sign_buffer);
+		if (rsa_req_ctx->pkey_buffer)
+			kfree(rsa_req_ctx->pkey_buffer);
+		if (rsa_req_ctx->dst_buffer)
+			kfree(rsa_req_ctx->dst_buffer);
+		if (rsa_req_ctx)
+			kfree(rsa_req_ctx);
+		ce_dev_unlock();
+
+		break;
+	case CE_IOC_ECC_CRYPTO:
+		if (!ecc_req_ctx) {
+			SS_ERR("input is NULL\n");
+			return -EINVAL;
+		}
+
+		if (ecc_req_ctx->dst_buffer)
+			kfree(ecc_req_ctx->dst_buffer);
+		if (ecc_req_ctx->src_buffer)
+			kfree(ecc_req_ctx->src_buffer);
+		if (ecc_req_ctx->key_buffer)
+			kfree(ecc_req_ctx->key_buffer);
+		if (ecc_req_ctx->iv_buffer)
+			kfree(ecc_req_ctx->iv_buffer);
+		if (ecc_req_ctx)
+			kfree(ecc_req_ctx);
+		ce_dev_unlock();
+
+		break;
+	case CE_IOC_SM2_CRYPTO:
+		if (!sm2_req_ctx) {
+			SS_ERR("input is NULL\n");
+			return -EINVAL;
+		}
+
+		if (sm2_req_ctx->dst_buffer)
+			kfree(sm2_req_ctx->dst_buffer);
+		if (sm2_req_ctx->src_buffer)
+			kfree(sm2_req_ctx->src_buffer);
+		if (sm2_req_ctx->key_buffer)
+			kfree(sm2_req_ctx->key_buffer);
+		if (sm2_req_ctx->iv_buffer)
+			kfree(sm2_req_ctx->iv_buffer);
+		if (sm2_req_ctx)
+			kfree(sm2_req_ctx);
+
 		break;
 #endif
 	default:
@@ -557,156 +639,7 @@ static int ioctl_aes_crypto(unsigned int cmd, unsigned long arg)
 	return 0;
 }
 
-#ifdef SS_SUPPORT_CE_V5
-static int ioctl_rsa_crypto(unsigned int cmd, unsigned long arg)
-{
-	crypto_rsa_req_ctx_t *rsa_req_ctx;
-	int ret;
-	phys_addr_t usr_dst_addr;
-	SS_DBG("arg_size = 0x%x\n", _IOC_SIZE(cmd));
-	if (_IOC_SIZE(cmd) != sizeof(crypto_rsa_req_ctx_t)) {
-		SS_DBG("arg_size != sizeof(crypto_rsa_req_ctx_t)\n");
-		return -EINVAL;
-	}
-
-	ce_dev_lock();
-	rsa_req_ctx = kzalloc(sizeof(crypto_rsa_req_ctx_t), GFP_KERNEL);
-	if (!rsa_req_ctx) {
-		SS_ERR("kzalloc rsa_req_ctx fail\n");
-		return -ENOMEM;
-	}
-
-	ret = copy_from_user(rsa_req_ctx, (crypto_rsa_req_ctx_t *)arg,
-			     sizeof(crypto_rsa_req_ctx_t));
-	if (ret) {
-		SS_ERR("copy_from_user fail\n");
-		ce_release_resources((void *)rsa_req_ctx, CE_IOC_RSA_CRYPTO);
-		return ret;
-	}
-	usr_dst_addr = (phys_addr_t)rsa_req_ctx->dst_buffer;
-	ret = sunxi_copy_from_user(&rsa_req_ctx->dst_buffer,
-				   rsa_req_ctx->dst_length);
-	if (ret) {
-		SS_ERR("dst_buffer copy_from_user fail\n");
-		ce_release_resources((void *)rsa_req_ctx, CE_IOC_RSA_CRYPTO);
-		return ret;
-	};
-
-	ret = sunxi_copy_from_user(&rsa_req_ctx->sign_buffer,
-				   rsa_req_ctx->sign_length);
-	if (ret) {
-		SS_ERR("sign_buffer copy_from_user fail\n");
-		ce_release_resources((void *)rsa_req_ctx, CE_IOC_RSA_CRYPTO);
-		return ret;
-	};
-
-	ret = sunxi_copy_from_user(&rsa_req_ctx->pkey_buffer,
-				   rsa_req_ctx->pkey_length);
-	if (ret) {
-		SS_ERR("pkey_buffer copy_from_user fail\n");
-		ce_release_resources((void *)rsa_req_ctx, CE_IOC_RSA_CRYPTO);
-		return ret;
-	};
-
-	SS_DBG("do_rsa_crypto start\n");
-	ret = do_rsa_crypto(rsa_req_ctx);
-	if (ret) {
-		ce_release_resources((void *)rsa_req_ctx, CE_IOC_RSA_CRYPTO);
-		SS_ERR("do_aes_crypto fail\n");
-		return ret;
-	}
-
-	ret = copy_to_user((u8 *)usr_dst_addr, rsa_req_ctx->dst_buffer,
-			   rsa_req_ctx->dst_length);
-	if (ret) {
-		SS_ERR(" dst_buffer copy_from_user fail\n");
-		ce_release_resources((void *)rsa_req_ctx, CE_IOC_RSA_CRYPTO);
-		return ret;
-	}
-
-	ce_release_resources((void *)rsa_req_ctx, CE_IOC_RSA_CRYPTO);
-
-	return 0;
-}
-
-static int ioctl_ecc_crypto(unsigned int cmd, unsigned long arg)
-{
-	crypto_ecc_req_ctx_t *ecc_req_ctx;
-	int ret;
-	phys_addr_t usr_dst_addr;
-	SS_DBG("arg_size = 0x%x\n", _IOC_SIZE(cmd));
-	if (_IOC_SIZE(cmd) != sizeof(crypto_ecc_req_ctx_t)) {
-		SS_DBG("arg_size != sizeof(crypto_ecc_req_ctx_t)\n");
-		return -EINVAL;
-	}
-
-	ce_dev_lock();
-	ecc_req_ctx = kzalloc(sizeof(crypto_ecc_req_ctx_t), GFP_KERNEL);
-	if (!ecc_req_ctx) {
-		SS_ERR("kzalloc ecc_req_ctx fail\n");
-		return -ENOMEM;
-	}
-
-	ret = copy_from_user(ecc_req_ctx, (crypto_ecc_req_ctx_t *)arg,
-			     sizeof(crypto_ecc_req_ctx_t));
-	if (ret) {
-		SS_ERR("copy_from_user fail\n");
-		ce_release_resources((void *)ecc_req_ctx, CE_IOC_ECC_CRYPTO);
-		return ret;
-	}
-	usr_dst_addr = (phys_addr_t)ecc_req_ctx->dst_buffer;
-	ret = sunxi_copy_from_user(&ecc_req_ctx->dst_buffer,
-				   ecc_req_ctx->dst_length);
-	if (ret) {
-		SS_ERR("dst_buffer copy_from_user fail\n");
-		ce_release_resources((void *)ecc_req_ctx, CE_IOC_ECC_CRYPTO);
-		return ret;
-	};
-
-	ret = sunxi_copy_from_user(&ecc_req_ctx->iv_buffer,
-				   ecc_req_ctx->iv_length);
-	if (ret) {
-		SS_ERR("iv_buffer copy_from_user fail\n");
-		ce_release_resources((void *)ecc_req_ctx, CE_IOC_ECC_CRYPTO);
-		return ret;
-	};
-
-	ret = sunxi_copy_from_user(&ecc_req_ctx->key_buffer,
-				   ecc_req_ctx->key_length);
-	if (ret) {
-		SS_ERR("key_buffer copy_from_user fail\n");
-		ce_release_resources((void *)ecc_req_ctx, CE_IOC_ECC_CRYPTO);
-		return ret;
-	};
-
-	ret = sunxi_copy_from_user(&ecc_req_ctx->src_buffer,
-				   ecc_req_ctx->src_length);
-	if (ret) {
-		SS_ERR("src_buffer copy_from_user fail\n");
-		ce_release_resources((void *)ecc_req_ctx, CE_IOC_ECC_CRYPTO);
-		return ret;
-	};
-
-	SS_DBG("do_ecc_crypto start\n");
-	ret = do_ecc_crypto(ecc_req_ctx);
-	if (ret) {
-		ce_release_resources((void *)ecc_req_ctx, CE_IOC_ECC_CRYPTO);
-		SS_ERR("do_ecc_crypto fail\n");
-		return ret;
-	}
-
-	ret = copy_to_user((u8 *)usr_dst_addr, ecc_req_ctx->dst_buffer,
-			   ecc_req_ctx->dst_length);
-	if (ret) {
-		SS_ERR(" dst_buffer copy_from_user fail\n");
-		ce_release_resources((void *)ecc_req_ctx, CE_IOC_ECC_CRYPTO);
-		return ret;
-	}
-
-	ce_release_resources((void *)ecc_req_ctx, CE_IOC_ECC_CRYPTO);
-	return 0;
-}
-
+#if !defined(SS_SUPPORT_CE_V3_1)
 static int ioctl_hash_crypto(unsigned int cmd, unsigned long arg)
 {
 	crypto_hash_req_ctx_t *hash_req_ctx;
@@ -865,6 +798,308 @@ static int ioctl_rng_crypto(unsigned int cmd, unsigned long arg)
 }
 #endif
 
+#ifdef SS_SUPPORT_CE_V1
+static int ioctl_crc_crypto(unsigned int cmd, unsigned long arg)
+{
+	crypto_crc_req_ctx_t *crc_req_ctx;
+	int ret;
+	phys_addr_t usr_dst_addr;
+	u32 *tmp_dst_buffer = NULL;
+
+	SS_DBG("arg_size = 0x%x\n", _IOC_SIZE(cmd));
+	if (_IOC_SIZE(cmd) != sizeof(crypto_crc_req_ctx_t)) {
+		SS_DBG("arg_size != sizeof(crypto_crc_req_ctx_t)\n");
+		return -EINVAL;
+	}
+
+	ce_dev_lock();
+	crc_req_ctx = kzalloc(sizeof(crypto_crc_req_ctx_t), GFP_KERNEL);
+	if (!crc_req_ctx) {
+		SS_DBG("arg_size != sizeof(crypto_crc_req_ctx_t)\n");
+		return -EINVAL;
+	}
+
+	ret = copy_from_user(crc_req_ctx, (crypto_crc_req_ctx_t *)arg,
+				sizeof(crypto_crc_req_ctx_t));
+	if (ret) {
+		SS_ERR("copy_from_user fail\n");
+		ce_release_resources((void *)crc_req_ctx, CE_IOC_CRC_CRYPTO);
+		return ret;
+	}
+
+	usr_dst_addr = (phys_addr_t)(uintptr_t)crc_req_ctx->dst_buffer;
+
+	ret = sunxi_copy_from_user(&crc_req_ctx->src_buffer, crc_req_ctx->src_length);
+	if (ret) {
+		SS_ERR("src_buffer copy_from_user fail\n");
+		ce_release_resources((void *)crc_req_ctx, CE_IOC_CRC_CRYPTO);
+		return ret;
+	}
+
+	tmp_dst_buffer = kzalloc(crc_req_ctx->dst_length, GFP_KERNEL);
+	if (!tmp_dst_buffer) {
+		SS_ERR("tmp_dst_buffer kzalloc fail\n");
+		return -ENOMEM;
+	}
+
+	ret = copy_from_user(tmp_dst_buffer, crc_req_ctx->dst_buffer, crc_req_ctx->dst_length);
+	if (ret) {
+		SS_ERR("dst_buffer copy_from_user fail\n");
+		return ret;
+	}
+
+	crc_req_ctx->dst_buffer = tmp_dst_buffer;
+
+	SS_DBG("do_crc_crypto start\n");
+	ret = do_crc_crypto(crc_req_ctx);
+	if (ret) {
+		ce_release_resources((void *)crc_req_ctx, CE_IOC_CRC_CRYPTO);
+		SS_ERR("do_crc_crypto fail\n");
+		return ret;
+	}
+
+	ret = copy_to_user((u32 *)(uintptr_t)usr_dst_addr, crc_req_ctx->dst_buffer,
+					crc_req_ctx->dst_length);
+	if (ret) {
+		SS_ERR(" dst_buffer copy_from_user fail\n");
+		ce_release_resources((void *)crc_req_ctx, CE_IOC_CRC_CRYPTO);
+		return ret;
+	}
+
+	ce_release_resources((void *)crc_req_ctx, CE_IOC_CRC_CRYPTO);
+
+	return 0;
+}
+#endif
+
+#if defined(SS_SUPPORT_CE_V5) || defined(SS_SUPPORT_CE_V4)
+static int ioctl_rsa_crypto(unsigned int cmd, unsigned long arg)
+{
+	crypto_rsa_req_ctx_t *rsa_req_ctx;
+	int ret;
+	phys_addr_t usr_dst_addr;
+	SS_DBG("arg_size = 0x%x\n", _IOC_SIZE(cmd));
+	if (_IOC_SIZE(cmd) != sizeof(crypto_rsa_req_ctx_t)) {
+		SS_DBG("arg_size != sizeof(crypto_rsa_req_ctx_t)\n");
+		return -EINVAL;
+	}
+
+	ce_dev_lock();
+	rsa_req_ctx = kzalloc(sizeof(crypto_rsa_req_ctx_t), GFP_KERNEL);
+	if (!rsa_req_ctx) {
+		SS_ERR("kzalloc rsa_req_ctx fail\n");
+		return -ENOMEM;
+	}
+
+	ret = copy_from_user(rsa_req_ctx, (crypto_rsa_req_ctx_t *)arg,
+			     sizeof(crypto_rsa_req_ctx_t));
+	if (ret) {
+		SS_ERR("copy_from_user fail\n");
+		ce_release_resources((void *)rsa_req_ctx, CE_IOC_RSA_CRYPTO);
+		return ret;
+	}
+	usr_dst_addr = (phys_addr_t)rsa_req_ctx->dst_buffer;
+	ret = sunxi_copy_from_user(&rsa_req_ctx->dst_buffer,
+				   rsa_req_ctx->dst_length);
+	if (ret) {
+		SS_ERR("dst_buffer copy_from_user fail\n");
+		ce_release_resources((void *)rsa_req_ctx, CE_IOC_RSA_CRYPTO);
+		return ret;
+	};
+
+	ret = sunxi_copy_from_user(&rsa_req_ctx->sign_buffer,
+				   rsa_req_ctx->sign_length);
+	if (ret) {
+		SS_ERR("sign_buffer copy_from_user fail\n");
+		ce_release_resources((void *)rsa_req_ctx, CE_IOC_RSA_CRYPTO);
+		return ret;
+	};
+
+	ret = sunxi_copy_from_user(&rsa_req_ctx->pkey_buffer,
+				   rsa_req_ctx->pkey_length);
+	if (ret) {
+		SS_ERR("pkey_buffer copy_from_user fail\n");
+		ce_release_resources((void *)rsa_req_ctx, CE_IOC_RSA_CRYPTO);
+		return ret;
+	};
+
+	SS_DBG("do_rsa_crypto start\n");
+	ret = do_rsa_crypto(rsa_req_ctx);
+	if (ret) {
+		ce_release_resources((void *)rsa_req_ctx, CE_IOC_RSA_CRYPTO);
+		SS_ERR("do_aes_crypto fail\n");
+		return ret;
+	}
+
+	ret = copy_to_user((u8 *)usr_dst_addr, rsa_req_ctx->dst_buffer,
+			   rsa_req_ctx->dst_length);
+	if (ret) {
+		SS_ERR(" dst_buffer copy_from_user fail\n");
+		ce_release_resources((void *)rsa_req_ctx, CE_IOC_RSA_CRYPTO);
+		return ret;
+	}
+
+	ce_release_resources((void *)rsa_req_ctx, CE_IOC_RSA_CRYPTO);
+
+	return 0;
+}
+
+static int ioctl_ecc_crypto(unsigned int cmd, unsigned long arg)
+{
+	crypto_ecc_req_ctx_t *ecc_req_ctx;
+	int ret;
+	phys_addr_t usr_dst_addr;
+	SS_DBG("arg_size = 0x%x\n", _IOC_SIZE(cmd));
+	if (_IOC_SIZE(cmd) != sizeof(crypto_ecc_req_ctx_t)) {
+		SS_DBG("arg_size != sizeof(crypto_ecc_req_ctx_t)\n");
+		return -EINVAL;
+	}
+
+	ce_dev_lock();
+	ecc_req_ctx = kzalloc(sizeof(crypto_ecc_req_ctx_t), GFP_KERNEL);
+	if (!ecc_req_ctx) {
+		SS_ERR("kzalloc ecc_req_ctx fail\n");
+		return -ENOMEM;
+	}
+
+	ret = copy_from_user(ecc_req_ctx, (crypto_ecc_req_ctx_t *)arg,
+			     sizeof(crypto_ecc_req_ctx_t));
+	if (ret) {
+		SS_ERR("copy_from_user fail\n");
+		ce_release_resources((void *)ecc_req_ctx, CE_IOC_ECC_CRYPTO);
+		return ret;
+	}
+	usr_dst_addr = (phys_addr_t)ecc_req_ctx->dst_buffer;
+	ret = sunxi_copy_from_user(&ecc_req_ctx->dst_buffer,
+				   ecc_req_ctx->dst_length);
+	if (ret) {
+		SS_ERR("dst_buffer copy_from_user fail\n");
+		ce_release_resources((void *)ecc_req_ctx, CE_IOC_ECC_CRYPTO);
+		return ret;
+	};
+
+	ret = sunxi_copy_from_user(&ecc_req_ctx->iv_buffer,
+				   ecc_req_ctx->iv_length);
+	if (ret) {
+		SS_ERR("iv_buffer copy_from_user fail\n");
+		ce_release_resources((void *)ecc_req_ctx, CE_IOC_ECC_CRYPTO);
+		return ret;
+	};
+
+	ret = sunxi_copy_from_user(&ecc_req_ctx->key_buffer,
+				   ecc_req_ctx->key_length);
+	if (ret) {
+		SS_ERR("key_buffer copy_from_user fail\n");
+		ce_release_resources((void *)ecc_req_ctx, CE_IOC_ECC_CRYPTO);
+		return ret;
+	};
+
+	ret = sunxi_copy_from_user(&ecc_req_ctx->src_buffer,
+				   ecc_req_ctx->src_length);
+	if (ret) {
+		SS_ERR("src_buffer copy_from_user fail\n");
+		ce_release_resources((void *)ecc_req_ctx, CE_IOC_ECC_CRYPTO);
+		return ret;
+	};
+
+	SS_DBG("do_ecc_crypto start\n");
+	ret = do_ecc_crypto(ecc_req_ctx);
+	if (ret) {
+		ce_release_resources((void *)ecc_req_ctx, CE_IOC_ECC_CRYPTO);
+		SS_ERR("do_ecc_crypto fail\n");
+		return ret;
+	}
+
+	ret = copy_to_user((u8 *)usr_dst_addr, ecc_req_ctx->dst_buffer,
+			   ecc_req_ctx->dst_length);
+	if (ret) {
+		SS_ERR(" dst_buffer copy_from_user fail\n");
+		ce_release_resources((void *)ecc_req_ctx, CE_IOC_ECC_CRYPTO);
+		return ret;
+	}
+
+	ce_release_resources((void *)ecc_req_ctx, CE_IOC_ECC_CRYPTO);
+	return 0;
+}
+
+static int ioctl_sm2_crypto(unsigned int cmd, unsigned long arg)
+{
+	int ret;
+	crypto_sm2_req_ctx_t *sm2_req_ctx;
+	phys_addr_t usr_dst_addr;
+
+	SS_DBG("arg_size = 0x%x\n", _IOC_SIZE(cmd));
+	if (_IOC_SIZE(cmd) != sizeof(crypto_sm2_req_ctx_t)) {
+		SS_DBG("arg_size != sizeof(crypto_sm2_req_ctx_t)\n");
+		return -EINVAL;
+	}
+
+	sm2_req_ctx = kzalloc(sizeof(crypto_sm2_req_ctx_t), GFP_KERNEL);
+	if (!sm2_req_ctx) {
+		SS_ERR("kzalloc sm2_req_ctx fail\n");
+		return -ENOMEM;
+	}
+
+	ret = copy_from_user(sm2_req_ctx, (crypto_sm2_req_ctx_t *)arg,
+			     sizeof(crypto_sm2_req_ctx_t));
+	if (ret) {
+		SS_ERR("copy_from_user fail\n");
+		goto out;
+	}
+
+	if (sm2_req_ctx->key_length) {
+		ret = sunxi_copy_from_user(&sm2_req_ctx->key_buffer,
+					   sm2_req_ctx->key_length);
+		if (ret) {
+			SS_ERR("key_buffer copy_from_user fail\n");
+			goto out;
+		};
+	}
+
+	if (sm2_req_ctx->iv_length) {
+		ret = sunxi_copy_from_user(&sm2_req_ctx->iv_buffer,
+					   sm2_req_ctx->iv_length);
+		if (ret) {
+			SS_ERR("iv_buffer copy_from_user fail\n");
+			goto out;
+		};
+	}
+
+	usr_dst_addr = (phys_addr_t)sm2_req_ctx->dst_buffer;
+	ret = sunxi_copy_from_user(&sm2_req_ctx->dst_buffer,
+				   sm2_req_ctx->dst_length);
+	if (ret) {
+		SS_ERR("dst_buffer copy_from_user fail\n");
+		goto out;
+	};
+
+	ret = sunxi_copy_from_user(&sm2_req_ctx->src_buffer,
+				   sm2_req_ctx->src_length);
+	if (ret) {
+		SS_ERR("src_buffer copy_from_user fail\n");
+		goto out;
+	};
+
+	SS_DBG("do_sm2_crypto start\n");
+	ret = do_sm2_crypto(sm2_req_ctx);
+	if (ret) {
+		SS_ERR("do_sm2_crypto fail\n");
+		goto out;
+	}
+
+	ret = copy_to_user((u8 *)usr_dst_addr, sm2_req_ctx->dst_buffer,
+			   sm2_req_ctx->dst_length);
+	if (ret) {
+		SS_ERR(" dst_buffer copy_from_user fail\n");
+		goto out;
+	}
+
+out:
+	ce_release_resources((void *)sm2_req_ctx, CE_IOC_SM2_CRYPTO);
+	return ret;
+}
+#endif
+
 static long sunxi_ce_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	int channel_id;
@@ -908,7 +1143,38 @@ static long sunxi_ce_ioctl(struct file *file, unsigned int cmd, unsigned long ar
 		}
 		break;
 	}
-#ifdef SS_SUPPORT_CE_V5
+#if !defined(SS_SUPPORT_CE_V3_1)
+	case CE_IOC_HASH_CRYPTO:
+	{
+		ret = ioctl_hash_crypto(CE_IOC_HASH_CRYPTO, arg);
+		if (ret < 0) {
+			SS_ERR("hash crypto failed\n");
+			return ret;
+		}
+		break;
+	}
+	case CE_IOC_RNG_CRYPTO:
+	{
+		ret = ioctl_rng_crypto(CE_IOC_RNG_CRYPTO, arg);
+		if (ret < 0) {
+			SS_ERR("rng crypto failed\n");
+			return ret;
+		}
+		break;
+	}
+#endif
+#ifdef SS_SUPPORT_CE_V1
+	case CE_IOC_CRC_CRYPTO:
+	{
+		ret = ioctl_crc_crypto(CE_IOC_CRC_CRYPTO, arg);
+		if (ret < 0) {
+			SS_ERR("crc crypto failed\n");
+			return ret;
+		}
+		break;
+	}
+#endif
+#if defined(SS_SUPPORT_CE_V5) || defined(SS_SUPPORT_CE_V4)
 	case CE_IOC_RSA_CRYPTO:
 	{
 		ret = ioctl_rsa_crypto(CE_IOC_RSA_CRYPTO, arg);
@@ -927,20 +1193,11 @@ static long sunxi_ce_ioctl(struct file *file, unsigned int cmd, unsigned long ar
 		}
 		break;
 	}
-	case CE_IOC_HASH_CRYPTO:
+	case CE_IOC_SM2_CRYPTO:
 	{
-		ret = ioctl_hash_crypto(CE_IOC_HASH_CRYPTO, arg);
+		ret = ioctl_sm2_crypto(CE_IOC_SM2_CRYPTO, arg);
 		if (ret < 0) {
-			SS_ERR("hash crypto failed\n");
-			return ret;
-		}
-		break;
-	}
-	case CE_IOC_RNG_CRYPTO:
-	{
-		ret = ioctl_rng_crypto(CE_IOC_RNG_CRYPTO, arg);
-		if (ret < 0) {
-			SS_ERR("rng crypto failed\n");
+			SS_ERR("sm2 crypto failed\n");
 			return ret;
 		}
 		break;
@@ -1020,17 +1277,40 @@ static int sunxi_ce_setup_cdev(void)
 	ce_cdev->pdevice = device_create(ce_cdev->pclass, NULL, ce_cdev->devid, NULL,
 						SUNXI_SS_DEV_NAME);
 
-#if defined(SS_SUPPORT_CE_V5)
+#if defined(SS_SUPPORT_CE_V5) || defined(SS_SUPPORT_CE_V3_1) || defined(SS_SUPPORT_CE_V4)
 	/* init task_pool */
 	ce_cdev->task_pool = dma_pool_create("task_pool", ce_cdev->pdevice,
 			sizeof(struct ce_task_desc), 4, 0);
 	if (ce_cdev->task_pool == NULL)
 		return -ENOMEM;
 #endif
+
 #ifdef CONFIG_OF
-	ce_cdev->pdevice->dma_mask = &sunxi_ss_dma_mask;
-	ce_cdev->pdevice->coherent_dma_mask = DMA_BIT_MASK(64);
+	/*
+	 * If @dev is expected to be DMA-capable then the bus code that created
+	 * it should have initialised its dma_mask pointer by this point. For
+	 * now, we'll continue the legacy behaviour of coercing it to the
+	 * coherent mask if not, but we'll no longer do so quietly.
+	 */
+	if (!ce_cdev->pdevice->dma_mask) {
+		SS_DBG("dma_mask not set\n");
+		ce_cdev->pdevice->dma_mask = &(ce_cdev->pdevice->coherent_dma_mask);
+	}
+	ret = dma_set_mask_and_coherent(ce_cdev->pdevice, DMA_BIT_MASK(64));
+	if (ret) {
+		SS_ERR("64-bit DMA mask not supported,try 32-bit\n");
+		if (dma_set_mask_and_coherent(ce_cdev->pdevice, DMA_BIT_MASK(32))) {
+			SS_ERR("Failed to set DMA mask\n");
+			return -EIO;
+		}
+	}
+#if defined(CONFIG_ARCH_HAS_SYNC_DMA_FOR_DEVICE) || \
+    defined(CONFIG_ARCH_HAS_SYNC_DMA_FOR_CPU) || \
+    defined(CONFIG_ARCH_HAS_SYNC_DMA_FOR_CPU_ALL)
+	/* For RISC-V that does not default set hardware dma_coherent=false */
+	ce_cdev->pdevice->dma_coherent = false;
 #endif
+#endif  /* CONFIG_OF */
 	memcpy(ce_cdev->dev_name, SUNXI_SS_DEV_NAME, 3);
 
 	return 0;
@@ -1049,6 +1329,7 @@ static int sunxi_ce_exit_cdev(void)
 		dma_pool_destroy(ce_cdev->task_pool);
 
 	device_destroy(ce_cdev->pclass, ce_cdev->devid);
+
 	class_destroy(ce_cdev->pclass);
 
 	cdev_del(ce_cdev->pcdev);
@@ -1062,31 +1343,31 @@ static int sunxi_ce_exit_cdev(void)
 
 static int __init sunxi_ce_module_init(void)
 {
-	int ret = 0;
+	int err = 0;
 
 	SS_DBG("sunxi_ce_cdev_init\n");
-	ret = sunxi_ce_setup_cdev();
-	if (ret < 0) {
-		SS_ERR("sunxi_ce_setup_cdev() failed, return %d\n", ret);
-		return ret;
+	err = sunxi_ce_setup_cdev();
+	if (err) {
+		SS_ERR("sunxi_ce_setup_cdev() failed, return %d\n", err);
+		return err;
 	}
 
-	ret = sunxi_ce_hw_init(ce_cdev);
-	if (ret < 0) {
-		SS_ERR("sunxi_ce_hw_init failed, return %d\n", ret);
+	err = sunxi_ce_hw_init(ce_cdev);
+	if (err) {
+		SS_ERR("sunxi_ce_hw_init failed, return %d\n", err);
 		goto err0;
 	}
 
 #if IS_ENABLED(CONFIG_AW_HWRNG_DRIVER)
-	ret = sunxi_register_hwrng(ce_cdev);
-	if (ret < 0) {
-		SS_ERR("sunxi_register_hwrng failed, return %d\n", ret);
+	err = sunxi_register_hwrng(ce_cdev);
+	if (err) {
+		SS_ERR("sunxi_register_hwrng failed, return %d\n", err);
 		goto err1;
 	}
 #endif
 
 	spin_lock_init(&ce_cdev->lock);
-	return ret;
+	return err;
 
 #if IS_ENABLED(CONFIG_AW_HWRNG_DRIVER)
 err1:
@@ -1095,7 +1376,7 @@ err1:
 err0:
 	sunxi_ce_exit_cdev();
 
-	return ret;
+	return err;
 }
 
 static void __exit sunxi_ce_module_exit(void)
@@ -1109,7 +1390,7 @@ module_init(sunxi_ce_module_init);
 module_exit(sunxi_ce_module_exit);
 
 MODULE_AUTHOR("mintow");
-MODULE_VERSION("1.1.7");
+MODULE_VERSION("1.2.8");
 MODULE_DESCRIPTION("SUNXI CE Controller Driver");
 MODULE_ALIAS("platform:"SUNXI_SS_DEV_NAME);
 MODULE_LICENSE("GPL");

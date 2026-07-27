@@ -7,6 +7,8 @@
 #ifndef _XH2A_HOST_DRV_H_
 #define _XH2A_HOST_DRV_H_
 
+#include <xh2a_ctl.h>
+
 /*
  * xh2a_host_register_notifier_chain() - register notifier chain
  * @nb: notifier block to register
@@ -66,5 +68,12 @@ void xh2a_rpmsg_unregister_driver(void);
 
 int xh2a_fast_memory_register_driver(void);
 void xh2a_fast_memory_unregister_driver(void);
+
+int xh2a_ctl_init(struct xh2a_ctl_ctx **ctl_out);
+void xh2a_ctl_exit(struct xh2a_ctl_ctx *ctl);
+int xh2a_ctl_register_dev(struct xh2a_ctl_ctx *ctl, uint32_t dev_id,
+			  void *handle);
+void xh2a_ctl_unregister_dev(struct xh2a_ctl_ctx *ctl, uint32_t dev_id);
+int xh2a_ctl_get_ctx(struct xh2a_ctl_ctx **ctl_out);
 
 #endif

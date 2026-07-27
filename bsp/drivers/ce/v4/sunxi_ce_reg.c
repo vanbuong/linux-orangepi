@@ -61,6 +61,32 @@ void ss_keysize_set(int size, ce_task_desc_t *task)
 	task->sym_ctl |= (type << CE_SYM_CTL_KEY_SIZE_SHIFT);
 }
 
+void ce_task_addr_set(u8 *vir_addr, phys_addr_t phy_addr, u8 *dst)
+{
+	phys_addr_t phy;
+
+	if (phy_addr)
+		phy = phy_addr >> 2;	/* task addr in word */
+	else
+		phy = virt_to_phys(vir_addr) >> 2;	/* task addr in word */
+
+	if (phy > 0xffffffff) {
+		phy = phy & CE_ADDR_MASK;
+		memcpy(dst, (void *)&phy, 5);
+	} else {
+		memcpy(dst, (void *)&phy, 4);
+	}
+}
+
+phys_addr_t ce_task_addr_get(u8 *dst)
+{
+	phys_addr_t phy;
+
+	phy = *((u32 *)dst);
+
+	return phy;
+}
+
 /* key: phsical address. */
 void ss_key_set(char *key, int size, ce_task_desc_t *task)
 {
@@ -96,7 +122,7 @@ void ss_key_set(char *key, int size, ce_task_desc_t *task)
 
 	ss_keyselect_set(key_sel, task);
 	ss_keysize_set(size, task);
-	task->key_addr = (virt_to_phys(key)) >> 2;  /* address in word */
+	ce_task_addr_set(key, 0, (u8 *)&task->key_addr);
 }
 
 void ss_pending_clear(int flow)
@@ -152,7 +178,7 @@ void ss_md_get(char *dst, char *src, int size)
 /* iv: phsical address. */
 void ss_iv_set(char *iv, int size, ce_task_desc_t *task)
 {
-	task->iv_addr = (virt_to_phys(iv)) >> 2;	/* address in word */
+	ce_task_addr_set(iv, 0, (u8 *)&task->iv_addr);
 }
 
 void ss_iv_mode_set(int mode, ce_task_desc_t *task)
@@ -167,14 +193,14 @@ void ss_cntsize_set(int size, ce_task_desc_t *task)
 
 void ss_cnt_set(char *cnt, int size, ce_task_desc_t *task)
 {
-	task->ctr_addr = (virt_to_phys(cnt)) >> 2;		/* address in word */
+	ce_task_addr_set(cnt, 0, (u8 *)&task->ctr_addr);
 
 	ss_cntsize_set(CE_CTR_SIZE_128, task);
 }
 
 void ss_gcm_cnt_set(char *cnt, int size, ce_task_desc_t *task)
 {
-	task->ctr_addr = (virt_to_phys(cnt)) >> 2;		/* address in word */
+	ce_task_addr_set(cnt, 0, (u8 *)&task->ctr_addr);
 
 	ss_cntsize_set(CE_CTR_SIZE_32, task);
 }
@@ -293,9 +319,16 @@ void ss_ecc_op_mode_set(int mode, ce_task_desc_t *task)
 
 void ss_ctrl_start(ce_task_desc_t *task, int type, int mode)
 {
-	ss_writel(CE_REG_TSK, (virt_to_phys(task)) >> 2);	/* task addr in word */
+	phys_addr_t task_phy;
 
-	if (CE_METHOD_IS_AES(type) && (mode == SS_AES_MODE_XTS))
+	if (task->task_phy_addr)
+		task_phy = (task->task_phy_addr) >> 2;	/* task addr in word */
+	else
+		task_phy = virt_to_phys(task) >> 2;	/* task addr in word */
+
+	ss_writel(CE_REG_TSK, task_phy);
+
+	if ((CE_METHOD_IS_AES(type) && (mode == SS_AES_MODE_XTS)) || CE_METHOD_IS_RAES(type))
 		ss_writel(CE_REG_TLR, 0x1 << CE_REG_TLR_RAES_TYPE_SHIFT);
 	else if (CE_METHOD_IS_AES(type) && (mode != SS_AES_MODE_XTS))
 		ss_writel(CE_REG_TLR, 0x1 << CE_REG_TLR_SYMM_TYPE_SHIFT);
@@ -393,6 +426,29 @@ int ss_reg_print(char *buf, int len)
 		);
 }
 
+void ce_reg_print(void)
+{
+	pr_err("The SS control register:\n");
+	pr_err("[TSK] 0x%02x = 0x%08x\n", CE_REG_TSK, ss_readl(CE_REG_TSK));
+
+	pr_err("[ICR] 0x%02x = 0x%08x\n", CE_REG_ICR, ss_readl(CE_REG_ICR));
+	pr_err("[ISR] 0x%02x = 0x%08x\n", CE_REG_ISR, ss_readl(CE_REG_ISR));
+	pr_err("[TLR] 0x%02x = 0x%08x\n", CE_REG_TLR, ss_readl(CE_REG_TLR));
+	pr_err("[TSR] 0x%02x = 0x%08x\n", CE_REG_TSR, ss_readl(CE_REG_TSR));
+	pr_err("[ERR] 0x%02x = 0x%08x\n", CE_REG_ERR, ss_readl(CE_REG_ERR));
+
+	pr_err("[CSA] 0x%02x = 0x%08x\n", CE_REG_CSA, ss_readl(CE_REG_CSA));
+	pr_err("[CDA] 0x%02x = 0x%08x\n", CE_REG_CDA, ss_readl(CE_REG_CDA));
+
+	pr_err("[HCSA] 0x%02x = 0x%08x\n", CE_REG_HCSA, ss_readl(CE_REG_HCSA));
+	pr_err("[HCDA] 0x%02x = 0x%08x\n", CE_REG_HCDA, ss_readl(CE_REG_HCDA));
+	pr_err("[ACSA] 0x%02x = 0x%08x\n", CE_REG_ACSA, ss_readl(CE_REG_ACSA));
+	pr_err("[ACDA] 0x%02x = 0x%08x\n", CE_REG_ACDA, ss_readl(CE_REG_ACDA));
+	pr_err("[XCSA] 0x%02x = 0x%08x\n", CE_REG_XCSA, ss_readl(CE_REG_XCSA));
+	pr_err("[XCDA] 0x%02x = 0x%08x\n", CE_REG_XCDA, ss_readl(CE_REG_XCDA));
+	pr_err("[VER] 0x%02x = 0x%08x\n", CE_REG_VER, ss_readl(CE_REG_VER));
+}
+
 /* key: phsical address. */
 void ss_rng_key_set(char *key, int size, ce_new_task_desc_t *task)
 {
@@ -426,10 +482,18 @@ void ss_hash_method_set(int type, ce_new_task_desc_t *task)
 	task->main_cmd |= type << CE_CMD_HASH_METHOD_SHIFT;
 }
 
+void ss_hash_cmd_set(int channel_id, ce_new_task_desc_t *task)
+{
+	task->common_ctl |= ((channel_id << CHN) | (0x1 << LPKG) | (0x0 << DLAV) | (0x1 << IE));
+}
+
 void ss_rng_method_set(int hash_type, int type, ce_new_task_desc_t *task)
 {
 	task->main_cmd |= (type << CE_CMD_RNG_METHOD_SHIFT);
 	task->main_cmd |= (hash_type << CE_CMD_HASH_METHOD_SHIFT);
+
+	task->common_ctl |= ((0x1 << LPKG) | (0x0 << DLAV) | (0x1 << IE));
+
 	if (type == SS_METHOD_DRBG) {
 		task->common_ctl |= CE_CTL_HMAC_SHA1_LAST;
 		/* for drbg, need set sub_cmd bit[28:16] */
@@ -439,7 +503,14 @@ void ss_rng_method_set(int hash_type, int type, ce_new_task_desc_t *task)
 
 void ss_hash_rng_ctrl_start(ce_new_task_desc_t *task)
 {
-	ss_writel(CE_REG_TSK, (virt_to_phys(task)) >> 2);
+	phys_addr_t task_phy;
+
+	if (task->task_phy_addr)
+		task_phy = (task->task_phy_addr) >> 2;	/* task addr in word */
+	else
+		task_phy = virt_to_phys(task) >> 2;	/* task addr in word */
+
+	ss_writel(CE_REG_TSK, task_phy);
 	ss_writel(CE_REG_TLR, 0x1 << CE_REG_TLR_HASH_RBG_TYPE_SHIFT);
 }
 

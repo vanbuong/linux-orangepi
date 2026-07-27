@@ -11,6 +11,10 @@
 
 #include "linux/mman.h"
 #include <mali_kbase.h>
+#include <linux/version.h>
+#if (KERNEL_VERSION(6, 6, 0) <= LINUX_VERSION_CODE)
+#include <linux/maple_tree.h>
+#endif
 
 /* mali_kbase_mmap.c
  *
@@ -19,6 +23,7 @@
  */
 
 
+#if (KERNEL_VERSION(6, 6, 0) > LINUX_VERSION_CODE)
 /**
  * align_and_check() - Align the specified pointer to the provided alignment and
  *                     check that it is still in range.
@@ -93,6 +98,7 @@ static bool align_and_check(unsigned long *gap_end, unsigned long gap_start,
 
 	return true;
 }
+#endif
 
 /**
  * kbase_unmapped_area_topdown() - allocates new areas top-down from
@@ -132,6 +138,104 @@ static bool align_and_check(unsigned long *gap_end, unsigned long gap_start,
 static unsigned long kbase_unmapped_area_topdown(struct vm_unmapped_area_info
 		*info, bool is_shader_code, bool is_same_4gb_page)
 {
+#if (KERNEL_VERSION(6, 6, 0) <= LINUX_VERSION_CODE)
+	/*
+	 * For Linux 6.6+, the VMA management has been changed from red-black tree
+	 * to Maple Tree. The vm_unmapped_area() function is not exported for
+	 * module use, so we implement our own version using exported Maple Tree
+	 * APIs (mas_empty_area_rev).
+	 */
+	unsigned long length, gap, gap_end;
+	unsigned long low_limit, high_limit;
+	struct vm_area_struct *tmp;
+	struct mm_struct *mm = current->mm;
+	MA_STATE(mas, &mm->mm_mt, 0, 0);
+
+	/* Adjust search length to account for worst case alignment overhead */
+	length = info->length + info->align_mask;
+	if (length < info->length)
+		return -ENOMEM;
+
+	low_limit = info->low_limit;
+	high_limit = info->high_limit;
+
+retry:
+	if (mas_empty_area_rev(&mas, low_limit, high_limit - 1, length))
+		return -ENOMEM;
+
+	gap = mas.last + 1 - info->length;
+	gap -= (gap - info->align_offset) & info->align_mask;
+	gap_end = mas.last;
+
+	/* Check for 4GB boundary crossing if needed */
+	if (is_shader_code) {
+		unsigned long end = gap + info->length;
+		if ((gap & BASE_MEM_MASK_4GB) != ((end - 1) & BASE_MEM_MASK_4GB)) {
+			/* Crosses 4GB boundary, try to adjust */
+			unsigned long aligned_gap;
+			aligned_gap = gap & ~BASE_MEM_MASK_4GB;
+			if (aligned_gap >= low_limit) {
+				gap = aligned_gap;
+			} else {
+				/* Need to find another area */
+				high_limit = gap & ~BASE_MEM_MASK_4GB;
+				if (high_limit <= low_limit)
+					return -ENOMEM;
+				mas_reset(&mas);
+				goto retry;
+			}
+		}
+	} else if (is_same_4gb_page) {
+		unsigned long end = gap + info->length;
+		unsigned long mask = ~((unsigned long)U32_MAX);
+		if ((gap & mask) != ((end - 1) & mask)) {
+			/* Crosses 4GB boundary, try to find another area */
+			high_limit = gap & mask;
+			if (high_limit <= low_limit)
+				return -ENOMEM;
+			mas_reset(&mas);
+			goto retry;
+		}
+	}
+
+	/* Verify the gap doesn't overlap with adjacent VMAs */
+	tmp = mas_next(&mas, ULONG_MAX);
+	if (tmp && (tmp->vm_flags & VM_STARTGAP_FLAGS)) {
+		/* Equivalent to vm_start_gap() but without stack_guard_gap
+		 * which is not exported for module use */
+		unsigned long vm_start_adj = tmp->vm_start;
+
+		if (tmp->vm_flags & VM_GROWSDOWN)
+			vm_start_adj -= 256UL << PAGE_SHIFT;
+		if (vm_start_adj > tmp->vm_start)
+			vm_start_adj = 0;
+
+		if (vm_start_adj <= gap_end) {
+			high_limit = vm_start_adj;
+			mas_reset(&mas);
+			goto retry;
+		}
+	} else {
+		tmp = mas_prev(&mas, 0);
+		if (tmp) {
+			unsigned long vm_end_adj = tmp->vm_end;
+
+			if (tmp->vm_flags & VM_GROWSUP) {
+				vm_end_adj += 256UL << PAGE_SHIFT;
+				if (vm_end_adj < tmp->vm_end)
+					vm_end_adj = -PAGE_SIZE;
+			}
+
+			if (vm_end_adj > gap) {
+				high_limit = tmp->vm_start;
+				mas_reset(&mas);
+				goto retry;
+			}
+		}
+	}
+
+	return gap;
+#else
 	struct mm_struct *mm = current->mm;
 	struct vm_area_struct *vma;
 	unsigned long length, low_limit, high_limit, gap_start, gap_end;
@@ -227,6 +331,7 @@ check_current:
 	}
 
 	return -ENOMEM;
+#endif
 }
 
 

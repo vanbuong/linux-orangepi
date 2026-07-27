@@ -104,7 +104,7 @@ static struct ve_performat_info dvfs_performat[] = {
 };
 
 /* debug */
-#define VE_DEBUGFS_MAX_CHANNEL	16
+#define VE_DEBUGFS_MAX_CHANNEL	32
 #define VE_DEBUGFS_BUF_SIZE	1024
 
 struct ve_debugfs_proc {

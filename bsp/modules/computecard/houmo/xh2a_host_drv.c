@@ -7,6 +7,7 @@
 #include <xh2a_host_drv.h>
 #include <xh2a_pcie_api.h>
 
+static struct xh2a_ctl_ctx *ctl_ctx;
 static BLOCKING_NOTIFIER_HEAD(xh2a_host_notifier_list);
 
 int xh2a_host_register_notifier_chain(struct notifier_block *nb)
@@ -27,12 +28,29 @@ int xh2a_host_call_notifier_chain(int val, void *v)
 }
 EXPORT_SYMBOL(xh2a_host_call_notifier_chain);
 
+int xh2a_ctl_get_ctx(struct xh2a_ctl_ctx **ctl_out)
+{
+	if (!ctl_ctx)
+		return -ENODEV;
+
+	*ctl_out = ctl_ctx;
+
+	return 0;
+}
+EXPORT_SYMBOL(xh2a_ctl_get_ctx);
+
 static int __init xh2a_host_init(void)
 {
 	int rc;
 
 	pr_info("%s: installing xh2a driver version %s: %s\n", __func__,
 		XH2A_HOST_DRIVER_RELEASE, XH2A_HOST_DRIVER_BUILDTIME);
+
+	rc = xh2a_ctl_init(&ctl_ctx);
+	if (rc < 0) {
+		pr_err("%s: xh2a_ctl_init failed\n", __func__);
+		goto module_exit;
+	}
 
 	xh2a_sys_register_driver();
 
@@ -57,6 +75,8 @@ static int __init xh2a_host_init(void)
 	if (rc < 0) {
 		pr_info("%s: NO xh2a PCI driver found.\n", __func__);
 		rc = -ENODEV;
+		xh2a_ctl_exit(ctl_ctx);
+		ctl_ctx = NULL;
 		goto module_exit;
 	}
 
@@ -88,6 +108,9 @@ static void __exit xh2a_host_exit(void)
 	xh2a_qspi_unregister_driver();
 
 	xh2a_i2c_unregister_driver();
+
+	xh2a_ctl_exit(ctl_ctx);
+	ctl_ctx = NULL;
 
 	pr_info("%s: removed xh2a driver version %s: %s\n", __func__,
 		XH2A_HOST_DRIVER_RELEASE, XH2A_HOST_DRIVER_BUILDTIME);

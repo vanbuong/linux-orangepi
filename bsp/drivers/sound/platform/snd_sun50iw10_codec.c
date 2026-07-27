@@ -1764,7 +1764,11 @@ static int sunxi_codec_component_probe(struct snd_soc_component *component)
 	sunxi_jack_extcon.pdev = codec->pdev;
 	sunxi_jack_extcon.data = (void *)(&codec->jack_extcon_priv);
 
-	snd_sunxi_jack_init(&sunxi_jack_port);
+	ret = snd_sunxi_jack_init(&sunxi_jack_port);
+	if (ret) {
+		SND_LOG_ERR("jack init failed\n");
+		return ret;
+	}
 
 	return 0;
 }
@@ -2890,5 +2894,5 @@ module_exit(sunxi_codec_dev_exit);
 
 MODULE_AUTHOR("Dby@allwinnertech.com");
 MODULE_LICENSE("GPL");
-MODULE_VERSION("1.0.8");
+MODULE_VERSION("1.0.9");
 MODULE_DESCRIPTION("sunxi soundcard codec of internal-codec");

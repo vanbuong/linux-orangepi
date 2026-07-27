@@ -23,8 +23,8 @@
 #define DRV_TYPE_NAME   "compatible(unknow)"
 #endif
 
-#define DRV_RELEASE_DATE "20250410"
-#define DRV_PATCH_LEVEL  "002"
+#define DRV_RELEASE_DATE "20250923"
+#define DRV_PATCH_LEVEL  "003"
 #define DRV_RELEASE_TAG  "aic-bsp-" DRV_TYPE_NAME "-" DRV_RELEASE_DATE "-" DRV_PATCH_LEVEL
 
 static struct platform_device *aicbsp_pdev;
@@ -252,72 +252,6 @@ static ssize_t btpcm_show(struct device *dev,
 	return count;
 }
 
-static ssize_t btmode_show(struct device *dev,
-	struct device_attribute *attr, char *buf)
-{
-	ssize_t count = 0;
-
-	count += sprintf(&buf[count], "%d\n", aicbsp_info.btmode);
-
-	return count;
-}
-
-static ssize_t btmode_store(struct device *dev,
-	struct device_attribute *attr, const char *buf, size_t count)
-{
-	long val;
-	int err = kstrtol(buf, 0, &val);
-
-	if (err) {
-		pr_err("invalid input\n");
-		return err;
-	}
-
-	if (val < 0) {
-		pr_err("must greater than 0\n");
-		return val;
-	}
-
-	if (val >= AICBT_BTMODE_BT_ONLY_SW && val <= AICBT_BTMODE_NULL)
-		aicbsp_info.btmode = val;
-	else
-		aicbsp_info.btmode = -1;
-	return count;
-}
-
-static ssize_t lpm_enable_show(struct device *dev,
-	struct device_attribute *attr, char *buf)
-{
-	ssize_t count = 0;
-
-	count += sprintf(&buf[count], "%d\n", aicbsp_info.lpm_enable);
-
-	return count;
-}
-
-static ssize_t lpm_enable_store(struct device *dev,
-	struct device_attribute *attr, const char *buf, size_t count)
-{
-	long val;
-	int err = kstrtol(buf, 0, &val);
-
-	if (err) {
-		pr_err("invalid input\n");
-		return err;
-	}
-
-	if (val < 0) {
-		pr_err("must greater than 0\n");
-		return val;
-	}
-
-	if (val >= 0 && val <= 1)
-		aicbsp_info.lpm_enable = val;
-	else
-		aicbsp_info.lpm_enable = -1;
-	return count;
-}
-
 static DEVICE_ATTR(cpmode, S_IRUGO | S_IWUSR,
 		cpmode_show, cpmode_store);
 
@@ -336,12 +270,6 @@ static DEVICE_ATTR(sdio_phase, S_IRUGO | S_IWUSR,
 static DEVICE_ATTR(btpcm, S_IRUGO | S_IWUSR,
 		btpcm_show, NULL);
 
-static DEVICE_ATTR(btmode, S_IRUGO | S_IWUSR,
-		btmode_show, btmode_store);
-
-static DEVICE_ATTR(lpm_enable, S_IRUGO | S_IWUSR,
-		lpm_enable_show, lpm_enable_store);
-
 static struct attribute *aicbsp_attributes[] = {
 	&dev_attr_cpmode.attr,
 	&dev_attr_hwinfo.attr,
@@ -349,8 +277,6 @@ static struct attribute *aicbsp_attributes[] = {
 	&dev_attr_sdio_clock.attr,
 	&dev_attr_sdio_phase.attr,
 	&dev_attr_btpcm.attr,
-	&dev_attr_btmode.attr,
-	&dev_attr_lpm_enable.attr,
 	NULL,
 };
 

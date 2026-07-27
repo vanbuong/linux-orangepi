@@ -2137,6 +2137,7 @@ static struct sensor_win_size sensor_win_sizes[] = {
 	 .regs = sensor_1080p_25fps_regs,
 	 .regs_size = ARRAY_SIZE(sensor_1080p_25fps_regs),
 	 .set_size = NULL,
+	 .deskew     = 0x3,
 	},
 	{
 	 .width = 1920,
@@ -2189,6 +2190,7 @@ static int sensor_g_ctrl(struct v4l2_ctrl *ctrl)
 	case V4L2_CID_EXPOSURE:
 		return sensor_g_exp(sd, &ctrl->val);
 	}
+	usleep_range(40000, 44000);
 	return -EINVAL;
 }
 
@@ -2409,8 +2411,8 @@ static int sensor_probe(struct i2c_client *client,
 	info->fmt_num = N_FMTS;
 	info->win_size_num = N_WIN_SIZES;
 	info->combo_mode = CMB_TERMINAL_RES | CMB_PHYA_OFFSET2 | MIPI_NORMAL_MODE;
-	info->time_hs = 0x20;
-	info->stream_seq = MIPI_BEFORE_SENSOR;
+	// info->time_hs = 0x20;
+	info->stream_seq = MIPI_NEXT_SENSOR;
 	info->af_first_flag = 1;
 	info->exp = 0;
 	info->gain = 0;

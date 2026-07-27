@@ -26,6 +26,8 @@
 #include "v5/sunxi_ce_reg.h"
 #elif defined(SS_SUPPORT_CE_V4)
 #include "v4/sunxi_ce_reg.h"
+#elif defined(SS_SUPPORT_CE_V1)
+#include "v1/sunxi_ce_reg.h"
 #else
 #include "v3/sunxi_ce_reg.h"
 #endif
@@ -252,11 +254,83 @@ int ss_hash_padding(ss_hash_ctx_t *ctx, int type)
 #endif
 }
 
+/*
+ * Create update_buf to save the pad data left over from the previous update
+ * operation and the data for this update operation
+ */
+static int ss_hash_create_data_buf(struct ahash_request *req, int padlen)
+{
+	ss_aes_req_ctx_t *req_ctx = ahash_request_ctx(req);
+	ss_hash_ctx_t *ctx = req_ctx->ctx;
+
+	ctx->update_buf = kmalloc(req->nbytes + padlen, GFP_KERNEL);
+	if (!ctx->update_buf) {
+		SS_ERR("Fail to kmalloc update_buf(%d)\n", req->nbytes + padlen);
+		return -ENOMEM;
+	}
+
+	ctx->update_sg = kmalloc(sizeof(struct scatterlist), GFP_KERNEL);
+	if (!ctx->update_sg) {
+		SS_ERR("Fail to kmalloc scatterlist\n");
+		kfree(ctx->update_buf);
+		return -ENOMEM;
+	}
+
+	return 0;
+}
+
+static void ss_hash_destroy_data_buf(struct ahash_request *req)
+{
+	ss_aes_req_ctx_t *req_ctx = ahash_request_ctx(req);
+	ss_hash_ctx_t *ctx = req_ctx->ctx;
+
+	if (ctx->update_sg) {
+		kfree(ctx->update_sg);
+		ctx->update_sg = NULL;
+	}
+
+	if (ctx->update_buf) {
+		kfree(ctx->update_buf);
+		ctx->update_buf = NULL;
+	}
+}
+
+static int ss_hash_adjust_update_data(struct ahash_request *req)
+{
+	ss_aes_req_ctx_t *req_ctx = ahash_request_ctx(req);
+	ss_hash_ctx_t *ctx = req_ctx->ctx;
+	s32 sg_cnt = 0;
+	s32 padlen = 0;
+	int err;
+
+	SS_DBG("adjust update data, padlen = %d, update nbytes = %d\n", padlen, req->nbytes);
+	padlen = ctx->tail_len;
+
+	err = ss_hash_create_data_buf(req, padlen);
+	if (err) {
+		SS_ERR("Fail to allocate adjust buf\n");
+		return err;
+	}
+
+	memcpy(ctx->update_buf, ctx->pad, padlen);
+	memset(ctx->pad, 0, padlen);
+
+	sg_cnt = ss_sg_cnt(req->src, req->nbytes);
+	sg_copy_to_buffer(req->src, sg_cnt, ctx->update_buf + padlen, req->nbytes);
+
+	sg_init_one(ctx->update_sg, ctx->update_buf, req->nbytes + padlen);
+
+	req->nbytes += padlen;
+	ctx->cnt -= padlen;
+
+	return 0;
+}
+
 static int ss_hash_one_req(sunxi_ce_cdev_t *sss, struct ahash_request *req)
 {
 	int ret = 0;
 	ss_aes_req_ctx_t *req_ctx = ahash_request_ctx(req);
-	ss_hash_ctx_t *ctx = crypto_ahash_ctx(crypto_ahash_reqtfm(req));
+	ss_hash_ctx_t *ctx = req_ctx->ctx;
 
 	SS_ENTER();
 	if (!req->src) {
@@ -266,40 +340,48 @@ static int ss_hash_one_req(sunxi_ce_cdev_t *sss, struct ahash_request *req)
 
 	ss_dev_lock();
 
-	req_ctx->dma_src.sg = req->src;
+	if (ctx->update_sg)
+		req_ctx->dma_src.sg = ctx->update_sg;
+	else
+		req_ctx->dma_src.sg = req->src;
 
 	ret = ss_hash_start(ctx, req_ctx, req->nbytes, 0);
 	if (ret < 0)
 		SS_ERR("ss_hash_start fail(%d)\n", ret);
 
 	ss_dev_unlock();
+	ss_hash_destroy_data_buf(req);
 	return ret;
 }
 
 /* Backup the tail data to req_ctx->pad[]. */
-void ss_hash_save_tail(struct ahash_request *req)
+static int ss_hash_save_tail(struct ahash_request *req)
 {
-#ifdef HMAC_DATA_RREPROCE_ENABLE
-	int i;
-	unsigned char i_pad[SHA1_BLOCK_SIZE] = {0x36};
-#endif
 	s8 *buf = NULL;
 	s32 sg_cnt = 0;
 	s32 taillen = 0;
 	ss_aes_req_ctx_t *req_ctx = ahash_request_ctx(req);
-	ss_hash_ctx_t *ctx = crypto_ahash_ctx(crypto_ahash_reqtfm(req));
+	ss_hash_ctx_t *ctx = req_ctx->ctx;
+	s32 padlen = ctx->tail_len;
+	int err;
+
+	if (ctx->tail_len) {
+		err = ss_hash_adjust_update_data(req);
+		if (err)
+			return err;
+	}
 
 	taillen = req->nbytes % ss_hash_blk_size(req_ctx->type);
 	SS_DBG("type: %d, mode: %d, len: %d, tail: %d\n", req_ctx->type, req_ctx->mode, req->nbytes, taillen);
 	ctx->tail_len = taillen;
 	if (taillen == 0) {
 #ifndef HMAC_DATA_RREPROCE_ENABLE
-		return;  /* The package don't need to backup. */
+		return err;  /* The package don't need to backup. */
 #else
 		if (CE_METHOD_IS_HMAC(req_ctx->type))
 			ctx->hmac_all_data_len = req->nbytes + SHA1_BLOCK_SIZE;
 		else
-			return;
+			return err;
 	} else {
 		if (CE_METHOD_IS_HMAC(req_ctx->type))
 			ctx->hmac_all_data_len = req->nbytes / ss_hash_blk_size(req_ctx->type) * 64
@@ -307,22 +389,26 @@ void ss_hash_save_tail(struct ahash_request *req)
 #endif
 	}
 
-	buf = vmalloc(req->nbytes);
-	if (unlikely(buf == NULL)) {
-		SS_ERR("Fail to vmalloc(%d)\n", req->nbytes);
-		return;
+	buf = kmalloc(req->nbytes - padlen, GFP_KERNEL);
+	if (!buf) {
+		SS_ERR("Fail to kmalloc(%d)\n", req->nbytes - padlen);
+		err = -ENOMEM;
+		goto err0;
 	}
 
-	sg_cnt = ss_sg_cnt(req->src, req->nbytes);
-	sg_copy_to_buffer(req->src, sg_cnt, buf, req->nbytes); /* copy data from req->src to buf */
-	memcpy(ctx->pad, buf + req->nbytes - taillen, taillen);
+	sg_cnt = ss_sg_cnt(req->src, req->nbytes - padlen);
+	sg_copy_to_buffer(req->src, sg_cnt, buf, req->nbytes - padlen); /* copy data from req->src to buf */
+	memcpy(ctx->pad, buf + req->nbytes - padlen - taillen, taillen);
 
 #ifdef HMAC_DATA_RREPROCE_ENABLE
+	int i;
+	unsigned char i_pad[SHA1_BLOCK_SIZE] = {0x36};
 	if (CE_METHOD_IS_HMAC(req_ctx->type)) {
 		ctx->save_hmac_data = kzalloc(ctx->hmac_all_data_len + SHA1_BLOCK_SIZE, GFP_KERNEL);
 		if (!ctx->save_hmac_data) {
 			SS_ERR("Failed to kzalloc(%d)\n", req->nbytes + SHA1_BLOCK_SIZE);
-			return;
+			err = -ENOMEM;
+			goto err1;
 		}
 
 		for (i = 0; i < SHA1_BLOCK_SIZE; i++) {
@@ -333,21 +419,34 @@ void ss_hash_save_tail(struct ahash_request *req)
 
 		memcpy(ctx->save_hmac_data + SHA1_BLOCK_SIZE, buf, req->nbytes - ctx->tail_len);
 	}
+err1:
 #endif
-	vfree(buf);
+	kfree(buf);
+err0:
+	if (err)
+		ss_hash_destroy_data_buf(req);
+	return err;
 }
 
 int ss_hash_update(struct ahash_request *req)
 {
+	if (!req) {
+		SS_ERR("Invalid parameter.\n");
+		return -EAGAIN;
+	}
+
 	if (!req->nbytes) {
 		SS_ERR("Invalid length: %d.\n", req->nbytes);
 		return 0;
 	}
-	ss_hash_save_tail(req);
+
+	if (ss_hash_save_tail(req))
+		return -ENOMEM;
 
 	SS_DBG("Flags: %#x, len = %d\n", req->base.flags, req->nbytes);
 	if (ss_dev->suspend) {
 		SS_ERR("SS has already suspend.\n");
+		ss_hash_destroy_data_buf(req);
 		return -EAGAIN;
 	}
 
@@ -359,10 +458,17 @@ int ss_hash_final(struct ahash_request *req)
 {
 	int pad_len = 0;
 	ss_aes_req_ctx_t *req_ctx = ahash_request_ctx(req);
-	ss_hash_ctx_t *ctx = crypto_ahash_ctx(crypto_ahash_reqtfm(req));
+	ss_hash_ctx_t *ctx;
 	struct scatterlist last = {0}; /* make a sg struct for padding data. */
 
-	if (req->result == NULL) {
+	if (!req) {
+		SS_ERR("Invalid parameter.\n");
+		return -EAGAIN;
+	}
+
+	ctx = req_ctx->ctx;
+
+	if (!req->result) {
 		SS_ERR("Invalid result porinter.\n");
 		return -EINVAL;
 	}
@@ -407,6 +513,7 @@ int ss_hash_final(struct ahash_request *req)
 	ss_sha_final();
 
 	SS_DBG("Method: %d, cnt: %d\n", req_ctx->type, ctx->cnt);
+	ctx->tail_len = 0;
 
 	ss_check_sha_end();
 
@@ -433,6 +540,9 @@ int ss_hash_final(struct ahash_request *req)
 		ss_hash_swap(req->result, ctx->md_size);
 #endif
 
+	if (ctx)
+		kfree(ctx);
+
 	return 0;
 }
 
@@ -444,7 +554,11 @@ int ss_hash_finup(struct ahash_request *req)
 
 int ss_hash_digest(struct ahash_request *req)
 {
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 12, 0)
 	crypto_ahash_reqtfm(req)->init(req);
+#else
+	crypto_ahash_init(req);
+#endif
 	ss_hash_update(req);
 	return ss_hash_final(req);
 }
@@ -460,7 +574,11 @@ void ss_trng_postprocess(u8 *out, u32 outlen, u8 *in, u32 inlen)
 	struct crypto_ahash *tfm = NULL;
 	struct ahash_request *req = NULL;
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 12, 0)
 	tfm = crypto_alloc_ahash("sha256", CRYPTO_ALG_TYPE_AHASH, CRYPTO_ALG_TYPE_AHASH_MASK);
+#else
+	tfm = crypto_alloc_ahash("sha256", 0, 0);
+#endif
 	if (IS_ERR(tfm)) {
 		SS_ERR("Fail to alloc ahash tfm!\n");
 	}

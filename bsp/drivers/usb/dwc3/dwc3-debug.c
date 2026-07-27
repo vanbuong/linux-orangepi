@@ -164,10 +164,35 @@ static const struct file_operations dwc3_compliance_fops = {
 void dwc3_debug_init(struct dwc3 *dwc)
 {
 	struct dentry *root = debugfs_lookup(dev_name(dwc->dev), usb_debug_root);
+#if IS_ENABLED(CONFIG_ARCH_SUN60IW2)
+	u32 reg;
+#endif
 
 	/* Create rootdir with parent 'usb' present not yet! */
 	if (!root)
 		root = debugfs_create_dir(dev_name(dwc->dev), usb_debug_root);
+
+#if IS_ENABLED(CONFIG_ARCH_SUN60IW2)
+	//CP13
+	reg = dwc3_sunxi_readl(dwc->regs, 0xd064);
+	reg &= ~GENMASK(1, 0);
+	dwc3_sunxi_writel(dwc->regs, 0xd064, reg);
+	//CP14
+	reg = dwc3_sunxi_readl(dwc->regs, 0xd068);
+	reg &= ~GENMASK(1, 0);
+	reg |= BIT(1);
+	dwc3_sunxi_writel(dwc->regs, 0xd068, reg);
+	//CP15
+	reg = dwc3_sunxi_readl(dwc->regs, 0xd060);
+	reg &= ~GENMASK(1, 0);
+	reg |= BIT(0);
+	dwc3_sunxi_writel(dwc->regs, 0xd060, reg);
+	//CP16
+	reg = dwc3_sunxi_readl(dwc->regs, 0xd06c);
+	reg &= ~GENMASK(1, 0);
+	reg |= GENMASK(1, 0);
+	dwc3_sunxi_writel(dwc->regs, 0xd06c, reg);
+#endif
 
 	debugfs_create_file("compliance", 0644, root, dwc, &dwc3_compliance_fops);
 }

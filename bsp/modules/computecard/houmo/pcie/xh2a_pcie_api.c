@@ -597,7 +597,7 @@ int xh2a_pcie_dma_read_mem(void *handle, uint64_t paddr, void *host_dst_addr,
 			goto out;
 		}
 
-		memcpy(host_dst_addr + done_size, pd_wr->dma_cfg_buf,
+		memcpy((uint8_t *)host_dst_addr + done_size, pd_wr->dma_cfg_buf,
 		       xfer_size);
 
 		done_size += xfer_size;
@@ -649,7 +649,7 @@ int xh2a_pcie_dma_write_mem(void *handle, uint64_t paddr, void *host_src_addr,
 		else
 			xfer_size = XH2A_PCIE_HDMA_BUF_SIZE;
 
-		memcpy(pd_rd->dma_cfg_buf, host_src_addr + done_size,
+		memcpy(pd_rd->dma_cfg_buf, (uint8_t *)host_src_addr + done_size,
 		       xfer_size);
 
 		ret = xh2a_pcie_hdma_chan_transfer(pd_rd,
@@ -800,7 +800,7 @@ int xh2a_pcie_dma_read_mem_userspace(void *handle, uint64_t paddr,
 			goto out;
 		}
 
-		ret = copy_to_user(host_dst_addr + done_size,
+		ret = copy_to_user((uint8_t *)host_dst_addr + done_size,
 				   pd_wr->dma_cfg_buf, xfer_size);
 
 		if (ret != 0) {
@@ -864,7 +864,7 @@ int xh2a_pcie_dma_write_mem_userspace(void *handle, uint64_t paddr,
 			xfer_size = XH2A_PCIE_HDMA_BUF_SIZE;
 
 		ret = copy_from_user(pd_rd->dma_cfg_buf,
-				     host_src_addr + done_size, xfer_size);
+				     (uint8_t *)host_src_addr + done_size, xfer_size);
 
 		if (ret != 0) {
 			dev_err(&p_xh2a->pdev->dev,

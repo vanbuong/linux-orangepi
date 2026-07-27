@@ -48,6 +48,7 @@
 #define REG_EDP_MSA_MISC1        0x022c
 #define REG_EDP_HBLANK_LINK_CYC  0x0230
 #define REG_EDP_AUDIO            0x0300
+#define REG_EDP_AUDIO_CFG        0x0304
 #define REG_EDP_PHY_AUX          0x0400
 #define REG_EDP_AUX_TIMEOUT      0x0404
 #define REG_EDP_AUX_DATA0        0x0408

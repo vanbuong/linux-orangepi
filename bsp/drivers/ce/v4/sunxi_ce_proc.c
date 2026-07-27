@@ -16,6 +16,8 @@
 #include <linux/platform_device.h>
 #include <linux/highmem.h>
 #include <linux/dmaengine.h>
+#include <linux/dma-mapping.h>
+#include <linux/dmapool.h>
 #include <crypto/internal/hash.h>
 #include <crypto/internal/rng.h>
 #include <crypto/des.h>
@@ -240,14 +242,6 @@ static int ss_sg_config(ce_scatter_t *scatter,
 		cur = sg_next(cur);
 	}
 
-#ifdef SS_HASH_HW_PADDING
-		if (CE_METHOD_IS_HMAC(type)) {
-			scatter[cnt-1].len += (tail+3)/4;
-			info->has_padding = 0;
-			return 0;
-		}
-#endif
-
 	info->nents = cnt;
 	if (tail == 0) {
 		info->has_padding = 0;
@@ -368,115 +362,6 @@ static void ss_aead_unmap_padding(ce_scatter_t *scatter,
 	dma_unmap_single(&ss_dev->pdev->dev, scatter[index].addr, len, dir);
 }
 
-static int ss_hmac_start(ss_aes_ctx_t *ctx, ss_aes_req_ctx_t *req_ctx, int len)
-{
-	int ret = 0;
-	int i = 0;
-	int src_len = len;
-	int align_size;
-	int flow = ctx->comm.flow;
-	phys_addr_t phy_addr = 0;
-	ce_new_task_desc_t *task = (ce_new_task_desc_t *)&ss_dev->flows[flow].task;
-
-	ss_new_task_desc_init(task, flow);
-
-	ss_pending_clear(flow);
-	ss_irq_enable(flow);
-
-	if (CE_METHOD_IS_HMAC(req_ctx->type) && (req_ctx->type == SS_METHOD_HMAC_SHA1))
-		ss_hmac_method_set(SS_METHOD_SHA1, task);
-	else if (CE_METHOD_IS_HMAC(req_ctx->type) && (req_ctx->type == SS_METHOD_HMAC_SHA256))
-		ss_hmac_method_set(SS_METHOD_SHA256, task);
-	else
-		ss_hash_method_set(req_ctx->type, task);
-
-	SS_DBG("Flow: %d, Dir: %d, Method: %d, Mode: %d, len: %d / %d\n", flow,
-		req_ctx->dir, req_ctx->type, req_ctx->mode, len, ctx->cnt);
-
-	phy_addr = virt_to_phys(ctx->key);
-	SS_DBG("ctx->key addr, vir = 0x%px, phy = %pa\n", ctx->key, &phy_addr);
-	phy_addr = virt_to_phys(ctx->iv);
-	SS_DBG("ctx->iv addr, vir = 0x%px, phy = %pa\n", ctx->iv, &phy_addr);
-	phy_addr = virt_to_phys(task);
-	SS_DBG("Task addr, vir = 0x%px, phy = %pa\n", task, &phy_addr);
-
-	ss_rng_key_set(ctx->key, ctx->key_size, task);
-	ctx->comm.flags &= ~SS_FLAG_NEW_KEY;
-	dma_map_single(&ss_dev->pdev->dev,
-		ctx->key, ctx->key_size, DMA_MEM_TO_DEV);
-
-	align_size = ss_aes_align_size(req_ctx->type, req_ctx->mode);
-
-	/* Prepare the src scatterlist */
-	req_ctx->dma_src.nents = ss_sg_cnt(req_ctx->dma_src.sg, src_len);
-	src_len = ss_sg_len(req_ctx->dma_src.sg, len);
-	dma_map_sg(&ss_dev->pdev->dev,
-		req_ctx->dma_src.sg, req_ctx->dma_src.nents, DMA_MEM_TO_DEV);
-	ss_sg_config(task->src, &req_ctx->dma_src,
-		req_ctx->type, req_ctx->mode, src_len%align_size, 1);
-	ss_aes_map_padding(task->src,
-		&req_ctx->dma_src, req_ctx->mode, DMA_MEM_TO_DEV);
-
-	/* Prepare the dst scatterlist */
-	req_ctx->dma_dst.nents = ss_sg_cnt(req_ctx->dma_dst.sg, len);
-	dma_map_sg(&ss_dev->pdev->dev,
-		req_ctx->dma_dst.sg, req_ctx->dma_dst.nents, DMA_DEV_TO_MEM);
-	ss_sg_config(task->dst, &req_ctx->dma_dst,
-		req_ctx->type, req_ctx->mode, len%align_size, 1);
-	ss_aes_map_padding(task->dst,
-		&req_ctx->dma_dst, req_ctx->mode, DMA_DEV_TO_MEM);
-
-	/* data_len set and last_flag set */
-	ss_hmac_sha1_last(task);
-	ss_hash_data_len_set((src_len * 8), task);
-
-	/* Start CE controller. */
-	init_completion(&ss_dev->flows[flow].done);
-	dma_map_single(&ss_dev->pdev->dev, task,
-		sizeof(ce_new_task_desc_t), DMA_MEM_TO_DEV);
-
-	SS_DBG("Before CE, COMM_CTL: 0x%08x, ICR: 0x%08x\n",
-		task->common_ctl, ss_reg_rd(CE_REG_ICR));
-	ss_hash_rng_ctrl_start(task);
-	ce_print_new_task_desc(task);
-
-	ret = wait_for_completion_timeout(&ss_dev->flows[flow].done,
-		msecs_to_jiffies(SS_WAIT_TIME));
-	if (ret == 0) {
-		SS_ERR("Timed out\n");
-		ce_reg_print();
-		ss_reset();
-		ret = -ETIMEDOUT;
-	}
-	ss_irq_disable(flow);
-	dma_unmap_single(&ss_dev->pdev->dev, virt_to_phys(task),
-			sizeof(ce_new_task_desc_t), DMA_MEM_TO_DEV);
-
-	/* Unpadding and unmap the dst sg. */
-	ss_aes_unpadding(task->dst,
-		&req_ctx->dma_dst, req_ctx->mode, len%align_size);
-	ss_aes_unmap_padding(task->dst,
-		&req_ctx->dma_dst, req_ctx->mode, DMA_DEV_TO_MEM);
-	dma_unmap_sg(&ss_dev->pdev->dev,
-		req_ctx->dma_dst.sg, req_ctx->dma_dst.nents, DMA_DEV_TO_MEM);
-
-	/* Unpadding and unmap the src sg. */
-	ss_aes_unpadding(task->src,
-		&req_ctx->dma_src, req_ctx->mode, src_len%align_size);
-	ss_aes_unmap_padding(task->src,
-		&req_ctx->dma_src, req_ctx->mode, DMA_MEM_TO_DEV);
-	dma_unmap_sg(&ss_dev->pdev->dev,
-		req_ctx->dma_src.sg, req_ctx->dma_src.nents, DMA_MEM_TO_DEV);
-
-	dma_unmap_single(&ss_dev->pdev->dev,
-		virt_to_phys(ctx->key), ctx->key_size, DMA_MEM_TO_DEV);
-
-	SS_DBG("After CE, TSR: 0x%08x, ERR: 0x%08x\n",
-			ss_reg_rd(CE_REG_TSR), ss_reg_rd(CE_REG_ERR));
-	SS_DBG("After CE, dst data:\n");
-
-	return 0;
-}
 static int ss_aead_start(ss_aead_ctx_t *ctx, ss_aes_req_ctx_t *req_ctx)
 {
 	int ret = 0;
@@ -841,7 +726,7 @@ static int ss_aes_start(ss_aes_ctx_t *ctx, ss_aes_req_ctx_t *req_ctx, int len)
 }
 
 /* verify the key_len */
-int ss_aes_key_valid(struct crypto_ablkcipher *tfm, int len)
+int ss_aes_key_valid(struct crypto_tfm *tfm, int len)
 {
 	if (unlikely(len > SS_RSA_MAX_SIZE)) {
 		SS_ERR("Unsupported key size: %d\n", len);
@@ -1173,7 +1058,6 @@ int ss_drbg_get_random(struct crypto_rng *tfm, const u8 *src, u32 slen, u8 *rdat
 	return ret;
 }
 
-
 u32 ss_hash_start(ss_hash_ctx_t *ctx,
 		ss_aes_req_ctx_t *req_ctx, u32 len, u32 last)
 {
@@ -1202,7 +1086,12 @@ u32 ss_hash_start(ss_hash_ctx_t *ctx,
 	ss_pending_clear(flow);
 	ss_irq_enable(flow);
 
-	ss_hash_method_set(req_ctx->type, task);
+	if (req_ctx->type == SS_METHOD_HMAC_SHA1)
+		ss_hmac_method_set(SS_METHOD_SHA1, task);
+	else if (req_ctx->type == SS_METHOD_HMAC_SHA256)
+		ss_hmac_method_set(SS_METHOD_SHA256, task);
+	else
+		ss_hash_method_set(req_ctx->type, task);
 
 	SS_DBG("Flow: %d, Dir: %d, Method: %d, Mode: %d, len: %d / %d\n", flow,
 		req_ctx->dir, req_ctx->type, req_ctx->mode, len, ctx->cnt);
@@ -1211,9 +1100,21 @@ u32 ss_hash_start(ss_hash_ctx_t *ctx,
 	SS_DBG("Task addr, vir = 0x%px, phy = 0x%pa\n", task, &phy_addr);
 
 	ss_hash_iv_set(ctx->md, ctx->md_size, task);
-	ss_hash_iv_mode_set(1, task);
-	dma_map_single(&ss_dev->pdev->dev,
-		ctx->md, ctx->md_size, DMA_MEM_TO_DEV);
+	if (ctx->npackets++)
+		ss_hash_iv_mode_set(1, task);
+
+	dma_map_single(&ss_dev->pdev->dev, ctx->md, ctx->md_size, DMA_MEM_TO_DEV);
+
+#ifdef SS_HMAC_ENABLE
+	if (CE_METHOD_IS_HMAC(req_ctx->type)) {
+		/* hamc_hash set key operation same as rng */
+		ss_rng_key_set(ctx->key, ctx->key_size, task);
+		dma_map_single(&ss_dev->pdev->dev, ctx->key, ctx->key_size, DMA_TO_DEVICE);
+		ctx->comm.flags &= ~SS_FLAG_NEW_KEY;
+		phy_addr = virt_to_phys(ctx->key) >> 2; /* address in word */
+		SS_DBG("key addr, vir = 0x%px, phy = 0x%pa\n", ctx->key, &phy_addr);
+	}
+#endif
 
 	if (last == 1) {
 		ss_hmac_sha1_last(task);
@@ -1223,10 +1124,8 @@ u32 ss_hash_start(ss_hash_ctx_t *ctx,
 
 	/* Prepare the src scatterlist */
 	req_ctx->dma_src.nents = ss_sg_cnt(req_ctx->dma_src.sg, len);
-	dma_map_sg(&ss_dev->pdev->dev, req_ctx->dma_src.sg,
-		req_ctx->dma_src.nents, DMA_MEM_TO_DEV);
-	ss_sg_config(task->src,
-		&req_ctx->dma_src, req_ctx->type, 0, len%blk_size, 1);
+	dma_map_sg(&ss_dev->pdev->dev, req_ctx->dma_src.sg, req_ctx->dma_src.nents, DMA_MEM_TO_DEV);
+	ss_sg_config(task->src, &req_ctx->dma_src, req_ctx->type, 0, len%blk_size, 1);
 
 #ifdef SS_HASH_HW_PADDING
 	if (last == 1) {
@@ -1248,16 +1147,15 @@ u32 ss_hash_start(ss_hash_ctx_t *ctx,
 			task->dst[0].len  = SHA384_DIGEST_SIZE/4 ;
 	}
 
-	dma_map_single(&ss_dev->pdev->dev,
-		digest, SHA512_DIGEST_SIZE, DMA_DEV_TO_MEM);
-	phy_addr = virt_to_phys(digest);
+	dma_map_single(&ss_dev->pdev->dev, digest, SHA512_DIGEST_SIZE, DMA_DEV_TO_MEM);
+	phy_addr = virt_to_phys(digest) >> 2; /* address in word */
 	SS_DBG("digest addr, vir = 0x%px, phy = 0x%pa\n", digest, &phy_addr);
 
 	/* addr should set in word, src_len and dst_len set in bytes */
-		for (i = 0; i < 8; i++) {
-			task->src[i].len = (task->src[i].len) << 2;
-			task->dst[i].len = (task->dst[i].len) << 2;
-		}
+	for (i = 0; i < 8; i++) {
+		task->src[i].len = (task->src[i].len) << 2;
+		task->dst[i].len = (task->dst[i].len) << 2;
+	}
 
 	ce_print_new_task_desc(task);
 	/* Start CE controller. */
@@ -1278,20 +1176,16 @@ u32 ss_hash_start(ss_hash_ctx_t *ctx,
 	}
 	ss_irq_disable(flow);
 
-	dma_unmap_single(&ss_dev->pdev->dev, virt_to_phys(task),
-		sizeof(ce_new_task_desc_t), DMA_MEM_TO_DEV);
-	dma_unmap_single(&ss_dev->pdev->dev, virt_to_phys(digest),
-		SHA512_DIGEST_SIZE, DMA_DEV_TO_MEM);
-	dma_unmap_sg(&ss_dev->pdev->dev, req_ctx->dma_src.sg,
-		req_ctx->dma_src.nents, DMA_MEM_TO_DEV);
+	dma_unmap_single(&ss_dev->pdev->dev, virt_to_phys(task), sizeof(ce_new_task_desc_t), DMA_MEM_TO_DEV);
+	dma_unmap_single(&ss_dev->pdev->dev, virt_to_phys(digest), SHA512_DIGEST_SIZE, DMA_DEV_TO_MEM);
+	dma_unmap_sg(&ss_dev->pdev->dev, req_ctx->dma_src.sg, req_ctx->dma_src.nents, DMA_MEM_TO_DEV);
 #ifdef SS_HASH_HW_PADDING
 	if (last == 1) {
 		ctx->cnt >>= 3;
 	}
 #endif
 
-	SS_DBG("After CE, TSR: 0x%08x, ERR: 0x%08x\n",
-			ss_reg_rd(CE_REG_TSR), ss_reg_rd(CE_REG_ERR));
+	SS_DBG("After CE, TSR: 0x%08x, ERR: 0x%08x\n", ss_reg_rd(CE_REG_TSR), ss_reg_rd(CE_REG_ERR));
 	SS_DBG("After CE, dst data:\n");
 	ss_print_hex(digest, SHA512_DIGEST_SIZE, digest);
 
@@ -1354,7 +1248,7 @@ void ss_aead_load_iv(ss_aead_ctx_t *ctx, ss_aes_req_ctx_t *req_ctx,
 	ss_print_hex(ctx->iv, ctx->iv_size, ctx->iv);
 }
 
-int ss_aead_one_req(sunxi_ss_t *sss, struct aead_request *req)
+int ss_aead_one_req(sunxi_ce_cdev_t *sss, struct aead_request *req)
 {
 	int ret = 0;
 	struct crypto_aead *tfm = NULL;
@@ -1392,10 +1286,10 @@ int ss_aead_one_req(sunxi_ss_t *sss, struct aead_request *req)
 	return ret;
 }
 
-int ss_aes_one_req(sunxi_ss_t *sss, struct ablkcipher_request *req)
+int ss_aes_one_req(sunxi_ce_cdev_t *sss, struct skcipher_request *req)
 {
 	int ret = 0;
-	struct crypto_ablkcipher *tfm = NULL;
+	struct crypto_skcipher *tfm = NULL;
 	ss_aes_ctx_t *ctx = NULL;
 	ss_aes_req_ctx_t *req_ctx = NULL;
 
@@ -1407,11 +1301,11 @@ int ss_aes_one_req(sunxi_ss_t *sss, struct ablkcipher_request *req)
 
 	ss_dev_lock();
 
-	tfm = crypto_ablkcipher_reqtfm(req);
-	req_ctx = ablkcipher_request_ctx(req);
-	ctx = crypto_ablkcipher_ctx(tfm);
+	tfm = crypto_skcipher_reqtfm(req);
+	req_ctx = skcipher_request_ctx(req);
+	ctx = crypto_skcipher_ctx(tfm);
 
-	ss_load_iv(ctx, req_ctx, req->info, crypto_ablkcipher_ivsize(tfm));
+	ss_load_iv(ctx, req_ctx, req->iv, crypto_skcipher_ivsize(tfm));
 
 	req_ctx->dma_src.sg = req->src;
 	req_ctx->dma_dst.sg = req->dst;
@@ -1420,11 +1314,7 @@ int ss_aes_one_req(sunxi_ss_t *sss, struct ablkcipher_request *req)
 	ss_rsa_preprocess(ctx, req_ctx, req->nbytes);
 #endif
 
-	if (CE_METHOD_IS_HMAC(req_ctx->type)) {
-		ret = ss_hmac_start(ctx, req_ctx, req->nbytes);
-	} else {
-		ret = ss_aes_start(ctx, req_ctx, req->nbytes);
-	}
+	ret = ss_aes_start(ctx, req_ctx, req->cryptlen);
 	if (ret < 0)
 		SS_ERR("ss_aes_start fail(%d)\n", ret);
 
@@ -1438,7 +1328,7 @@ int ss_aes_one_req(sunxi_ss_t *sss, struct ablkcipher_request *req)
 	}
 #endif
 
-	ctx->cnt += req->nbytes;
+	ctx->cnt += req->cryptlen;
 	return ret;
 }
 
@@ -1446,7 +1336,7 @@ irqreturn_t sunxi_ss_irq_handler(int irq, void *dev_id)
 {
 	int i;
 	int pending = 0;
-	sunxi_ss_t *sss = (sunxi_ss_t *)dev_id;
+	sunxi_ce_cdev_t *sss = (sunxi_ce_cdev_t *)dev_id;
 
 	pending = ss_pending_get();
 	SS_DBG("pending: %#x\n", pending);
@@ -1459,4 +1349,75 @@ irqreturn_t sunxi_ss_irq_handler(int irq, void *dev_id)
 	}
 
 	return IRQ_HANDLED;
+}
+
+int ce_trng_get_random(u8 *buf, u32 rng_len, u32 flag)
+{
+	int err = 0;
+	int flow = 0;
+	phys_addr_t phy_addr = 0;
+	dma_addr_t ptask = 0;
+	ce_new_task_desc_t *task = NULL;
+
+	if (!buf || !rng_len) {
+		SS_ERR("input is NULL\n");
+		return -EINVAL;
+	}
+
+	task = dma_pool_zalloc(ss_dev->task_pool, GFP_KERNEL, &ptask);
+	if (!task) {
+		SS_ERR("dma_pool_zalloc fail\n");
+		return -ENOMEM;
+	}
+	SS_DBG("Task addr, vir = 0x%px, phy = 0x%px\n", task, (void *)ptask);
+
+	ss_new_task_desc_init(task, flow);
+	task->task_phy_addr = ptask;
+
+	ss_rng_method_set(SS_METHOD_SHA256, SS_METHOD_TRNG, task);
+
+	phy_addr = virt_to_phys(buf);
+	SS_DBG("buf addr, vir = 0x%px, phy = %pa\n", buf, &phy_addr);
+
+	/* Prepare the dst scatterlist */
+	ce_task_addr_set(buf, 0, (u8 *)&(task->dst[0].addr));
+	task->dst[0].len = rng_len;
+	dma_map_single(&ss_dev->pdev->dev, buf, rng_len, DMA_TO_DEVICE);
+
+	SS_DBG("Flow: %d, Request: %d\n", flow, rng_len);
+
+	ce_print_new_task_desc(task);
+
+	init_completion(&ss_dev->flows[flow].done);
+
+	SS_DBG("Before CE, COMM_CTL: 0x%08x, ICR: 0x%08x\n", task->common_ctl, ss_reg_rd(CE_REG_ICR));
+
+	ss_pending_clear(flow);
+	ss_irq_enable(flow);
+	/* Start CE controller. */
+	ss_hash_rng_ctrl_start(task);
+
+	err = wait_for_completion_timeout(&ss_dev->flows[flow].done, msecs_to_jiffies(SS_WAIT_TIME));
+	if (!err) {
+		SS_ERR("Timed out\n");
+		SS_ERR("ERR: 0x%08x\n", ss_reg_rd(CE_REG_ERR));
+		dma_pool_free(ss_dev->task_pool, task, ptask);
+		ss_reset();
+		err = -ETIMEDOUT;
+	}
+	SS_DBG("After CE, TSR: 0x%08x, ERR: 0x%08x\n", ss_reg_rd(CE_REG_TSR), ss_reg_rd(CE_REG_ERR));
+	if (ss_flow_err(flow)) {
+		SS_ERR("CE return error: %d\n", ss_flow_err(flow));
+		return -EINVAL;
+	}
+	SS_DBG("After CE, dst data:\n");
+	ss_print_hex(buf, rng_len, buf);
+
+	dma_unmap_single(&ss_dev->pdev->dev, virt_to_phys(buf), rng_len, DMA_FROM_DEVICE);
+
+	dma_pool_free(ss_dev->task_pool, task, ptask);
+
+	ss_irq_disable(flow);
+
+	return 0;
 }

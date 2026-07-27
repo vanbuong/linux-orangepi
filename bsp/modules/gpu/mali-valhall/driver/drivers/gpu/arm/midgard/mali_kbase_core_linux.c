@@ -4488,6 +4488,7 @@ void kbase_device_pm_term(struct kbase_device *kbdev)
 }
 
 #if defined(CONFIG_PM_OPP)
+#if IS_ENABLED(CONFIG_ARCH_SUN55IW3)
 static int sunxi_match_vf_table(u32 combi, u32 *index)
 {
 	struct device_node *np = NULL;
@@ -4574,8 +4575,97 @@ static void sunxi_set_gpu_opp_table_name(struct kbase_device *kbdev)
 	u_volt = u_volt / 1000;
 	sunxi_get_gpu_opp_table_name(opp_table_name, u_volt);
 	dev_info(kbdev->dev, "mali get opp_table_name is %s\n", opp_table_name);
+#if (KERNEL_VERSION(6, 0, 0) <= LINUX_VERSION_CODE)
+	kbdev->prop_name_token = dev_pm_opp_set_prop_name(kbdev->dev, opp_table_name);
+#else
 	dev_pm_opp_set_prop_name(kbdev->dev, opp_table_name);
+#endif
 }
+
+#elif IS_ENABLED(CONFIG_ARCH_SUN65IW1)
+#define MAX_NAME_LEN	10
+static int match_vf_table(struct kbase_device *kbdev, u32 combi, u32 *index)
+{
+	struct device_node *np = NULL;
+	int nsels, ret, i;
+	u32 tmp;
+
+	np = of_find_node_by_name(NULL, "vf_mapping_table");
+	if (!np) {
+		dev_info(kbdev->dev, "Unable to find node\n");
+		return -EINVAL;
+	}
+
+	if (!of_get_property(np, "table", &nsels))
+		return -EINVAL;
+
+	nsels /= sizeof(u32);
+	if (!nsels) {
+		dev_info(kbdev->dev, "invalid table property size\n");
+		return -EINVAL;
+	}
+
+	for (i = 0; i < nsels / 2; i++) {
+		ret = of_property_read_u32_index(np, "table", i * 2, &tmp);
+		if (ret) {
+			dev_info(kbdev->dev, "could not retrieve table property: %d\n", ret);
+			return ret;
+		}
+
+		if (tmp == combi) {
+			ret = of_property_read_u32_index(np, "table", i * 2 + 1, &tmp);
+			if (ret) {
+				dev_info(kbdev->dev, "could not retrieve table property: %d\n", ret);
+				return ret;
+			}
+
+			*index = tmp;
+			break;
+		} else
+			continue;
+	}
+
+	if (i == nsels/2)
+		dev_info(kbdev->dev, "%s %d, could not match vf table, i:%d", __func__, __LINE__, i);
+
+	return 0;
+}
+
+static void sunxi_set_gpu_opp_table_name(struct kbase_device *kbdev)
+{
+	char opp_table_name[MAX_NAME_LEN] = { 0 };
+	u32 dvfs = 0;
+	u32 index = 0x0;
+	unsigned int u_volt = 900000;
+
+	if (kbdev->regulators[0] && !kbdev->independent_power)
+		u_volt = regulator_get_voltage(kbdev->regulators[0]);
+
+	dvfs = index;
+
+#if IS_ENABLED(CONFIG_AW_SID)
+	if (sunxi_get_soc_dvfs(&dvfs))
+		dev_info(kbdev->dev, "failed to get soc dvfs, use default vf table\n");
+#else
+	dvfs = 0x1;
+	dev_err(kbdev->dev, "CONFIG_AW_SID is close, set dvfs = 0x1\n");
+#endif
+
+	match_vf_table(kbdev, dvfs, &index);
+
+	if (kbdev->independent_power)
+		snprintf(opp_table_name, MAX_NAME_LEN, "vf%07x", index);
+	else
+		snprintf(opp_table_name, MAX_NAME_LEN, "vf%04x%.3d", index, u_volt);
+
+	dev_info(kbdev->dev, "mali get opp_table_name is %s\n", opp_table_name);
+#if (KERNEL_VERSION(6, 0, 0) <= LINUX_VERSION_CODE)
+	kbdev->prop_name_token = dev_pm_opp_set_prop_name(kbdev->dev, opp_table_name);
+#else
+	dev_pm_opp_set_prop_name(kbdev->dev, opp_table_name);
+#endif
+}
+#endif /*CONFIG_ARCH_SUN55IW3 else CONFIG_ARCH_SUN65IW1*/
 #endif /* CONFIG_PM_OPP */
 
 int power_control_init(struct kbase_device *kbdev)
@@ -4746,11 +4836,12 @@ void power_control_term(struct kbase_device *kbdev)
 	 * If user don't call it, rmmod and reinsmod mali_kbase.ko,
 	 * dev_pm_opp_set_regulators will be failed.
 	 */
-	dev_pm_opp_put_prop_name(kbdev->opp_table);
 	dev_pm_opp_of_remove_table(kbdev->dev);
 #if defined(CONFIG_REGULATOR)
 #if (KERNEL_VERSION(6, 0, 0) <= LINUX_VERSION_CODE)
-	if (kbdev->token > -EPERM)
+	if (kbdev->prop_name_token > 0)
+		dev_pm_opp_put_prop_name(kbdev->prop_name_token);
+	if (kbdev->token > 0)
 		dev_pm_opp_put_regulators(kbdev->token);
 #elif (KERNEL_VERSION(4, 10, 0) <= LINUX_VERSION_CODE)
 	if (!IS_ERR_OR_NULL(kbdev->opp_table))
@@ -4770,12 +4861,19 @@ void power_control_term(struct kbase_device *kbdev)
 	}
 
 #if defined(CONFIG_OF) && defined(CONFIG_REGULATOR)
+#if (KERNEL_VERSION(6, 0, 0) <= LINUX_VERSION_CODE)
+	/* Regulators are already released by dev_pm_opp_put_regulators()
+	 * via the OPP config token, skip manual regulator_put() to avoid
+	 * double free warning.
+	 */
+#else
 	for (i = 0; i < BASE_MAX_NR_CLOCKS_REGULATORS; i++) {
 		if (kbdev->regulators[i]) {
 			regulator_put(kbdev->regulators[i]);
 			kbdev->regulators[i] = NULL;
 		}
 	}
+#endif /* (KERNEL_VERSION(6, 0, 0) <= LINUX_VERSION_CODE) */
 #endif
 }
 
@@ -5632,6 +5730,7 @@ static int kbase_platform_device_probe(struct platform_device *pdev)
 
 #if (KERNEL_VERSION(6, 0, 0) <= LINUX_VERSION_CODE)
 	kbdev->token = -EPERM;
+	kbdev->prop_name_token = -EPERM;
 #endif /* (KERNEL_VERSION(6, 0, 0) <= LINUX_VERSION_CODE) */
 
 	dev_set_drvdata(kbdev->dev, kbdev);

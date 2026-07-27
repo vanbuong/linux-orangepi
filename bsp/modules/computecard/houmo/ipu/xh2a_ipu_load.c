@@ -8,7 +8,7 @@
 #include <linux/uaccess.h>
 #include <linux/workqueue.h>
 #include <linux/reboot.h>
-
+#include <linux/version.h>
 #include <xh2a_address.h>
 
 #include "xh2a_ipu_device.h"
@@ -143,7 +143,11 @@ void xh2a_ipu_load_work(struct work_struct *work)
 static void xh2a_ipu_load_timer_handler(struct timer_list *t)
 {
 	struct xh2a_ipu_device *ipu_dev;
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 16, 0)
+	ipu_dev = timer_container_of(ipu_dev, t, load_timer);
+#else
 	ipu_dev = from_timer(ipu_dev, t, load_timer);
+#endif
 
 	if (unlikely(atomic_read(&ipu_dev->load_stop)))
 		return;
@@ -195,13 +199,17 @@ void xh2a_ipu_load_stop(struct xh2a_ipu_device *ipu_dev)
 	if (atomic_xchg(&ipu_dev->load_stop, 1))
 		return;
 
-	del_timer(&ipu_dev->load_timer);
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 16, 0)
+	timer_delete_sync(&ipu_dev->load_timer);
+#else
+	del_timer_sync(&ipu_dev->load_timer);
+#endif
 	cancel_work_sync(&ipu_dev->ipu_load_work);
 	xh2a_ipu_update_load(ipu_dev, 0);
 }
 
 static int xh2a_ipu_load_shutdown_cb(struct notifier_block *nb,
-				unsigned long action, void *data)
+				     unsigned long action, void *data)
 {
 	struct xh2a_ipu_device *ipu_dev =
 		container_of(nb, struct xh2a_ipu_device, load_shutdown_nb);

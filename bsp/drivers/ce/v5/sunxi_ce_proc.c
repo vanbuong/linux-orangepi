@@ -134,7 +134,7 @@ static int ss_sg_len(struct scatterlist *sg, int total)
 
 static int ss_aes_align_size(int type, int mode)
 {
-	if ((type == SS_METHOD_ECC))
+	if (type == SS_METHOD_ECC)
 		return 4;
 	else if ((CE_IS_AES_MODE(type, mode, CTS))
 			|| (CE_IS_AES_MODE(type, mode, CFB))

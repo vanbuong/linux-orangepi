@@ -694,11 +694,20 @@ static int sunxi_tdm_top_s_stream(struct tdm_rx_dev *rx, int enable)
 		csic_tdm_tx_enable(tdm->id);
 		csic_tdm_tx_cap_enable(tdm->id);
 		ini_en = RX_FRM_LOST_INT_EN | RX_FRM_ERR_INT_EN | RX_BTYPE_ERR_INT_EN |
-				RX_BUF_FULL_INT_EN | RX_HB_SHORT_INT_EN | RX_FIFO_FULL_INT_EN |
-				TDM_LBC_ERR_INT_EN | TDM_FIFO_UNDER_INT_EN | SPEED_DN_FIFO_FULL_INT_EN |
-				SPEED_DN_HSYNC_INT_EN | RX_CHN_CFG_MODE_INT_EN | TX_CHN_CFG_MODE_INT_EN |
-				RDM_LBC_FIFO_FULL_INT_EN;
-#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN55IW6) || IS_ENABLED(CONFIG_ARCH_SUN60IW1) || IS_ENABLED(CONFIG_ARCH_SUN60IW2)
+			RX_BUF_FULL_INT_EN | RX_HB_SHORT_INT_EN | RX_FIFO_FULL_INT_EN |
+			TDM_LBC_ERR_INT_EN | TDM_FIFO_UNDER_INT_EN |
+			RX_CHN_CFG_MODE_INT_EN | TX_CHN_CFG_MODE_INT_EN;
+#if IS_ENABLED(CONFIG_ARCH_SUN65IW1)
+		/*
+		ini_en |= RX0_FRM_START_INT_EN | RX1_FRM_START_INT_EN | RX2_FRM_START_INT_EN | RX3_FRM_START_INT_EN;
+		ini_en |= RX0_N_LINE_START_INT_EN | RX1_N_LINE_START_INT_EN | RX2_N_LINE_START_INT_EN | RX3_N_LINE_START_INT_EN;
+		*/
+#else
+		ini_en |= SPEED_DN_FIFO_FULL_INT_EN | SPEED_DN_HSYNC_INT_EN | RDM_LBC_FIFO_FULL_INT_EN;
+#endif
+#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN55IW6) ||\
+	 IS_ENABLED(CONFIG_ARCH_SUN60IW1) || IS_ENABLED(CONFIG_ARCH_SUN60IW2) ||\
+	 IS_ENABLED(CONFIG_ARCH_SUN65IW1)
 		if (tdm->work_mode == TDM_ONLINE && tdm->ws.speed_dn_en) {
 			if (rx->ws.wdr_mode == ISP_NORMAL_MODE)
 				ini_en |= RX0_FRM_DONE_INT_EN;
@@ -709,7 +718,12 @@ static int sunxi_tdm_top_s_stream(struct tdm_rx_dev *rx, int enable)
 		csic_tdm_int_clear_status(tdm->id, TDM_INT_ALL);
 		csic_tdm_int_enable(tdm->id, ini_en);
 		vin_log(VIN_LOG_TDM, "tdm%d open first, setting the interrupt and tx configuration!\n", tdm->id);
-
+#if IS_ENABLED(CONFIG_ARCH_SUN65IW1)
+		csic_tdm_set_line_int_num(tdm->id, 0, 120);
+		csic_tdm_set_line_int_num(tdm->id, 1, 120);
+		csic_tdm_set_line_int_num(tdm->id, 2, 120);
+		csic_tdm_set_line_int_num(tdm->id, 3, 120);
+#endif
 	} else {
 		tdm->ws.speed_dn_en = 0;
 		csic_tdm_int_disable(tdm->id, TDM_INT_ALL);
@@ -998,7 +1012,8 @@ static int sunxi_tdm_subdev_s_stream(struct v4l2_subdev *sd, int enable)
 #endif
 			tdm_rx->ws.tx_func_en = 1;
 			if (tdm_rx->id == 0) {
-#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN55IW6)
+#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN55IW6) ||\
+	IS_ENABLED(CONFIG_ARCH_SUN65IW1)
 				tdm_rx->ws.pkg_en = 1;
 				tdm_rx->ws.lbc_en = 0;
 #else
@@ -1055,7 +1070,8 @@ static int sunxi_tdm_subdev_s_stream(struct v4l2_subdev *sd, int enable)
 #endif
 				tdm_rx->ws.tx_func_en = 1;
 				if (tdm_rx->id == 0 || tdm_rx->id == 1) {
-#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN55IW6)
+#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN55IW6) ||\
+	IS_ENABLED(CONFIG_ARCH_SUN65IW1)
 					tdm_rx->ws.pkg_en = 1;
 					tdm_rx->ws.lbc_en = 0;
 #else
@@ -2345,22 +2361,30 @@ static irqreturn_t tdm_isr(int irq, void *priv)
 	if (status.rx0_frm_done) {
 		csic_tdm_int_clear_status(tdm->id, RX0_FRM_DONE_INT_EN);
 		vin_log(VIN_LOG_TDM, "tdm%d rx0 frame done!\n", tdm->id);
-#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN55IW6) || IS_ENABLED(CONFIG_ARCH_SUN60IW1) || IS_ENABLED(CONFIG_ARCH_SUN60IW2)
+#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN55IW6) ||\
+	 IS_ENABLED(CONFIG_ARCH_SUN60IW1) || IS_ENABLED(CONFIG_ARCH_SUN60IW2) ||\
+	 IS_ENABLED(CONFIG_ARCH_SUN65IW1)
 		tdm->rx_stream_cnt[0]++;
 		if (tdm->rx_stream_cnt[0] > 100) {
 			csic_tdm_int_disable(tdm->id, RX0_FRM_DONE_INT_EN);
+#if !defined(CONFIG_ARCH_SUN65IW1)
 			csic_tdm_int_enable(tdm->id, SPEED_DN_FIFO_FULL_INT_EN | SPEED_DN_FIFO_FULL_INT_EN);
+#endif
 		}
 #endif
 	}
 	if (status.rx1_frm_done) {
 		csic_tdm_int_clear_status(tdm->id, RX1_FRM_DONE_INT_EN);
 		vin_log(VIN_LOG_TDM, "tdm%d rx1 frame done!\n", tdm->id);
-#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN55IW6) || IS_ENABLED(CONFIG_ARCH_SUN60IW1) || IS_ENABLED(CONFIG_ARCH_SUN60IW2)
+#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN55IW6) ||\
+	 IS_ENABLED(CONFIG_ARCH_SUN60IW1) || IS_ENABLED(CONFIG_ARCH_SUN60IW2) ||\
+	 IS_ENABLED(CONFIG_ARCH_SUN65IW1)
 		tdm->rx_stream_cnt[1]++;
 		if (tdm->rx_stream_cnt[1] > 100) {
 			csic_tdm_int_disable(tdm->id, RX1_FRM_DONE_INT_EN);
+#if !defined(CONFIG_ARCH_SUN65IW1)
 			csic_tdm_int_enable(tdm->id, SPEED_DN_FIFO_FULL_INT_EN | SPEED_DN_FIFO_FULL_INT_EN);
+#endif
 		}
 #endif
 	}
@@ -2385,6 +2409,7 @@ static irqreturn_t tdm_isr(int irq, void *priv)
 		vin_log(VIN_LOG_TDM, "tdm%d tx chn cfg!\n", tdm->id);
 	}
 
+#if !defined(CONFIG_ARCH_SUN65IW1)
 	if (status.speed_dn_hsync) {
 		csic_tdm_int_clear_status(tdm->id, SPEED_DN_HSYNC_INT_EN);
 		vin_err("tdm%d speed dn hsync!\n", tdm->id);
@@ -2394,6 +2419,7 @@ static irqreturn_t tdm_isr(int irq, void *priv)
 		csic_tdm_int_clear_status(tdm->id, SPEED_DN_FIFO_FULL_INT_EN);
 		vin_err("tdm%d speed dn fifo full!\n", tdm->id);
 	}
+#endif
 
 	if (status.tx_fifo_under) {
 		csic_tdm_int_clear_status(tdm->id, TDM_FIFO_UNDER_INT_EN);
@@ -2427,11 +2453,49 @@ static irqreturn_t tdm_isr(int irq, void *priv)
 		schedule_work(&tdm->tdm_reset_task);
 	}
 
+#if !defined(CONFIG_ARCH_SUN65IW1)
 	if (status.tdm_lbc_fifo_full) {
 		csic_tdm_int_clear_status(tdm->id, RDM_LBC_FIFO_FULL_INT_EN);
 		vin_err("tdm%d lbc fifo overflow!\n", tdm->id);
 		schedule_work(&tdm->tdm_reset_task);
 	}
+#endif
+
+#if IS_ENABLED(CONFIG_ARCH_SUN65IW1)
+	if (status.rx0_frm_start) {
+		csic_tdm_int_clear_status(tdm->id, RX0_FRM_START_INT_EN);
+		vin_log(VIN_LOG_TDM, "tdm%d rx0 frame start!\n", tdm->id);
+	}
+	if (status.rx1_frm_start) {
+		csic_tdm_int_clear_status(tdm->id, RX1_FRM_START_INT_EN);
+		vin_log(VIN_LOG_TDM, "tdm%d rx1 frame start!\n", tdm->id);
+	}
+	if (status.rx2_frm_start) {
+		csic_tdm_int_clear_status(tdm->id, RX2_FRM_START_INT_EN);
+		vin_log(VIN_LOG_TDM, "tdm%d rx2 frame start!\n", tdm->id);
+	}
+	if (status.rx3_frm_start) {
+		csic_tdm_int_clear_status(tdm->id, RX3_FRM_START_INT_EN);
+		vin_log(VIN_LOG_TDM, "tdm%d rx3 frame start!\n", tdm->id);
+	}
+
+	if (status.rx0_n_line_start) {
+		csic_tdm_int_clear_status(tdm->id, RX0_N_LINE_START_INT_EN);
+		vin_log(VIN_LOG_TDM, "tdm%d rx0 N line start!\n", tdm->id);
+	}
+	if (status.rx1_n_line_start) {
+		csic_tdm_int_clear_status(tdm->id, RX1_N_LINE_START_INT_EN);
+		vin_log(VIN_LOG_TDM, "tdm%d rx1 N line start!\n", tdm->id);
+	}
+	if (status.rx2_n_line_start) {
+		csic_tdm_int_clear_status(tdm->id, RX2_N_LINE_START_INT_EN);
+		vin_log(VIN_LOG_TDM, "tdm%d rx2 N line start!\n", tdm->id);
+	}
+	if (status.rx3_n_line_start) {
+		csic_tdm_int_clear_status(tdm->id, RX3_N_LINE_START_INT_EN);
+		vin_log(VIN_LOG_TDM, "tdm%d rx3 N line start!\n", tdm->id);
+	}
+#endif
 #else
 	if (status.rx_comp_err) {
 		csic_tdm_int_clear_status(tdm->id, RX_COMP_ERR_INT_EN);
@@ -2524,7 +2588,8 @@ static int tdm_probe(struct platform_device *pdev)
 			vin_err("tdm%d request tdm failed\n", tdm->id);
 			goto unmap;
 		}
-#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN55IW6) || IS_ENABLED(CONFIG_ARCH_SUN60IW2)
+#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN55IW6) ||\
+	 IS_ENABLED(CONFIG_ARCH_SUN60IW2) || IS_ENABLED(CONFIG_ARCH_SUN60IW3)
 		vin_iommu_en(ISP_IOMMU_MASTER, true);
 #endif
 #else

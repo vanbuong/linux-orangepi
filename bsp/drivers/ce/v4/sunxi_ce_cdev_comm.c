@@ -52,6 +52,43 @@ irqreturn_t sunxi_ce_irq_handler(int irq, void *dev_id)
 	return IRQ_HANDLED;
 }
 
+void ce_print_task_desc(ce_task_desc_t *task)
+{
+	int i;
+	u64 phy_addr;
+
+#ifndef SUNXI_CE_DEBUG
+	return;
+#endif
+
+	pr_info("---------------------task_info--------------------\n");
+	pr_info("[channel_id] 0x%x\n", task->chan_id);
+	pr_info("task->comm_ctl = 0x%x\n", task->comm_ctl);
+	pr_info("task->sym_ctl = 0x%x\n", task->sym_ctl);
+	pr_info("task->asym_ctl = 0x%x\n", task->asym_ctl);
+	pr_info("task->key_addr = 0x%llx\n", task->key_addr);
+	pr_info("task->iv_addr = 0x%llx\n", task->iv_addr);
+	pr_info("task->ctr_addr = 0x%llx\n", task->ctr_addr);
+	pr_info("task->data_len = 0x%x\n", task->data_len);
+
+	for (i = 0; i < 8; i++) {
+		phy_addr = (u64)ce_task_addr_get((u8 *)&(task->src[i].addr));
+		if (phy_addr) {
+			pr_info("task->src[%d].addr = 0x%llx\n", i, phy_addr);
+			pr_info("task->src[%d].len = 0x%x\n", i, task->src[i].len);
+		}
+	}
+
+	for (i = 0; i < 8; i++) {
+		phy_addr = (u64)ce_task_addr_get((u8 *)&(task->dst[i].addr));
+		if (phy_addr) {
+			pr_info("task->dst[%d].addr = 0x%llx\n", i, phy_addr);
+			pr_info("task->dst[%d].len = 0x%x\n", i, task->dst[i].len);
+		}
+	}
+	pr_info("task->task_phy_addr = 0x%llx\n", (u64)task->task_phy_addr);
+}
+
 static int check_aes_ctx_vaild(crypto_aes_req_ctx_t *req)
 {
 	if (!req->src_buffer || !req->dst_buffer || !req->key_buffer) {
@@ -82,7 +119,7 @@ static int check_aes_ctx_vaild(crypto_aes_req_ctx_t *req)
 static void ce_aes_config(crypto_aes_req_ctx_t *req, ce_task_desc_t *task)
 {
 	task->chan_id = req->channel_id;
-	ss_method_set(req->dir, SS_METHOD_AES, task);
+	ss_method_set(req->dir, req->method, task);
 	ss_aes_mode_set(req->aes_mode, task);
 }
 
@@ -252,10 +289,10 @@ static int aes_crypto_start(crypto_aes_req_ctx_t *req, u8 *src_buffer,
 
 	/* task_key_set */
 	if (req->key_length) {
-		key_phy = dma_map_single(ce_cdev->pdevice,
-					req->key_buffer, req->key_length, DMA_MEM_TO_DEV);
 		SS_DBG("key = 0x%px, key_phy_addr = 0x%px\n", req->key_buffer, (void *)key_phy);
 		ss_key_set(req->key_buffer, req->key_length, task);
+		key_phy = dma_map_single(ce_cdev->pdevice,
+					req->key_buffer, req->key_length, DMA_MEM_TO_DEV);
 	}
 
 	SS_DBG("ion_flag = %d padding_flag =%d", req->ion_flag, padding_flag);
@@ -284,16 +321,15 @@ static int aes_crypto_start(crypto_aes_req_ctx_t *req, u8 *src_buffer,
 	SS_DBG("dst = 0x%px, dst_phy_addr = 0x%px\n", dst_buffer, (void *)dst_phy);
 
 	ce_task_data_init(req, src_phy, dst_phy, src_length, task);
-	/* ce_print_task_info(task); */
+	/* ce_print_task_desc(task); */
 
 	/* start ce */
 	ss_pending_clear(channel_id);
 	ss_irq_enable(channel_id);
 
 	init_completion(&ce_cdev->flows[channel_id].done);
-	ce_ctrl_start(task, task->task_phy_addr);
+	ss_ctrl_start(task, req->method, req->aes_mode);
 	/* ce_reg_print(); */
-
 
 	ret = wait_for_completion_timeout(&ce_cdev->flows[channel_id].done,
 		msecs_to_jiffies(SS_WAIT_TIME));
@@ -440,4 +476,680 @@ int do_aes_crypto(crypto_aes_req_ctx_t *req_ctx)
 	}
 	SS_ERR("do_aes_crypto sucess\n");
 	return 0;
+}
+
+static ce_new_task_desc_t *ce_alloc_hash_rng_task(void)
+{
+	dma_addr_t task_phy_addr;
+	ce_new_task_desc_t *task;
+
+	task = dma_pool_zalloc(ce_cdev->task_pool, GFP_KERNEL, &task_phy_addr);
+	if (!task) {
+		SS_ERR("Failed to alloc for task\n");
+		return NULL;
+	} else {
+		task->next = NULL;
+		task->task_phy_addr = task_phy_addr;
+		SS_DBG("task = 0x%px task_phy = 0x%px\n", task, (void *)task_phy_addr);
+	}
+
+	return task;
+}
+
+static void ce_destroy_hash_rng_task(ce_new_task_desc_t *task)
+{
+	ce_new_task_desc_t *prev;
+
+	while (task) {
+		prev = task;
+		task = task->next;
+		SS_DBG("prev = 0x%px, prev_phy = 0x%px\n", prev, (void *)prev->task_phy_addr);
+		dma_pool_free(ce_cdev->task_pool, prev, prev->task_phy_addr);
+	}
+	return;
+}
+
+void ce_hash_rng_task_desc_print(ce_new_task_desc_t *task)
+{
+	int i;
+	ce_new_task_desc_t *ptask = task;
+
+#ifndef SUNXI_CE_DEBUG
+	return;
+#endif
+	pr_err("the hash task description");
+
+	pr_err("[common_ctl] 0x%lx\n", ((ulong)ptask->common_ctl));
+	pr_err("[main_cmd] 0x%lx\n", ((ulong)ptask->main_cmd));
+	pr_err("[data_len] = 0x%lx\n", (ulong)ptask->data_len);
+	pr_err("[key_addr] = 0x%lx\n", (ulong)ptask->key_addr);
+
+	for (i = 0; i < 8; i++) {
+		pr_err("[ce_sg%d src_addr] 0x%lx\n", i, (u64)ce_task_addr_get((u8 *)&(ptask->src[i].addr)));
+		pr_err("[ce_sg%d dst_addr] 0x%lx\n", i, (u64)ce_task_addr_get((u8 *)&(ptask->dst[i].addr)));
+		pr_err("[ce_sg%d src_len] 0x%x\n", i, (ptask->src[i].len));
+		pr_err("[ce_sg%d dst_len] 0x%x\n", i, (ptask->dst[i].len));
+	}
+}
+
+static int check_hash_ctx_vaild(crypto_hash_req_ctx_t *req)
+{
+	if (!req->text_buffer || !req->dst_buffer) {
+		SS_ERR("Invalid para: text = 0x%px, dst = 0x%px\n", req->text_buffer, req->dst_buffer);
+		return -EINVAL;
+	}
+
+	if (!req->text_length) {
+		SS_ERR("Invalid len: text = 0x%x\n", req->text_length);
+		return -EINVAL;
+	}
+
+	if (req->key_length) {
+		if (!req->key_buffer) {
+			SS_ERR("Invalid para: key = 0x%px\n", req->key_buffer);
+			return -EINVAL;
+		}
+	}
+
+	if (req->iv_length) {
+		if (!req->iv_buffer) {
+			SS_ERR("Invalid para: key = 0x%px\n", req->iv_buffer);
+			return -EINVAL;
+		}
+	}
+
+	return 0;
+}
+
+static void ce_hash_config(crypto_hash_req_ctx_t *req,
+			   ce_new_task_desc_t *task)
+{
+	if (req->hash_mode == SS_METHOD_HMAC_SHA1)
+		ss_hmac_method_set(SS_METHOD_SHA1, task);
+	else if (req->hash_mode == SS_METHOD_HMAC_SHA256)
+		ss_hmac_method_set(SS_METHOD_SHA256, task);
+	else
+		ss_hash_method_set(req->hash_mode, task);
+
+	ss_hash_cmd_set(req->channel_id, task);
+}
+
+static void ce_task_hash_init(crypto_hash_req_ctx_t *req, phys_addr_t key_phy,
+			      phys_addr_t text_phy, phys_addr_t dst_phy,
+			      phys_addr_t iv_phy, ce_new_task_desc_t *ptask)
+{
+	u64 total_bit_len = req->text_length * 8;
+	ce_task_addr_set(0, text_phy, (u8 *)&(ptask->src[0].addr));
+	ptask->src[0].len = req->text_length << 2;	/* length in byte */
+	ce_task_addr_set(0, dst_phy, (u8 *)&(ptask->dst[0].addr));
+	ptask->dst[0].len = req->dst_length;
+
+	memcpy(&ptask->data_len, &total_bit_len, sizeof(ptask->data_len));
+
+	if (req->key_length)
+		ce_task_addr_set(0, key_phy, (u8 *)&(ptask->key_addr));
+
+	if (req->iv_length)
+		ce_task_addr_set(0, iv_phy, (u8 *)&(ptask->iv_addr));
+}
+
+int hash_crypto_start(crypto_hash_req_ctx_t *req)
+{
+	int err;
+	phys_addr_t key_phy = 0;
+	phys_addr_t text_phy = 0;
+	phys_addr_t dst_phy = 0;
+	phys_addr_t iv_phy = 0;
+	ce_new_task_desc_t *task;
+	int channel_id = req->channel_id;
+
+	task = ce_alloc_hash_rng_task();
+	if (!task)
+		return -ENOMEM;
+
+	/* task_mode_set */
+	ce_hash_config(req, task);
+	/* task_key_set */
+	if (req->key_length) {
+		key_phy = dma_map_single(ce_cdev->pdevice, req->key_buffer, req->key_length, DMA_TO_DEVICE);
+		SS_DBG("key = 0x%px, key_phy_addr = 0x%px\n", req->key_buffer, (void *)key_phy);
+	}
+
+	if (req->iv_length) {
+		iv_phy = dma_map_single(ce_cdev->pdevice, req->iv_buffer, req->iv_length, DMA_TO_DEVICE);
+		SS_DBG("iv = %px, iv_phy_addr = %pa\n", req->iv_buffer, &iv_phy);
+	}
+
+	/* task_data_set */
+	/* only the last src_buf is malloc */
+	if (req->ion_flag)
+		text_phy = req->text_phy;
+	else
+		text_phy = dma_map_single(ce_cdev->pdevice, req->text_buffer, req->text_length, DMA_TO_DEVICE);
+	SS_DBG("src = 0x%px, src_phy_addr = 0x%px\n", req->text_buffer, (void *)text_phy);
+
+	/* the dst_buf is from user */
+	dst_phy = dma_map_single(ce_cdev->pdevice, req->dst_buffer, req->dst_length, DMA_FROM_DEVICE);
+	SS_DBG("dst = 0x%px, dst_phy_addr = 0x%px\n", req->dst_buffer, (void *)dst_phy);
+
+	ce_task_hash_init(req, key_phy, text_phy, dst_phy, iv_phy, task);
+
+	/* start ce */
+	ss_pending_clear(channel_id);
+	ss_irq_enable(channel_id);
+
+	init_completion(&ce_cdev->flows[channel_id].done);
+	ce_hash_rng_task_desc_print(task);
+	ss_hash_rng_ctrl_start(task);
+
+	err = wait_for_completion_timeout(&ce_cdev->flows[channel_id].done, msecs_to_jiffies(SS_WAIT_TIME));
+	if (!err) {
+		SS_ERR("Timed out\n");
+		ce_reg_print();
+		ce_destroy_hash_rng_task(task);
+		ce_reset();
+		err = -ETIMEDOUT;
+		ce_hash_rng_task_desc_print(task);
+		goto out;
+	}
+
+	ss_irq_disable(channel_id);
+	ce_destroy_hash_rng_task(task);
+
+	err = ss_flow_err(channel_id);
+	if (err) {
+		SS_ERR("CE return error: %d\n", err);
+		err = -EINVAL;
+		goto out;
+	}
+	err = 0;
+out:
+	/* key */
+	if (req->key_length)
+		dma_unmap_single(ce_cdev->pdevice, key_phy, req->key_length, DMA_TO_DEVICE);
+
+	/* iv */
+	if (req->iv_length)
+		dma_unmap_single(ce_cdev->pdevice, iv_phy, req->iv_length, DMA_TO_DEVICE);
+
+	/* data */
+	if (req->ion_flag)
+		;
+	else
+		dma_unmap_single(ce_cdev->pdevice, text_phy, req->text_length, DMA_TO_DEVICE);
+
+	dma_unmap_single(ce_cdev->pdevice, dst_phy, req->dst_length, DMA_FROM_DEVICE);
+
+	return err;
+}
+
+int do_hash_crypto(crypto_hash_req_ctx_t *req_ctx)
+{
+	int err;
+	err = check_hash_ctx_vaild(req_ctx);
+	if (err)
+		return err;
+
+	err = hash_crypto_start(req_ctx);
+	if (err) {
+		SS_ERR("hash encrypt fail\n");
+		return err;
+	}
+
+	return 0;
+}
+
+static int check_rng_ctx_vaild(crypto_rng_req_ctx_t *req)
+{
+	if (!req->dst_buffer) {
+		SS_ERR("Invalid para: dst = 0x%px\n", req->dst_buffer);
+		return -EINVAL;
+	}
+
+	if (req->key_length) {
+		if (!req->key_buffer) {
+			SS_ERR("Invalid para: key = 0x%px\n", req->key_buffer);
+			return -EINVAL;
+		}
+	}
+
+	return 0;
+}
+
+int do_rng_crypto(crypto_rng_req_ctx_t *req)
+{
+	int err;
+	phys_addr_t key_phy;
+	phys_addr_t dst_phy;
+	ce_new_task_desc_t *task;
+	int channel_id = req->channel_id;
+
+	err = check_rng_ctx_vaild(req);
+	if (err)
+		return err;
+
+	task = ce_alloc_hash_rng_task();
+	if (!task)
+		return -ENOMEM;
+
+	/* task_mode_set, prng key set */
+	if (req->trng)
+		ss_rng_method_set(SS_METHOD_SHA256, SS_METHOD_TRNG, task);
+	else {
+		ss_rng_method_set(SS_METHOD_SHA1, SS_METHOD_PRNG, task);
+		/* Must set the seed addr in PRNG, key_len 5 words stable */
+		req->key_length = 5 * sizeof(int);
+		key_phy = dma_map_single(ce_cdev->pdevice, req->key_buffer, req->key_length, DMA_TO_DEVICE);
+		SS_DBG("key = 0x%px, key_phy_addr = 0x%px\n", req->key_buffer, (void *)key_phy);
+		ss_rng_key_set(req->key_buffer, req->key_length, task);
+	}
+
+	/* channel set */
+	task->common_ctl |= req->channel_id;
+
+	/* reload and reload_offset set */
+	if (req->reload_offset)
+		task->main_cmd |= (1 << CE_SUB_CMD_RELOAD_SHIFT) | (req->reload_offset << CE_SUB_CMD_RELOAD_OFFSET_SHIFT);
+	else
+		task->main_cmd |= (0 << CE_SUB_CMD_RELOAD_SHIFT);
+
+	/* the dst_buf is from user */
+	dst_phy = dma_map_single(ce_cdev->pdevice, req->dst_buffer, req->dst_length, DMA_FROM_DEVICE);
+	SS_DBG("dst = 0x%px, dst_phy_addr = 0x%px\n", req->dst_buffer, (void *)dst_phy);
+
+	ce_task_addr_set(0, dst_phy, (u8 *)&(task->dst[0].addr));
+	task->dst[0].len = req->dst_length;
+
+	ss_pending_clear(channel_id);
+	ss_irq_enable(channel_id);
+
+	init_completion(&ce_cdev->flows[channel_id].done);
+	ce_hash_rng_task_desc_print(task);
+	/* start ce */
+	ss_hash_rng_ctrl_start(task);
+
+	err = wait_for_completion_timeout(&ce_cdev->flows[channel_id].done, msecs_to_jiffies(SS_WAIT_TIME));
+	if (!err) {
+		SS_ERR("Timed out\n");
+		ce_reg_print();
+		ce_destroy_hash_rng_task(task);
+		ce_reset();
+		err = -ETIMEDOUT;
+		ce_hash_rng_task_desc_print(task);
+		goto out;
+	}
+
+	ss_irq_disable(channel_id);
+	ce_destroy_hash_rng_task(task);
+
+	err = ss_flow_err(channel_id);
+	if (err) {
+		SS_ERR("CE return error: %d\n", err);
+		err = -EINVAL;
+		goto out;
+	}
+
+	err = 0;
+
+out:
+	/* key */
+	if (!req->trng)
+		dma_unmap_single(ce_cdev->pdevice, key_phy, req->key_length, DMA_TO_DEVICE);
+
+	dma_unmap_single(ce_cdev->pdevice, dst_phy, req->dst_length, DMA_FROM_DEVICE);
+	return err;
+}
+
+static int check_rsa_ctx_vaild(crypto_rsa_req_ctx_t *req)
+{
+	if (!req->sign_buffer || !req->pkey_buffer || !req->dst_buffer) {
+		SS_ERR("Invalid para: src = 0x%px, dst = 0x%px key = 0x%p\n",
+		       req->sign_buffer, req->pkey_buffer, req->dst_buffer);
+		return -EINVAL;
+	}
+
+	if ((!req->sign_length) || (!req->pkey_length)) {
+		SS_ERR("Invalid len: sign = 0x%x, pkey = 0x%x\n", req->sign_length, req->pkey_length);
+		return -EINVAL;
+	}
+	return 0;
+}
+
+static void ce_rsa_config(crypto_rsa_req_ctx_t *req, ce_task_desc_t *task)
+{
+	task->chan_id = req->channel_id;
+	ss_method_set(req->dir, SS_METHOD_RSA, task);
+	ss_rsa_width_set(req->rsa_width, task);
+	task->comm_ctl |= 1 << CE_COMM_CTL_TASK_INT_SHIFT;
+}
+
+static void ce_task_rsa_init(crypto_rsa_req_ctx_t *req, phys_addr_t pkey_phy,
+			     phys_addr_t sign_phy, phys_addr_t dst_phy,
+			     ce_task_desc_t *ptask)
+{
+	ulong data_len = 0;
+
+	ce_task_addr_set(0, pkey_phy, (u8 *)&(ptask->key_addr));
+	data_len = ((req->rsa_width) >> 2) * 3 * 4;
+
+	ce_task_addr_set(0, pkey_phy, (u8 *)&(ptask->src[0].addr));
+	ptask->src[0].len = (req->pkey_length) >> 2;	/* length in word */
+	ce_task_addr_set(0, sign_phy, (u8 *)&(ptask->src[1].addr));
+	ptask->src[1].len = (req->sign_length) >> 2;	/* length in word */
+
+	ce_task_addr_set(0, dst_phy, (u8 *)&(ptask->dst[0].addr));
+	ptask->dst[0].len = (req->dst_length) >> 2;	/* length in word */
+	ss_data_len_set(data_len, ptask);
+}
+
+void ce_rsa_task_print(crypto_rsa_req_ctx_t *rsa_ctx)
+{
+	crypto_rsa_req_ctx_t *rsa_req_ctx = rsa_ctx;
+	pr_err("the rsa task");
+
+	pr_err("[sign address] 0x%px\n", rsa_req_ctx->sign_buffer);
+	pr_err("[sign length] %d\n", rsa_req_ctx->sign_length);
+
+	pr_err("[pkey address] 0x%px\n", rsa_req_ctx->pkey_buffer);
+	pr_err("[pkey length] %d\n", rsa_req_ctx->pkey_length);
+
+	pr_err("[dst address] 0x%px\n", rsa_req_ctx->dst_buffer);
+	pr_err("[dst length] %d\n", rsa_req_ctx->dst_length);
+
+	pr_err("[dir] %d\n", rsa_req_ctx->dir);
+	pr_err("[rsa width] %d\n", rsa_req_ctx->rsa_width);
+	pr_err("[flag] %d\n", rsa_req_ctx->flag);
+	pr_err("[channel_id] %d\n", rsa_req_ctx->channel_id);
+}
+
+static int rsa_crypto_start(crypto_rsa_req_ctx_t *req)
+{
+	int err;
+	int channel_id = req->channel_id;
+	phys_addr_t pkey_phy;
+	phys_addr_t sign_phy;
+	phys_addr_t dst_phy;
+	ce_task_desc_t *task;
+
+	task = ce_alloc_task();
+	if (!task)
+		return -ENOMEM;
+
+	/* task_set */
+	ce_rsa_config(req, task);
+	pkey_phy = dma_map_single(ce_cdev->pdevice, req->pkey_buffer, req->pkey_length, DMA_TO_DEVICE);
+	SS_DBG("pkey = 0x%px, pkey_phy_addr = 0x%px\n", req->pkey_buffer, (void *)pkey_phy);
+
+	sign_phy = dma_map_single(ce_cdev->pdevice, req->sign_buffer, req->sign_length, DMA_TO_DEVICE);
+	SS_DBG("sign = 0x%px, sign_phy_addr = 0x%px\n", req->sign_buffer, (void *)sign_phy);
+
+	dst_phy = dma_map_single(ce_cdev->pdevice, req->dst_buffer, req->dst_length, DMA_FROM_DEVICE);
+	SS_DBG("dst = 0x%px, dst_phy_addr = 0x%px\n", req->dst_buffer, (void *)dst_phy);
+
+	ce_task_rsa_init(req, pkey_phy, sign_phy, dst_phy, task);
+	/* start ce */
+	ss_pending_clear(channel_id);
+	ss_irq_enable(channel_id);
+	ce_print_task_desc(task);
+
+	init_completion(&ce_cdev->flows[channel_id].done);
+	ss_ctrl_start(task, SS_METHOD_RSA, 0);
+	ss_pending_clear(channel_id);
+
+	err = wait_for_completion_timeout(&ce_cdev->flows[channel_id].done, msecs_to_jiffies(SS_WAIT_TIME));
+	if (!err) {
+		SS_ERR("Timed out\n");
+		ce_print_task_desc(task);
+		ce_rsa_task_print(req);
+		ce_reg_print();
+		ce_task_destroy(task);
+		ce_reset();
+		err = -ETIMEDOUT;
+		goto out;
+	}
+
+	ss_irq_disable(channel_id);
+	ce_task_destroy(task);
+
+	SS_DBG("After CE, TSR: 0x%08x, ERR: 0x%08x\n", ss_reg_rd(CE_REG_TSR), ss_reg_rd(CE_REG_ERR));
+
+	err = ss_flow_err(channel_id);
+	if (err) {
+		ce_rsa_task_print(req);
+		SS_ERR("CE return error: %d\n", err);
+		err = -EINVAL;
+		goto out;
+	}
+
+	err = 0;
+out:
+	/* pkey */
+	dma_unmap_single(ce_cdev->pdevice, pkey_phy, req->pkey_length, DMA_TO_DEVICE);
+	/* data */
+	dma_unmap_single(ce_cdev->pdevice, sign_phy, req->sign_length, DMA_TO_DEVICE);
+
+	dma_unmap_single(ce_cdev->pdevice, dst_phy, req->dst_length, DMA_FROM_DEVICE);
+
+	return err;
+}
+
+int do_rsa_crypto(crypto_rsa_req_ctx_t *req_ctx)
+{
+	int err;
+
+	err = check_rsa_ctx_vaild(req_ctx);
+	if (err)
+		return err;
+
+	if (req_ctx->dir == SS_DIR_ENCRYPT) {
+		SS_ERR("rsa encrypt fail\n");
+		return -EINVAL;
+	} else {
+		err = rsa_crypto_start(req_ctx);
+		if (err) {
+			SS_ERR("rsa decrypt fail\n");
+			return -EINVAL;
+		}
+	}
+	SS_ERR("do_rsa_crypto sucess\n");
+	return err;
+}
+
+static void ce_ecc_config(crypto_ecc_req_ctx_t *req, ce_task_desc_t *task)
+{
+	task->chan_id = req->channel_id;
+	ss_method_set(req->dir, SS_METHOD_ECC, task);
+	ss_ecc_width_set(req->width / 8, task);
+	ss_ecc_op_mode_set(req->mode, task);
+	task->comm_ctl |= 1 << CE_COMM_CTL_TASK_INT_SHIFT;
+}
+
+int do_ecc_crypto(crypto_ecc_req_ctx_t *req)
+{
+	int err;
+	u32 src_data_len, dst_data_len, ecc_byte_size;
+	int channel_id = req->channel_id;
+	phys_addr_t key_phy;
+	phys_addr_t iv_phy;
+	phys_addr_t dst_phy;
+	phys_addr_t src_phy;
+	ce_task_desc_t *task;
+
+	ecc_byte_size = req->width / 32;	/* in word */
+
+	task = ce_alloc_task();
+	if (!task)
+		return -ENOMEM;
+
+	ce_ecc_config(req, task);
+
+	key_phy = dma_map_single(ce_cdev->pdevice, req->key_buffer, req->key_length, DMA_TO_DEVICE);
+	SS_DBG("pkey = 0x%px, key_phy_addr = 0x%px\n", req->key_buffer, (void *)key_phy);
+
+	iv_phy = dma_map_single(ce_cdev->pdevice, req->iv_buffer, req->iv_length, DMA_TO_DEVICE);
+	SS_DBG("sign = 0x%px, iv_phy_addr = 0x%px\n", req->iv_buffer, (void *)iv_phy);
+
+	dst_phy = dma_map_single(ce_cdev->pdevice, req->dst_buffer, req->dst_length, DMA_FROM_DEVICE);
+	SS_DBG("dst = 0x%px, dst_phy_addr = 0x%px\n", req->dst_buffer, (void *)dst_phy);
+
+	src_phy = dma_map_single(ce_cdev->pdevice, req->src_buffer, req->src_length, DMA_TO_DEVICE);
+	SS_DBG("src = 0x%px, src_phy_addr = 0x%px\n", req->src_buffer, (void *)src_phy);
+
+	switch (req->mode) {
+	case CE_ECC_OP_POINT_ADD:
+		src_data_len = ecc_byte_size * 5;
+		dst_data_len = ecc_byte_size * 2;
+		break;
+	case CE_ECC_OP_POINT_DBL:
+		src_data_len = ecc_byte_size * 4;
+		dst_data_len = ecc_byte_size * 2;
+		break;
+	case CE_ECC_OP_POINT_MUL:
+		src_data_len = ecc_byte_size * 5;
+		dst_data_len = ecc_byte_size * 2;
+		/* config task src */
+		ce_task_addr_set(0, src_phy, (u8 *)&(task->src[0].addr));
+		task->src[0].len = src_data_len;
+		task->data_len = src_data_len;
+
+		/* config task dst */
+		ce_task_addr_set(0, dst_phy, (u8 *)&(task->dst[0].addr));
+		task->dst[0].len = dst_data_len;
+		break;
+	case CE_ECC_OP_POINT_VER:
+		src_data_len = ecc_byte_size * 5;
+		dst_data_len = ecc_byte_size;
+		break;
+	case CE_ECC_OP_ENC:
+		src_data_len = ecc_byte_size * 8;
+		dst_data_len = ecc_byte_size * 3;
+		/* config task src */
+		ce_task_addr_set(0, key_phy, (u8 *)&(task->src[0].addr));
+		task->src[0].len = ecc_byte_size;
+
+		ce_task_addr_set(0, iv_phy, (u8 *)&(task->src[1].addr));
+		task->src[1].len = ecc_byte_size;
+
+		ce_task_addr_set(0, src_phy, (u8 *)&(task->src[2].addr));
+		task->src[2].len = src_data_len - 2 * ecc_byte_size;
+
+		task->data_len = src_data_len;
+
+		/* config task dst */
+		ce_task_addr_set(0, dst_phy, (u8 *)&(task->dst[0].addr));
+		task->dst[0].len = dst_data_len;
+		break;
+	case CE_ECC_OP_DEC:
+		src_data_len = ecc_byte_size * 6;
+		dst_data_len = ecc_byte_size;
+		/* config task src */
+		ce_task_addr_set(0, key_phy, (u8 *)&(task->src[0].addr));
+		task->src[0].len = ecc_byte_size;
+
+		ce_task_addr_set(0, iv_phy, (u8 *)&(task->src[1].addr));
+		task->src[1].len = ecc_byte_size;
+
+		ce_task_addr_set(0, src_phy, (u8 *)&(task->src[2].addr));
+		task->src[2].len = src_data_len - 2 * ecc_byte_size;
+
+		task->data_len = src_data_len;
+
+		/* config task dst */
+		ce_task_addr_set(0, dst_phy, (u8 *)&(task->dst[0].addr));
+		task->dst[0].len = dst_data_len;
+		break;
+	case CE_ECC_OP_SIGN:
+		src_data_len = ecc_byte_size * 8;
+		dst_data_len = ecc_byte_size * 2;
+		/* config task src */
+		ce_task_addr_set(0, src_phy, (u8 *)&(task->src[0].addr));
+		task->src[0].len = src_data_len;
+		task->data_len = src_data_len;
+
+		/* config task dst */
+		ce_task_addr_set(0, dst_phy, (u8 *)&(task->dst[0].addr));
+		task->dst[0].len = dst_data_len;
+		break;
+	case CE_ECC_OP_VERIFY:
+		src_data_len = ecc_byte_size * 12;
+		dst_data_len = ecc_byte_size;
+
+		ce_task_addr_set(0, key_phy, (u8 *)&(task->key_addr));
+
+		/* config task src */
+		ce_task_addr_set(0, src_phy, (u8 *)&(task->src[0].addr));
+		task->src[0].len = src_data_len;
+		task->data_len = src_data_len << 2;	/* length in byte */
+
+		/* config task dst */
+		ce_task_addr_set(0, dst_phy, (u8 *)&(task->dst[0].addr));
+		task->dst[0].len = dst_data_len;
+		task->next_task_addr = 0;
+		break;
+	default:
+		pr_err("ecc mode config error\n");
+		return -EINVAL;
+	}
+
+	/* start ce */
+	ss_pending_clear(channel_id);
+	ss_irq_enable(channel_id);
+	ce_print_task_desc(task);
+
+	init_completion(&ce_cdev->flows[channel_id].done);
+	ss_ctrl_start(task, SS_METHOD_ECC, 0);
+	ss_pending_clear(channel_id);
+
+	err = wait_for_completion_timeout(&ce_cdev->flows[channel_id].done, msecs_to_jiffies(SS_WAIT_TIME));
+	if (!err) {
+		SS_ERR("Timed out\n");
+		ce_print_task_desc(task);
+		ce_reg_print();
+		ce_task_destroy(task);
+		ce_reset();
+		err = -ETIMEDOUT;
+		goto out;
+	}
+
+	ss_irq_disable(channel_id);
+	ce_task_destroy(task);
+
+	SS_DBG("After CE, TSR: 0x%08x, ERR: 0x%08x\n", ss_reg_rd(CE_REG_TSR), ss_reg_rd(CE_REG_ERR));
+
+	err = 0;
+out:
+	/* key */
+	dma_unmap_single(ce_cdev->pdevice, key_phy, req->key_length, DMA_TO_DEVICE);
+	/* iv */
+	dma_unmap_single(ce_cdev->pdevice, iv_phy, req->iv_length, DMA_TO_DEVICE);
+
+	/* dst */
+	dma_unmap_single(ce_cdev->pdevice, dst_phy, req->dst_length, DMA_FROM_DEVICE);
+
+	/* src */
+	dma_unmap_single(ce_cdev->pdevice, src_phy, req->src_length, DMA_TO_DEVICE);
+
+	if (err)
+		return err;
+
+	err = ss_flow_err(channel_id);
+	if (err) {
+		SS_ERR("CE return error: %d\n", err);
+		return -EINVAL;
+	}
+
+	/*
+	 * Verify is to substitute the hash into the ECC curve for verification.
+	 * If the verification is successful, output 1; otherwise, output 0.
+	 */
+	if (req->mode == CE_ECC_OP_VERIFY) {
+		SS_DBG("the verify is %d\n", req->dst_buffer[0]);
+		if (req->dst_buffer[0] != 1) {
+			SS_ERR("ecc verify failed\n");
+			return -2;
+		}
+	}
+
+	return 0;
+
 }

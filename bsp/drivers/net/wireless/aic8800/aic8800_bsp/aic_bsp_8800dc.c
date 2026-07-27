@@ -15,6 +15,27 @@
 #include "aicsdio.h"
 #include "aic_bsp_driver.h"
 
+int is_file_exist(char *name)
+{
+	const struct firmware *fw = NULL;
+	int ret = request_firmware(&fw, name, NULL);
+	if (ret < 0) {
+		printk("File %s load fail or not exist", name);
+		return 0;
+	}
+
+	release_firmware(fw);
+	return 1;
+}
+EXPORT_SYMBOL(is_file_exist);
+
+#ifdef CONFIG_DPD
+rf_misc_ram_lite_t dpd_res = {{0},};
+EXPORT_SYMBOL(dpd_res);
+#endif
+
+#ifdef AICWF_SDIO_SUPPORT
+
 #define RAM_LMAC_FW_ADDR                   0x00150000
 #define RAM_FMAC_FW_ADDR                   0x00120000
 #define ROM_FMAC_PATCH_ADDR                0x00180000
@@ -141,11 +162,7 @@ static u32 patch_tbl_wifisetting_8800dc_u01[][2] = {
 };
 
 static u32 patch_tbl_wifisetting_8800dc_u02[][2] = {
-#if defined(CONFIG_SDIO_PWRCTRL)
 	{0x0124, 0x01011E01}
-#else
-	{0x0124, 0x01001E01}
-#endif
 };
 
 static u32 adaptivity_patch_tbl_8800dc[][2] = {
@@ -490,6 +507,7 @@ static const struct aicbsp_firmware fw_u01[] = {
 		.wl_fw         = "aic8800dc/fmacfw_patch_8800dc.bin",
 		.wl_table      = "aic8800dc/fmacfw_patch_tbl_8800dc.bin",
 		.wl_calib      = NULL,
+		.hw_config     = "aic8800dc/aichw.conf",
 	},
 
 	[AICBSP_CPMODE_TEST] = {
@@ -500,6 +518,7 @@ static const struct aicbsp_firmware fw_u01[] = {
 		.wl_fw         = "aic8800dc/fmacfw_rf_8800dc.bin",
 		.wl_table      = NULL,
 		.wl_calib      = NULL,
+		.hw_config     = "aic8800dc/aichw.conf",
 	},
 };
 
@@ -513,6 +532,7 @@ static const struct aicbsp_firmware fw_u02[] = {
 		.wl_fw         = "aic8800dc/fmacfw_patch_8800dc_u02.bin",
 		.wl_table      = "aic8800dc/fmacfw_patch_tbl_8800dc_u02.bin",
 		.wl_calib      = "aic8800dc/fmacfw_calib_8800dc_u02.bin",
+		.hw_config     = "aic8800dc/aichw.conf",
 	},
 
 	[AICBSP_CPMODE_TEST] = {
@@ -524,6 +544,7 @@ static const struct aicbsp_firmware fw_u02[] = {
 		.wl_fw         = "aic8800dc/lmacfw_rf_8800dc.bin",
 		.wl_table      = NULL,
 		.wl_calib      = "aic8800dc/fmacfw_calib_8800dc_u02.bin",
+		.hw_config     = "aic8800dc/aichw.conf",
 	},
 };
 
@@ -537,6 +558,7 @@ static const struct aicbsp_firmware fw_h_u02[] = {
 		.wl_fw         = "aic8800dc/fmacfw_patch_8800dc_h_u02.bin",
 		.wl_table      = "aic8800dc/fmacfw_patch_tbl_8800dc_h_u02.bin",
 		.wl_calib      = "aic8800dc/fmacfw_calib_8800dc_h_u02.bin",
+		.hw_config     = "aic8800dc/aichw.conf",
 	},
 
 	[AICBSP_CPMODE_TEST] = {
@@ -548,6 +570,7 @@ static const struct aicbsp_firmware fw_h_u02[] = {
 		.wl_fw         = "aic8800dc/lmacfw_rf_8800dc.bin",
 		.wl_table      = NULL,
 		.wl_calib      = "aic8800dc/fmacfw_calib_8800dc_h_u02.bin",
+		.hw_config     = "aic8800dc/aichw.conf",
 	},
 };
 
@@ -830,8 +853,7 @@ static int aic8800dc_bt_patch_config(struct priv_dev *aicdev)
 		return -1;
 	}
 
-	//aicbsp_driver_btmode_reinit(&aicbt_info);
-	aicbsp_driver_lpm_enable_reinit(&aicbt_info);
+	aicbt_reload_config(aicbsp_firmware_list[aicbsp_info.cpmode].hw_config, &aicbt_info);
 
 	if (aicbsp_info.chipinfo->rev != CHIP_REV_ID_U01)
 		patch_info.addr_adid = RAM_8800DC_U02_ADID_ADDR;
@@ -885,9 +907,6 @@ err:
 }
 
 #ifdef CONFIG_DPD
-rf_misc_ram_lite_t dpd_res = {{0},};
-EXPORT_SYMBOL(dpd_res);
-
 static int aicwf_misc_ram_valid_check_8800dc(struct priv_dev *aicdev, int *valid_out)
 {
 	int ret = 0;
@@ -1054,19 +1073,6 @@ static int aicwf_dpd_calib_8800dc(struct priv_dev *aicdev, rf_misc_ram_lite_t *d
 }
 
 #ifndef CONFIG_FORCE_DPD_CALIB
-int is_file_exist(char* name)
-{
-	const struct firwmware *fw = NULL;
-	int ret = request_firmware(&fw, name, NULL);
-	if (ret < 0) {
-		printk("File %s load fail or not exist", name);
-		return 0;
-	} else {
-		return 1;
-	}
-}
-EXPORT_SYMBOL(is_file_exist);
-
 static int aicwf_dpd_result_apply_8800dc(struct priv_dev *aicdev, rf_misc_ram_lite_t *dpd_res)
 {
 	int ret = 0;
@@ -1307,8 +1313,8 @@ static int aicbsp_patch_load_8800dc(struct priv_dev *aicdev)
 #endif
 			ret = rwnx_plat_bin_fw_upload_android(aicdev, ld_addr, aicbsp_firmware_list[aicbsp_info.cpmode].wl_fw); //150000
 			if (ret) {
-			    printk("load rftest bin fail: %d\n", ret);
-			    return ret;
+				printk("load rftest bin fail: %d\n", ret);
+				return ret;
 			}
 		} else if (aicbsp_info.cpmode == AICBSP_CPMODE_DPDCALIB) {
 #if (defined(CONFIG_DPD) && !defined(CONFIG_FORCE_DPD_CALIB))
@@ -1338,7 +1344,7 @@ static int aicbsp_patch_load_8800dc(struct priv_dev *aicdev)
 		}
 	}
 
-    return ret;
+	return ret;
 }
 
 int aicbsp_8800dc_fw_init(struct priv_dev *aicdev)
@@ -1508,14 +1514,22 @@ int aicbsp_8800dc_fw_init(struct priv_dev *aicdev)
 	if (rwnx_send_dbg_start_app_req(aicdev, fw_addr, boot_type, NULL))
 		return -1;
 
-#ifdef AICWF_SDIO_SUPPORT
 #if defined(CONFIG_SDIO_PWRCTRL)
 	if (aicwf_sdio_writeb(aicdev->func[0], aicdev->sdio_reg.wakeup_reg, 4)) {
 		bsp_err("reg:%d write failed!\n", aicdev->sdio_reg.wakeup_reg);
 		return -1;
 	}
 #endif
-#endif
 
 	return 0;
 }
+
+#else
+
+int aicbsp_8800dc_fw_init(struct priv_dev *aicdev)
+{
+	(void)aicdev;
+	return 0;
+}
+
+#endif

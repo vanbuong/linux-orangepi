@@ -1196,6 +1196,8 @@ long g2d_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		if (copy_from_user(fill_para, (g2d_fillrect_h *) arg,
 				   sizeof(g2d_fillrect_h))) {
 			ret = -EFAULT;
+			kfree(fill_para);
+			kfree(mixer_fill_para);
 			goto err_noput;
 		}
 		if (dbg_info) {
@@ -1207,6 +1209,8 @@ long g2d_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 		mixer_fill_para->op_flag = OP_FILLRECT;
 
 		ret  = mixer_task_process(&para, mixer_fill_para, 1);
+		kfree(fill_para);
+		kfree(mixer_fill_para);
 #endif
 		break;
 	}
@@ -1232,6 +1236,8 @@ long g2d_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			if (copy_from_user(mask_para, (g2d_maskblt *) arg,
 					   sizeof(g2d_maskblt))) {
 				ret = -EFAULT;
+				kfree(mask_para);
+				kfree(mixer_mask_para);
 				goto err_noput;
 			}
 			if (dbg_info) {
@@ -1251,6 +1257,8 @@ long g2d_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 			mixer_mask_para->op_flag = OP_MASK;
 
 			ret  = mixer_task_process(&para, mixer_mask_para, 1);
+			kfree(mask_para);
+			kfree(mixer_mask_para);
 #endif
 			break;
 		}
@@ -1728,6 +1736,6 @@ module_exit(g2d_module_exit);
 
 MODULE_AUTHOR("zxb <zhengxiaobin@allwinnertech.com>");
 MODULE_DESCRIPTION("g2d(rcq) driver");
-MODULE_VERSION("1.0.1");
+MODULE_VERSION("1.0.2");
 MODULE_LICENSE("GPL");
 MODULE_IMPORT_NS(DMA_BUF);

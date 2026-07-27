@@ -15,6 +15,7 @@
 #include <linux/regulator/consumer.h>
 #include <linux/slab.h>
 #include <linux/delay.h>
+#include <linux/version.h>
 
 #include <video/display_timing.h>
 #include <video/of_display_timing.h>
@@ -27,6 +28,8 @@
 #include <drm/drm_edid.h>
 #include <drm/drm_property.h>
 #include <linux/backlight.h>
+
+#include "panel-edp.h"
 
 #define POWER_MAX 3
 #define GPIO_MAX  3
@@ -289,7 +292,11 @@ static int general_panel_probe(struct platform_device *pdev)
 	return 0;
 }
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 11, 0)
 static int general_panel_remove(struct platform_device *pdev)
+#else
+static void general_panel_remove(struct platform_device *pdev)
+#endif
 {
 	struct general_panel *edp_panel = platform_get_drvdata(pdev);
 
@@ -297,7 +304,9 @@ static int general_panel_remove(struct platform_device *pdev)
 
 	drm_panel_disable(&edp_panel->panel);
 
+#if LINUX_VERSION_CODE < KERNEL_VERSION(6, 11, 0)
 	return 0;
+#endif
 }
 
 static const struct of_device_id general_panel_of_table[] = {
@@ -321,6 +330,6 @@ static struct platform_driver general_panel_driver = {
 module_platform_driver(general_panel_driver);
 
 MODULE_AUTHOR("huangyongxing <huangyongxing@allwinnertech.com>");
-MODULE_VERSION("1.0.0");
+MODULE_VERSION("1.0.1");
 MODULE_DESCRIPTION("eDP General Panel Driver");
 MODULE_LICENSE("GPL");

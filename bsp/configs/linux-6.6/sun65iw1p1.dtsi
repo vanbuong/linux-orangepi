@@ -20,7 +20,7 @@
 
 / {
 	model = "sun65iw1";
-	interrupt-parent = <&gic>;
+	interrupt-parent = <&wakeupgen>;
 	#address-cells = <2>;
 	#size-cells = <2>;
 
@@ -733,7 +733,7 @@
 		reg = <0x0 0x07060000 0x0 0x8000>;
 
 		pd: power-controller {
-			compatible = "allwinner,sun60iw2-pck-600";
+			compatible = "allwinner,sun65iw1-pck-600";
 			clocks = <&r_ccu CLK_BUS_R_PPU_VO0>;
 			clock-names = "pck";
 			#power-domain-cells = <1>;
@@ -904,23 +904,23 @@
 		#size-cells = <2>;
 		ranges;
 
-//		cpufreq_hw: cpufreq@7010000 {
-//			compatible = "allwinner,sun65iw1-hw-dvfs";
-//			reg = <0 0x07010000 0 0x64>, <0 0x07010200 0 0x64>, <0 0x07010100 0 0x64>;
-//			reg-names = "cluster0-dvfs", "cluster1-dvfs", "cluster2-dvfs";
-//			clocks = <&cpupll_ccu CLK_PLL_CPU0>, <&cpupll_ccu CLK_PLL_CPU1>, <&cpupll_ccu CLK_PLL_CPU2>;
-//			#freq-domain-cells = <2>;
-//			dvfs_twi = <&s_twi0>;
-//			pmu_addr = <0x34 0x36 0x36>; //0x68 0x6c 0x6c
-//			pmu_reg_addr = <0x83 0x14 0x13>;
-//			twi_priority = <0 0 0>;
-//			twi_mask = <0x80 0x80 0x00>;
-//			channel = <0 1 2>;
-//			twi_channel_num = <3>;
-//			cluster0-supply = <&reg_dcdc1>;
-//			cluster1-supply = <&reg_axp1530_dcdc2>;
-//			cluster2-supply = <&reg_axp1530_dcdc1>;
-//		};
+		cpufreq_hw: cpufreq@7010000 {
+			compatible = "allwinner,sun65iw1-hw-dvfs";
+			reg = <0 0x07010000 0 0x64>, <0 0x07010200 0 0x64>, <0 0x07010100 0 0x64>;
+			reg-names = "cluster0-dvfs", "cluster1-dvfs", "cluster2-dvfs";
+			clocks = <&cpupll_ccu CLK_PLL_CPU0>, <&cpupll_ccu CLK_PLL_CPU1>, <&cpupll_ccu CLK_PLL_CPU2>;
+			#freq-domain-cells = <2>;
+			dvfs_twi = <&s_twi0>;
+			pmu_addr = <0x35 0x36 0x36>; //0x68 0x6c 0x6c
+			pmu_reg_addr = <0x83 0x14 0x13>;
+			twi_priority = <0 0 0>;
+			twi_mask = <0x80 0x80 0x00>;
+			channel = <0 1 2>;
+			twi_channel_num = <3>;
+			cluster0-supply = <&reg_dcdc1>;
+			cluster1-supply = <&reg_axp1530_dcdc2>;
+			cluster2-supply = <&reg_axp1530_dcdc1>;
+		};
 
 		rtc_ccu: rtc_ccu@7200000 {
 			compatible = "allwinner,sun65iw1-rtc-ccu";
@@ -1333,7 +1333,7 @@
 		};
 
 		uart0: uart@2B00000 {
-			compatible = "allwinner,uart-v100";
+			compatible = "allwinner,uart-v102";
 			reg = <0x0 0x02B00000 0x0 0x400>;
 			interrupts = <GIC_SPI 2 IRQ_TYPE_LEVEL_HIGH>;
 			clocks = <&ccu CLK_BUS_UART0_APB>;
@@ -1344,7 +1344,7 @@
 		};
 
 		uart1: uart@2B01000 {
-			compatible = "allwinner,uart-v100";
+			compatible = "allwinner,uart-v102";
 			device_type = "uart1";
 			reg = <0x0 0x02B01000 0x0 0x400>;
 			interrupts = <GIC_SPI 3 IRQ_TYPE_LEVEL_HIGH>;
@@ -1360,7 +1360,7 @@
 		};
 
 		uart2: uart@2B02000 {
-			compatible = "allwinner,uart-v100";
+			compatible = "allwinner,uart-v102";
 			device_type = "uart2";
 			reg = <0x0 0x02B02000 0x0 0x400>;
 			interrupts = <GIC_SPI 4 IRQ_TYPE_LEVEL_HIGH>;
@@ -1376,7 +1376,7 @@
 		};
 
 		uart3: uart@2B03000 {
-			compatible = "allwinner,uart-v100";
+			compatible = "allwinner,uart-v102";
 			device_type = "uart3";
 			reg = <0x0 0x02B03000 0x0 0x400>;
 			interrupts = <GIC_SPI 5 IRQ_TYPE_LEVEL_HIGH>;
@@ -1392,7 +1392,7 @@
 		};
 
 		uart4: uart@2B04000 {
-			compatible = "allwinner,uart-v100";
+			compatible = "allwinner,uart-v102";
 			device_type = "uart4";
 			reg = <0x0 0x02B04000 0x0 0x400>;
 			interrupts = <GIC_SPI 6 IRQ_TYPE_LEVEL_HIGH>;
@@ -1408,7 +1408,7 @@
 		};
 
 		uart5: uart@2B05000 {
-			compatible = "allwinner,uart-v100";
+			compatible = "allwinner,uart-v102";
 			device_type = "uart5";
 			reg = <0x0 0x02B05000 0x0 0x400>;
 			interrupts = <GIC_SPI 7 IRQ_TYPE_LEVEL_HIGH>;
@@ -1424,7 +1424,7 @@
 		};
 
 		uart6: uart@2B06000 {
-			compatible = "allwinner,uart-v100";
+			compatible = "allwinner,uart-v102";
 			device_type = "uart6";
 			reg = <0x0 0x02B06000 0x0 0x400>;
 			interrupts = <GIC_SPI 8 IRQ_TYPE_LEVEL_HIGH>;
@@ -1440,7 +1440,7 @@
 		};
 
 		uart7: uart@2B07000 {
-			compatible = "allwinner,uart-v100";
+			compatible = "allwinner,uart-v102";
 			device_type = "uart7";
 			reg = <0x0 0x02B07000 0x0 0x400>;
 			interrupts = <GIC_SPI 9 IRQ_TYPE_LEVEL_HIGH>;
@@ -1456,7 +1456,7 @@
 		};
 
 		uart8: uart@7100000 {
-			compatible = "allwinner,uart-v100";
+			compatible = "allwinner,uart-v102";
 			device_type = "uart8";
 			reg = <0x0 0x07100000 0x0 0x400>;
 			interrupts = <GIC_SPI 237 IRQ_TYPE_LEVEL_HIGH>;
@@ -1472,7 +1472,7 @@
 		};
 
 		uart9: uart@7101000 {
-			compatible = "allwinner,uart-v100";
+			compatible = "allwinner,uart-v102";
 			device_type = "uart9";
 			reg = <0x0 0x07101000 0x0 0x400>;
 			interrupts = <GIC_SPI 238 IRQ_TYPE_LEVEL_HIGH>;
@@ -1945,7 +1945,7 @@
 			clock-names = "osc24m","pll_periph","pll_periph_2","mmc","ahb","mmc_store";
 			resets = <&ccu RST_BUS_SMHC0>;
 			reset-names = "rst";
-			pinctrl-names = "sdc_default","mmc_1v8","sleep","uart_jtag";
+			pinctrl-names = "default","mmc_1v8","sleep","uart_jtag";
 			pinctrl-0 = <&sdc0_pins_a &sdc0_pins_f>;
 			pinctrl-1 = <&sdc0_pins_b &sdc0_pins_g>;
 			pinctrl-2 = <&sdc0_pins_c>;
@@ -3043,47 +3043,53 @@
 		pcie: pcie@c800000 {
 			#address-cells = <3>;
 			#size-cells = <2>;
-			compatible = "allwinner,sunxi-pcie-v210-v3-rc";
-			bus-range = <0x0 0xff>;
-			reg = <0 0x0c800000 0 0x500000>;
-			reg-names = "dbi";
+			compatible = "allwinner,sun65iw1-pcie", "snps,dw-pcie";
 			device_type = "pci";
-			ranges = <0x00000800 0x4 0x40000000 0x4 0x40000000 0 0x01000000>, /* configuration (16 MB) */
-				  <0x01000000 0x4 0x41000000 0x4 0x41000000 0 0x01000000>, /* downstream I/O (16 MB) */
-				  <0x02000000 0x0 0x22000000 0x4 0x42000000 0 0x08000000>, /* non-prefetchable memory (128 MB) */
-				  <0x43000000 0x4 0x4A000000 0x4 0x4A000000 0 0xF6000000>; /* prefetchable memory (3936 MB) */
-			num-lanes = <1>;
-			phys = <&combo0_pcie>;
-			phy-names = "pcie-phy";
-			interrupts = <GIC_SPI 195 IRQ_TYPE_LEVEL_HIGH>,
-				     <GIC_SPI 194 IRQ_TYPE_LEVEL_HIGH>,
+			reg = <0x0 0x0c800000 0x0 0x00100000>,
+			      <0x0 0x0c900000 0x0 0x00040000>,
+			      <0x0 0x0cb00000 0x0 0x00080000>,
+			      <0x0 0x0cb80000 0x0 0x00080000>,
+			      <0x0 0x0cc00000 0x0 0x00080000>,
+			      <0x4 0x40000000 0x0 0x01000000>;
+			reg-names = "dbi", "dbi2", "atu", "dma", "app", "config";
+			ranges = <0x01000000 0x4 0x41000000 0x4 0x41000000 0x0 0x01000000>, /* downstream I/O (16 MB) */
+				 <0x02000000 0x0 0x22000000 0x4 0x42000000 0x0 0x08000000>, /* non-prefetchable memory (128 MB) */
+				 <0x43000000 0x4 0x4a000000 0x4 0x4a000000 0x0 0xf6000000>; /* prefetchable memory (3936 MB) */
+			clocks = <&ccu CLK_PCIE0_AUX>, <&ccu CLK_PCIE0_AXI_S>;
+			clock-names = "aux", "axi_slv";
+			assigned-clocks = <&ccu CLK_PCIE0_AXI_S>;
+			assigned-clocks-parents = <&ccu CLK_PLL_PERI0_400M>;
+			assigned-clock-rates = <400000000>;
+			resets = <&ccu RST_BUS_PCIE0>, <&ccu RST_BUS_PCIE0_PWR_UP>;
+			reset-names = "rst", "pwrup_rst";
+			power-domains = <&pd SUN65IW1_PCK_HSI>;
+			interrupts = <GIC_SPI 194 IRQ_TYPE_LEVEL_HIGH>,
+				     <GIC_SPI 195 IRQ_TYPE_LEVEL_HIGH>,
 				     <GIC_SPI 186 IRQ_TYPE_LEVEL_HIGH>,
 				     <GIC_SPI 187 IRQ_TYPE_LEVEL_HIGH>;
-			interrupt-names = "msi", "sii", "edma-w0", "edma-r0";
+			interrupt-names = "sii", "msi",
+					  "dma0", /* edma-w */
+					  "dma1"; /* edma-r */
 			#interrupt-cells = <1>;
 			interrupt-map-mask = <0 0 0 7>;
 			interrupt-map = <0 0 0 1 &pcie_intc 0>,
-							<0 0 0 2 &pcie_intc 1>,
-							<0 0 0 3 &pcie_intc 2>,
-							<0 0 0 4 &pcie_intc 3>;
-			num-edma = <1>;
-			max-link-speed = <2>;
-			num-ib-windows = <8>;
-			num-ob-windows = <8>;
-			num-viewport = <8>;
+					<0 0 0 2 &pcie_intc 1>,
+					<0 0 0 3 &pcie_intc 2>,
+					<0 0 0 4 &pcie_intc 3>;
+			bus-range = <0x0 0xff>;
 			linux,pci-domain = <0>;
-			power-domains = <&pd SUN65IW1_PCK_HSI>;
-			clocks = <&ccu CLK_PLL_PERI0_200M>, <&dcxo24M>, <&ccu CLK_PCIE0_AUX>, <&ccu CLK_PCIE0_AXI_S>;
-			clock-names = "pclk_per", "hosc", "pclk_aux", "pclk_slv";
-			resets = <&ccu RST_BUS_PCIE0>, <&ccu RST_BUS_PCIE0_PWR_UP>;
-			reset-names = "pclk_rst", "pwrup_rst";
-			busno = <0>;
+			max-link-speed = <2>;
+			num-lanes = <1>;
+			phys = <&combo0_pcie>;
+			phy-names = "pcie-phy";
 			status = "disabled";
 
 			pcie_intc: legacy-interrupt-controller {
 				interrupt-controller;
 				#address-cells = <0>;
 				#interrupt-cells = <1>;
+				interrupt-parent = <&gic>;
+				interrupts = <GIC_SPI 194 IRQ_TYPE_EDGE_RISING>;
 			};
 		};
 
@@ -3104,7 +3110,7 @@
 		};
 
 		gmac0: ethernet@de00000 {
-			compatible = "allwinner,sunxi-dwmac-110", "snps,dwmac-5.20";
+			compatible = "allwinner,sunxi-gmac-110", "snps,dwmac-5.20";
 			reg = <0x0 0x0de00000 0x0 0x8000>, /* ip */
 				  <0x0 0x0de08000 0x0 0x1000>; /* cfg */
 			interrupts = <GIC_SPI 170 IRQ_TYPE_LEVEL_HIGH>,
@@ -4051,7 +4057,7 @@
 		};
 
 		synopsys: synopsys@dc80000 {
-			compatible = "allwinner,synopsys-combophy";
+			compatible = "allwinner,synopsys-combophy-v2";
 			reg = <0x0 0x0dc80000 0x0 0x8000>, /* HSI Subsystem Application Register */
 			      <0x0 0x0dd00000 0x0 0x100>, /* COMBO0 PHY TOP Application Register */
 			      <0x0 0x0dd01000 0x0 0x10>, /* COMBO0 PHY CORE Application Register */
@@ -4076,8 +4082,6 @@
 				clocks = <&ccu CLK_HSI_COMB0_PHY_REF>, <&ccu CLK_HSI_COMB0_PHY_CFG>,
 					 <&ccu CLK_USB2_U3_ONLY_UTMI>;
 				clock-names = "comb0_ref_clk", "comb0_cfg_clk", "u3_only_clk";
-				aw,u2u3-only-quirk = <1>; /* u2:0, u3:1*/
-				aw,u2u3-only-ver = <0>, <1>;
 				#phy-cells = <0>;
 				status = "okay";
 			};
@@ -4113,7 +4117,6 @@
 						     0x02 0xb9 0x01 0x01
 						     0x02 0xba 0x00 0x01
 						     0x02 0xbb 0x01 0x01>;
-				aw,dpdm-bypass-ver = <0>, <1>;
 				#phy-cells = <0>;
 				status = "okay";
 			};
@@ -4133,9 +4136,6 @@
 						     0x02 0xb9 0x01 0x01
 						     0x02 0xba 0x00 0x01
 						     0x02 0xbb 0x01 0x01>;
-				aw,dpdm-bypass-ver = <0>, <1>;
-				aw,u2u3-only-quirk = <1>; /* u2:0, u3:1*/
-				aw,u2u3-only-ver = <0>, <1>;
 				#phy-cells = <0>;
 				status = "okay";
 			};

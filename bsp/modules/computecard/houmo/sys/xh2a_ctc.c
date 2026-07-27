@@ -80,7 +80,6 @@
 #define AOSS_NIU_CTC_CTRL_BASE		  0x70030000
 #define AOSS_NIU_CTC_STATUS_BASE	  0x70030004
 #define CTC_NIU_MASK			  0xffffffC0
-#define CTC_NIU_DISCONNECT		  0x15555540
 #define CTC_NIU_CONNECT			  0x2AAAAA80
 
 /* MULTI-CHIP */
@@ -370,34 +369,6 @@ static void ctc_niu_connect(struct xh2a_sys_dev *sys_dev)
 	}
 }
 
-static void ctc_niu_disconnect(struct xh2a_sys_dev *sys_dev)
-{
-	uint32_t niu_val, trycnt;
-	uint32_t niu_ctrl_addr = AOSS_NIU_CTC_CTRL_BASE;
-	uint32_t niu_status_addr = AOSS_NIU_CTC_STATUS_BASE;
-
-	dev_info(sys_dev->miscdev.this_device, "ctc niu disconnect\n");
-
-	trycnt = 0;
-	do {
-		xh2a_pcie_pio_readl(sys_dev->private_data, niu_ctrl_addr,
-				    &niu_val);
-		niu_val |= CTC_NIU_DISCONNECT;
-		xh2a_pcie_pio_writel(sys_dev->private_data, niu_ctrl_addr,
-				     niu_val);
-		xh2a_pcie_pio_readl(sys_dev->private_data, niu_status_addr,
-				    &niu_val);
-		trycnt++;
-	} while (((niu_val & CTC_NIU_MASK) == 0) && (trycnt < 1000));
-
-	if (trycnt >= 1000) {
-		dev_err(sys_dev->miscdev.this_device, "niu disconnect "
-						      "failed.\n");
-	} else {
-		dev_info(sys_dev->miscdev.this_device, "niu disconnect ok.\n");
-	}
-}
-
 void xh2a_ctc_shutdown(struct xh2a_sys_dev *sys_dev)
 {
 	int ctcss_id;
@@ -406,8 +377,6 @@ void xh2a_ctc_shutdown(struct xh2a_sys_dev *sys_dev)
 	if (sys_dev->ctc_info.chip_id == CTC_UNINIT_VAL ||
 	    sys_dev->ctc_info.is_single == 1)
 		return;
-
-	ctc_niu_disconnect(sys_dev);
 
 	/* step: a */
 	xh2a_pcie_pio_readl(sys_dev->private_data,

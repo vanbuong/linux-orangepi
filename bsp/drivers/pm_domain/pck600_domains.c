@@ -23,6 +23,7 @@
 #include <linux/timer.h>
 #include <dt-bindings/power/a523-power.h>
 #include <dt-bindings/power/sun60iw2-power.h>
+#include <dt-bindings/power/sun65iw1-power.h>
 
 struct sunxi_domain_info {
 	u32 domain_id;
@@ -568,6 +569,26 @@ static const struct sunxi_pmu_info sun60iw2_pck600_pmu = {
 	.domain_info = sun60iw2_pck600_pm_domains,
 	.has_rst_clk = false,
 };
+
+static const struct sunxi_domain_info sun65iw1_pck600_pm_domains[] = {
+	[SUN65IW1_PCK_VI] = DOMAIN(SUN65IW1_PCK_VI,  0x1f1f1f, 0x1f1f,  0x8080808,  0x808,  0x8,  0xf),
+	[SUN65IW1_PCK_VE] = DOMAIN(SUN65IW1_PCK_VE,  0x1f1f1f, 0x1f1f,  0x8080808,  0x808,  0x8,  0xf),
+	[SUN65IW1_PCK_HSI] = DOMAIN(SUN65IW1_PCK_HSI, 0x1f1f1f, 0x1f1f, 0x8080808,  0x808,  0x8,  0xf),
+	[SUN65IW1_PCK_VO] = DOMAIN(SUN65IW1_PCK_VO, 0x1f1f1f, 0x1f1f, 0x8080808,  0x808,  0x8,  0xf),
+};
+
+static const struct sunxi_pmu_info sun65iw1_pck600_pmu = {
+	.pwr_offset = 0x0,
+	.status_offset = 0x8,
+	.device_ctrl0_delay_offset = 0x170,
+	.device_ctrl1_delay_offset = 0x174,
+	.logic_power_switch0_delay_offset = 0xc00,
+	.logic_power_switch1_delay_offset = 0xc04,
+	.off2on_delay_offset = 0xc10,
+	.num_domains = ARRAY_SIZE(sun65iw1_pck600_pm_domains),
+	.domain_info = sun65iw1_pck600_pm_domains,
+	.has_rst_clk = false,
+};
 static const struct of_device_id sunxi_pm_domain_dt_match[] = {
 	{
 		.compatible = "allwinner,a523-pck-600",
@@ -576,6 +597,10 @@ static const struct of_device_id sunxi_pm_domain_dt_match[] = {
 	{
 		.compatible = "allwinner,sun60iw2-pck-600",
 		.data = (void *)&sun60iw2_pck600_pmu,
+	},
+	{
+		.compatible = "allwinner,sun65iw1-pck-600",
+		.data = (void *)&sun65iw1_pck600_pmu,
 	},
 	{ /* sentinel */ },
 };
@@ -612,4 +637,4 @@ MODULE_LICENSE("GPL v2");
 MODULE_DESCRIPTION("Allwinner power domain driver");
 MODULE_ALIAS("platform:" DRIVER_NAME);
 MODULE_AUTHOR("fanqinghua <fanqinghua@allwinnertech.com>");
-MODULE_VERSION("1.0.3");
+MODULE_VERSION("1.0.4");

@@ -39,8 +39,8 @@
 
 #define AICBT_RELEASE_NAME "202012_ANDROID"
 #define VERSION            "2.1.0"
-#define DRV_RELEASE_DATE   "20220429"
-#define DRV_PATCH_LEVEL    "002"
+#define DRV_RELEASE_DATE   "20250923"
+#define DRV_PATCH_LEVEL    "003"
 #define DRV_RELEASE_TAG    "aic-btusb-" DRV_RELEASE_DATE "-" DRV_PATCH_LEVEL
 
 #define SUSPNED_DW_FW 0
@@ -97,6 +97,21 @@ struct btusb_data {
 static bool reset_on_close;
 #endif
 
+static u8 chip_id = 0;
+static u8 sub_chip_id = 0;
+
+struct aicbsp_info_t aicbtusb_info = {
+	.hwinfo   = AICBSP_HWINFO_DEFAULT,
+	.cpmode   = AICBSP_CPMODE_DEFAULT,
+};
+
+const struct aicbt_firmware *aicbt_fw;
+
+//for 8800DC start
+static u32 fwcfg_tbl[][2] = {
+	{0x40200028, 0x0021047e},
+	{0x40200024, 0x0000011d},
+};
 
 static inline int check_set_dlfw_state_value(uint16_t change_value)
 {
@@ -115,8 +130,476 @@ static inline void set_dlfw_state_value(uint16_t change_value)
 	spin_unlock(&dlfw_lock);
 }
 
+static int check_fw_status(firmware_info *fw_info)
+{
+	struct fw_status *read_ver_rsp;
+	int ret_val = -1;
 
+	printk("%s", __func__);
+	fw_info->cmd_hdr->opcode = cpu_to_le16(HCI_VSC_FW_STATUS_GET_CMD);
+	fw_info->cmd_hdr->plen = 0;
+	fw_info->pkt_len = CMD_HDR_LEN;
 
+	ret_val = send_hci_cmd(fw_info);
+	if (ret_val < 0) {
+		printk("%s: Failed to send hci cmd 0x%04x, errno %d",
+				__func__, fw_info->cmd_hdr->opcode, ret_val);
+		return ret_val;
+	}
+
+	ret_val = rcv_hci_evt(fw_info);
+	if (ret_val < 0) {
+		printk("%s: Failed to receive hci event, errno %d",
+				__func__, ret_val);
+		return ret_val;
+	}
+
+	read_ver_rsp = (struct fw_status *)(fw_info->rsp_para);
+
+	printk("%s: fw status = 0x%04x",
+			__func__, read_ver_rsp->status);
+	return read_ver_rsp->status;
+}
+
+static int hci_send_dbg_rd_mem_cmd(firmware_info *fw_info, u32 addr)
+{
+	struct hci_dbg_rd_mem_cmd *rd_cmd = (struct hci_dbg_rd_mem_cmd *)(fw_info->req_para);
+	int ret_val = -1;
+
+	if (!rd_cmd)
+		return -ENOMEM;
+
+	rd_cmd->start_addr = addr;
+	rd_cmd->type = 32;
+	rd_cmd->length = 4;
+	fw_info->cmd_hdr->opcode = cpu_to_le16(HCI_VSC_DBG_RD_MEM_CMD);
+	fw_info->cmd_hdr->plen = sizeof(struct hci_dbg_rd_mem_cmd);
+	fw_info->pkt_len = CMD_HDR_LEN + sizeof(struct hci_dbg_rd_mem_cmd);
+
+	ret_val = send_hci_cmd(fw_info);
+	if (ret_val < 0) {
+		printk("%s: Failed to send hci cmd 0x%04x, errno %d",
+				__func__, fw_info->cmd_hdr->opcode, ret_val);
+		return ret_val;
+	}
+
+	ret_val = rcv_hci_evt(fw_info);
+	if (ret_val < 0) {
+		printk("%s: Failed to receive hci event, errno %d",
+				__func__, ret_val);
+		return ret_val;
+	}
+
+	return 0;
+}
+
+static int hci_send_patch_table_req(firmware_info *fw_info, u32 patch_table[][2], u32 patch_num)
+{
+	struct hci_patch_table_cmd *patch_table_cmd = (struct hci_patch_table_cmd *)(fw_info->req_para);
+	int i = 0, ret_val = 0;
+	struct fw_status *evt_status;
+
+	patch_table_cmd->patch_num = patch_num;
+	for (i = 0; i < patch_num; i++) {
+		memcpy(&patch_table_cmd->patch_table_addr[i], &patch_table[i][0], sizeof(uint32_t));
+		memcpy(&patch_table_cmd->patch_table_data[i], &patch_table[i][1], sizeof(uint32_t));
+	}
+	fw_info->cmd_hdr->opcode = cpu_to_le16(HCI_VSC_UPDATE_PT_CMD);
+	fw_info->cmd_hdr->plen = HCI_VSC_UPDATE_PT_SIZE;
+	fw_info->pkt_len = fw_info->cmd_hdr->plen + 3;
+
+	ret_val = send_hci_cmd(fw_info);
+	if (ret_val < 0) {
+		AICBT_ERR("%s: rcv_hci_evt err %d", __func__, ret_val);
+		return ret_val;
+	}
+	ret_val = rcv_hci_evt(fw_info);
+	if (ret_val < 0) {
+		printk("%s: Failed to receive hci event, errno %d",
+				__func__, ret_val);
+		return ret_val;
+	}
+	evt_status = (struct fw_status *)fw_info->rsp_para;
+	ret_val = evt_status->status;
+	if (0 != evt_status->status) {
+		ret_val = -1;
+	} else {
+		ret_val = 0;
+	}
+
+	return ret_val;
+}
+
+static int hci_send_dbg_mem_block_write_req(firmware_info *fw_info, u32 mem_addr,
+									  u32 mem_size, u8 *mem_data)
+{
+	int ret_val = -1;
+	struct hci_dbg_wr_mem_cmd *dl_cmd;
+	int hdr_len = sizeof(__le32) + sizeof(__u8) + sizeof(__u8);
+	int data_len = mem_size;
+	int frag_len = data_len + hdr_len;
+
+	dl_cmd = (struct hci_dbg_wr_mem_cmd *)(fw_info->req_para);
+	if (!dl_cmd)
+		return -ENOMEM;
+
+	dl_cmd->start_addr = mem_addr;
+	dl_cmd->type = 32;
+	dl_cmd->length = data_len;
+	memcpy(dl_cmd->data, mem_data, data_len);
+	fw_info->cmd_hdr->opcode = cpu_to_le16(DOWNLOAD_OPCODE);
+	fw_info->cmd_hdr->plen = frag_len;
+	fw_info->pkt_len = frag_len + sizeof(struct hci_command_hdr);;
+
+	ret_val = send_hci_cmd(fw_info);
+	if (ret_val < 0) {
+		printk("%s: Failed to send hci cmd 0x%04x, errno %d",
+				__func__, fw_info->cmd_hdr->opcode, ret_val);
+		return ret_val;
+	}
+
+	ret_val = rcv_hci_evt(fw_info);
+	if (ret_val < 0) {
+		printk("%s: Failed to receive hci event, errno %d",
+				__func__, ret_val);
+		return ret_val;
+	}
+
+	return 0;
+}
+
+static int hci_send_dbg_mem_write_req(firmware_info *fw_info, u32 mem_addr, u32 mem_data)
+{
+	return hci_send_dbg_mem_block_write_req(fw_info, mem_addr, 4, (u8 *)&mem_data);
+}
+
+static int hci_plat_bin_fw_upload_android(firmware_info *fw_info, u32 fw_addr,
+							   const char *filename)
+{
+	unsigned int i = 0;
+	int size;
+	u8 *dst = NULL;
+	int err = 0;
+
+	const struct firmware *fw = NULL;
+	int ret = request_firmware(&fw, filename, NULL);
+
+	printk("aicbt_request_firmware, name: %s\n", filename);
+	if (ret < 0) {
+		printk("Load %s fail\n", filename);
+		return ret;
+	}
+
+	size = fw->size;
+	dst = (u8 *)fw->data;
+
+	if (size <= 0) {
+		printk("wrong size of firmware file\n");
+		release_firmware(fw);
+		return -1;
+	}
+
+	/* Copy the file on the Embedded side */
+	if (size > HCI_VSC_MEM_WR_SIZE) {// > HCI_VSC_MEM_WR_SIZE
+		for (i = 0; i < (size - HCI_VSC_MEM_WR_SIZE); i += HCI_VSC_MEM_WR_SIZE) { // each time write HCI_VSC_MEM_WR_SIZE
+			err = hci_send_dbg_mem_block_write_req(fw_info, fw_addr + i, HCI_VSC_MEM_WR_SIZE, dst + i);
+			if (err) {
+				printk("bin upload fail: %x, err:%d\r\n", fw_addr + i, err);
+				break;
+			}
+		}
+	}
+
+	if (!err && (i < size)) {// < HCI_VSC_MEM_WR_SIZE
+		err = hci_send_dbg_mem_block_write_req(fw_info, fw_addr + i, size - i, dst + i);
+		if (err) {
+			printk("bin upload fail: %x, err:%d\r\n", fw_addr + i, err);
+		}
+	}
+
+	release_firmware(fw);
+	return err;
+}
+
+static int aicbt_set_bbpll_config(firmware_info *fw_info)
+{
+	int ret_val = -1;
+	struct hci_dbg_rd_mem_cmd_evt *evt_para = (struct hci_dbg_rd_mem_cmd_evt *)(fw_info->rsp_para);
+
+	u32 bbpll_addr = 0x40505010;
+	u32 bbpll_vals = 0;
+	u32 patch_table[1][2];
+
+	//Read crystal provided by CPU or not.
+	ret_val = hci_send_dbg_rd_mem_cmd(fw_info, 0x40500148);
+	if (ret_val < 0) {
+		printk("%s error ret_val:%d\r\n", __func__, ret_val);
+		return ret_val;
+	}
+
+	if (!(evt_para->data[0] & 0x01)) {
+		printk("%s Crystal not provided by CPU \r\n", __func__);
+		return 0;
+	}
+
+	printk("%s Crystal provided by CPU \r\n", __func__);
+	ret_val = hci_send_dbg_rd_mem_cmd(fw_info, 0x40505010);
+	if (ret_val < 0) {
+		printk("%s error ret_val:%d\r\n", __func__, ret_val);
+		return ret_val;
+	}
+
+	evt_para = (struct hci_dbg_rd_mem_cmd_evt *)(fw_info->rsp_para);
+	if ((evt_para->data[3] >> 5) == 3) {
+		printk("%s Not need to set \r\n", __func__);
+		return 0;
+	}
+
+	evt_para->data[3] |= ((0x1 << 5) | (0x1 << 6));
+	evt_para->data[3] &= (~(0x1 << 7));
+	bbpll_vals  = evt_para->data[3] << 24;
+	bbpll_vals |= evt_para->data[2] << 16;
+	bbpll_vals |= evt_para->data[1] << 8;
+	bbpll_vals |= evt_para->data[0];
+
+	patch_table[0][0] = bbpll_addr;
+	patch_table[0][1] = bbpll_vals;
+
+	return hci_send_patch_table_req(fw_info, patch_table, 1);
+}
+
+static int aicbt_fw_config(firmware_info *fw_info)
+{
+	int ret = 0;
+	struct hci_dbg_rd_mem_cmd_evt *evt_para;
+
+	uint16_t rd_data = 0;
+	ret = hci_send_dbg_rd_mem_cmd(fw_info, 0x40200024);
+	if (ret) {
+		printk("%s, read 0x40200024 error, %d\n", __func__, ret);
+		return ret;
+	}
+
+	evt_para = (struct hci_dbg_rd_mem_cmd_evt *)(fw_info->rsp_para);
+	rd_data = (evt_para->data[0] | (evt_para->data[1] << 8));
+	printk("%s rd_data is %x\n", __func__, rd_data);
+	if (rd_data != 0x119) {
+		goto done;
+	}
+
+	ret = hci_send_patch_table_req(fw_info, fwcfg_tbl,  sizeof(fwcfg_tbl) / sizeof(u32) / 2);
+	if (ret < 0) {
+		printk("%s send fwcfg_tbl error, %d\n", __func__, ret);
+		return ret;
+	}
+
+done:
+	return aicbt_set_bbpll_config(fw_info);
+}
+
+static int aicbt_system_config(firmware_info *fw_info)
+{
+	int ret = 0;
+	struct hci_dbg_rd_mem_cmd_evt *evt_para = (struct hci_dbg_rd_mem_cmd_evt *)(fw_info->rsp_para);
+	uint32_t rd_data;
+	uint8_t btdual;
+
+	printk("%s", __func__);
+	ret = hci_send_dbg_rd_mem_cmd(fw_info, 0x40500000);
+	if (ret) {
+		printk("%s, read 0x40500000 error, %d\n", __func__, ret);
+		return ret;
+	}
+
+	rd_data = (evt_para->data[0] | (evt_para->data[1] << 8) | (evt_para->data[2] << 16) | (evt_para->data[3] << 24));
+	chip_id = (u8) (rd_data >> 16);
+	btdual = (u8) ((rd_data >> 27) && 0x01);
+	printk("%s, btdual: %d\n", __func__, btdual);
+
+	ret = hci_send_dbg_rd_mem_cmd(fw_info, 0x20);
+	if (ret) {
+		printk("%s, read 0x20 error, %d\n", __func__, ret);
+		return ret;
+	}
+
+	rd_data = (evt_para->data[0] | (evt_para->data[1] << 8) | (evt_para->data[2] << 16) | (evt_para->data[3] << 24));
+	sub_chip_id = (u8)(rd_data);
+
+	printk("chip_id = %x, sub_chip_id = %x\n", chip_id, sub_chip_id);
+	return 0;
+}
+
+static int aicbtusb_patch_table_load(firmware_info *fw_info, struct aicbt_info_t *aicbt_info, struct aicbt_patch_table *head)
+{
+	struct aicbt_patch_table *p;
+	uint32_t *data = NULL;
+	int ret_val = 0;
+	uint32_t len = 0;
+	uint32_t tot_len = 0;
+
+	printk("%s bt uart baud: %d, flowctrl: %d, lpm_enable: %d, tx_pwr: %d, bt mode:%d.\n", __func__,
+			aicbt_info->uart_baud, aicbt_info->uart_flowctrl, aicbt_info->lpm_enable, aicbt_info->txpwr_lvl, aicbt_info->btmode);
+
+	for (p = head; p != NULL; p = p->next) {
+		data = p->data;
+		if (AICBT_PT_BTMODE == p->type) {
+			*(data + 1)  = aicbtusb_info.hwinfo < 0;
+			*(data + 3)  = aicbtusb_info.hwinfo;
+			*(data + 5)  = aicbtusb_info.cpmode;
+
+			*(data + 7)  = aicbt_info->btmode;
+			*(data + 9)  = aicbt_info->btport;
+			*(data + 11) = aicbt_info->uart_baud;
+			*(data + 13) = aicbt_info->uart_flowctrl;
+			*(data + 15) = aicbt_info->lpm_enable;
+			*(data + 17) = aicbt_info->txpwr_lvl;
+		}
+		if (p->type == AICBT_PT_INF || p->type == AICBT_PT_PWRON) {
+			continue;
+		}
+		if (p->type == AICBT_PT_VER) {
+			char *data_s = (char *)p->data;
+			printk("patch version %s\n", data_s);
+			continue;
+		}
+		if (p->len == 0) {
+			printk("len is 0\n");
+			continue;
+		}
+		tot_len = p->len;
+		while (tot_len) {
+			if (tot_len > HCI_PT_MAX_LEN) {
+				len = HCI_PT_MAX_LEN;
+			} else {
+				len = tot_len;
+			}
+			tot_len -= len;
+
+			ret_val = hci_send_patch_table_req(fw_info, (u32 (*)[2])data, len);
+			if (ret_val) {
+				printk("%s, download patch fail: %d\n", __func__, ret_val);
+				return ret_val;
+			}
+		}
+	}
+	return 0;
+}
+
+static int aic8800dc_bt_patch_config(firmware_info *fw_info)
+{
+	int ret = 0;
+	struct aicbt_patch_info_t patch_info = {
+		.info_len          = 0,
+		.adid_addrinf      = 0,
+		.addr_adid         = 0,
+		.patch_addrinf     = 0,
+		.addr_patch        = 0,
+		.reset_addr        = 0,
+		.reset_val         = 0,
+		.adid_flag_addr    = 0,
+		.adid_flag         = 0,
+		.ext_patch_nb_addr = 0,
+		.ext_patch_nb      = 0,
+	};
+
+	struct aicbt_info_t aicbt_info = {
+		.btmode        = AICBT_BTMODE_BT_WIFI_COMBO,
+		.btport        = AICBT_BTPORT_MB,
+		.uart_baud     = AICBT_UART_BAUD_DEFAULT,
+		.uart_flowctrl = AICBT_UART_FC_DEFAULT,
+		.lpm_enable    = 0,
+		.txpwr_lvl     = AICBT_TXPWR_LVL_8800DC,
+	};
+
+	struct aicbt_patch_table *head = NULL;
+
+	if (!fw_info) {
+		printk("%s fw_info is null", __func__);
+		printk("%s: No patch entry exists(fw_info %p)", __func__, fw_info);
+		return -1;
+	}
+
+	ret = aicbt_fw_config(fw_info);
+	if (ret) {
+		printk("%s: fw config failed %d", __func__, ret);
+		return ret;
+	}
+
+	ret = aicbt_system_config(fw_info);
+	if (ret) {
+		printk("%s: system config failed %d", __func__, ret);
+		return ret;
+	}
+
+	/*
+	 * step1: check firmware statis
+	 * step2: download firmware if updated
+	 */
+	ret = check_fw_status(fw_info);
+	if (!ret) {
+		printk("%s: already configured", __func__);
+		return 0;
+	}
+
+	switch (sub_chip_id) {
+	case DC_U01:
+	case DC_U02:
+	case DC_U02H:
+		aicbt_fw = &fw_8800dc[sub_chip_id];
+		printk("%s aicbt_fw desc: %s\n", __func__, aicbt_fw->desc);
+		break;
+	default:
+		printk("%s unsupported sub_chip_id %x\n", __func__, sub_chip_id);
+		goto err;
+		break;
+	}
+
+	head = aicbt_patch_table_alloc(aicbt_fw->bt_table);
+	if (head == NULL) {
+		printk("aicbt_patch_table_alloc fail\n");
+		return -1;
+	}
+
+	patch_info.addr_adid  = FW_RAM_ADID_BASE_ADDR;
+	patch_info.addr_patch = FW_RAM_PATCH_BASE_ADDR;
+
+	ret = aicbt_patch_info_unpack(head, &patch_info);
+	if (ret) {
+		pr_warn("%s no patch info found in bt fw\n", __func__);
+	}
+
+	if (patch_info.reset_addr == 0) {
+		patch_info.reset_addr        = FW_RESET_START_ADDR;
+		patch_info.reset_val         = FW_RESET_START_VAL;
+		patch_info.adid_flag_addr    = FW_ADID_FLAG_ADDR;
+		patch_info.adid_flag         = FW_ADID_FLAG_VAL;
+		ret = hci_send_dbg_mem_write_req(fw_info, patch_info.reset_addr, patch_info.reset_val);
+		if (ret)
+			goto err;
+
+		ret = hci_send_dbg_mem_write_req(fw_info, patch_info.adid_flag_addr, patch_info.adid_flag);
+		if (ret)
+			goto err;
+	}
+
+	ret = hci_plat_bin_fw_upload_android(fw_info, patch_info.addr_adid, aicbt_fw->bt_adid);
+	if (ret)
+		goto err;
+
+	ret = hci_plat_bin_fw_upload_android(fw_info, patch_info.addr_patch, aicbt_fw->bt_patch);
+	if (ret)
+		goto err;
+
+	aicbt_reload_config(aicbt_fw->hw_config, &aicbt_info);
+
+	ret = aicbtusb_patch_table_load(fw_info, &aicbt_info, head);
+	if (ret)
+		printk("aicbtfdrv_patch_table_load fail\n");
+
+err:
+	aicbt_patch_table_free(&head);
+	return ret;
+}
 
 static void aic_free(struct btusb_data *data)
 {
@@ -1168,11 +1651,7 @@ failed:
 static long compat_btchr_ioctl (struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	AICBT_DBG("%s: enter", __func__);
-#if LINUX_VERSION_CODE >= KERNEL_VERSION(5, 6, 0)
 	return btchr_ioctl(filp, cmd, (unsigned long) compat_ptr(arg));
-#else
-	return btchr_ioctl(filp, cmd, (unsigned long __user)arg);
-#endif
 }
 #endif
 
@@ -1205,7 +1684,11 @@ static int btchr_init(void)
 	init_waitqueue_head(&btchr_read_wait);
 	init_waitqueue_head(&bt_dlfw_wait);
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 4, 0)
+	bt_char_class = class_create(BT_CHAR_DEVICE_NAME);
+#else
 	bt_char_class = class_create(THIS_MODULE, BT_CHAR_DEVICE_NAME);
+#endif
 	if (IS_ERR(bt_char_class)) {
 		AICBT_ERR("Failed to create bt char class");
 		return PTR_ERR(bt_char_class);
@@ -1260,11 +1743,16 @@ int send_hci_cmd(firmware_info *fw_info)
 	int len = 0;
 	int ret_val = -1;
 
-	ret_val = usb_bulk_msg(fw_info->udev, fw_info->pipe_out, fw_info->send_pkt, fw_info->pkt_len,
-			&len, 3000);
-	if (ret_val || (len != fw_info->pkt_len)) {
-		AICBT_INFO("Error in send hci cmd = %d,"
-				"len = %d, size = %d", ret_val, len, fw_info->pkt_len);
+	while ((ret_val < 0) && (len++ < 3)) {
+		ret_val = usb_control_msg(
+			fw_info->udev, fw_info->pipe_out,
+			0, USB_TYPE_CLASS, 0, 0,
+			(void *)(fw_info->send_pkt),
+			fw_info->pkt_len, MSG_TO);
+
+		if (ret_val <= 0) {
+			printk("Error in send hci cmd = %d,size = %d\n", ret_val,  fw_info->pkt_len);
+		}
 	}
 
 	return ret_val;
@@ -1349,8 +1837,8 @@ firmware_info *firmware_info_init(struct usb_interface *intf)
 
 	fw_info->intf = intf;
 	fw_info->udev = udev;
-	fw_info->pipe_in = usb_rcvbulkpipe(fw_info->udev, BULK_EP);
-	fw_info->pipe_out = usb_rcvbulkpipe(fw_info->udev, CTRL_EP);
+	fw_info->pipe_in = usb_rcvintpipe(fw_info->udev, INTR_EP);
+	fw_info->pipe_out = usb_sndctrlpipe(fw_info->udev, CTRL_EP);
 	fw_info->cmd_hdr = (struct hci_command_hdr *)(fw_info->send_pkt);
 	fw_info->evt_hdr = (struct hci_event_hdr *)(fw_info->rcv_pkt);
 	fw_info->cmd_cmp = (struct hci_ev_cmd_complete *)(fw_info->rcv_pkt + EVT_HDR_LEN);
@@ -1402,7 +1890,10 @@ void firmware_info_destroy(struct usb_interface *intf)
 static struct usb_driver btusb_driver;
 
 static struct usb_device_id btusb_table[] = {
-	{USB_DEVICE_AND_INTERFACE_INFO(0xa69c, 0x8801, 0xe0, 0x01, 0x01)},
+	{USB_DEVICE_AND_INTERFACE_INFO(USB_VENDOR_ID_AIC, USB_DEVICE_ID_AIC_8801, 0xe0, 0x01, 0x01)},
+	{USB_DEVICE_AND_INTERFACE_INFO(USB_VENDOR_ID_AIC, USB_DEVICE_ID_AIC_8800D81, 0xe0, 0x01, 0x01)},
+	{USB_DEVICE_AND_INTERFACE_INFO(USB_VENDOR_ID_AIC, USB_DEVICE_ID_AIC_8800DC, 0xe0, 0x01, 0x01)},
+	{USB_DEVICE_AND_INTERFACE_INFO(USB_VENDOR_ID_AIC, USB_DEVICE_ID_AIC_8800D41, 0xe0, 0x01, 0x01)},
 	{}
 };
 
@@ -1912,6 +2403,7 @@ static int btusb_close(struct hci_dev *hdev)
 
 	clear_bit(BTUSB_ISOC_RUNNING, &data->flags);
 	clear_bit(BTUSB_BULK_RUNNING, &data->flags);
+	clear_bit(BTUSB_INTR_RUNNING, &data->flags);
 
 	btusb_stop_traffic(data);
 	err = usb_autopm_get_interface(data->intf);
@@ -2354,6 +2846,7 @@ static int btusb_probe(struct usb_interface *intf, const struct usb_device_id *i
 
 		if (!data->intr_ep && usb_endpoint_is_int_in(ep_desc)) {
 			data->intr_ep = ep_desc;
+			data->intr_ep->bInterval = 4;
 			continue;
 		}
 
@@ -2393,6 +2886,13 @@ static int btusb_probe(struct usb_interface *intf, const struct usb_device_id *i
 	init_usb_anchor(&data->isoc_anchor);
 	init_usb_anchor(&data->deferred);
 
+#if (CONFIG_BLUEDROID == 0)
+#if HCI_VERSION_CODE >= KERNEL_VERSION(3, 18, 0)
+	spin_lock_init(&data->rxlock);
+	data->recv_bulk = btusb_recv_bulk;
+#endif
+#endif
+
 	fw_info = firmware_info_init(intf);
 	if (fw_info)
 		data->fw_info = fw_info;
@@ -2409,6 +2909,9 @@ static int btusb_probe(struct usb_interface *intf, const struct usb_device_id *i
 #endif
 
 
+	if (id->idProduct == USB_DEVICE_ID_AIC_8800DC) {
+		err = aic8800dc_bt_patch_config(data->fw_info);
+	}
 
 #if CONFIG_BLUEDROID
 	mutex_unlock(&btchr_mutex);
@@ -2434,6 +2937,12 @@ static int btusb_probe(struct usb_interface *intf, const struct usb_device_id *i
 	hdev->flush    = btusb_flush;
 	hdev->send     = btusb_send_frame;
 	hdev->notify   = btusb_notify;
+
+#if (CONFIG_BLUEDROID == 0)
+#if LINUX_VERSION_CODE > KERNEL_VERSION(4, 0, 9)
+	hdev->shutdown = btusb_shutdown;
+#endif
+#endif //(CONFIG_BLUEDROIF == 0)
 
 #if LINUX_VERSION_CODE > KERNEL_VERSION(3, 4, 0)
 	hci_set_drvdata(hdev, data);
@@ -2643,6 +3152,14 @@ static int btusb_resume(struct usb_interface *intf)
 
 	if (--data->suspend_count)
 		return 0;
+
+	if (test_bit(BTUSB_INTR_RUNNING, &data->flags)) {
+		err = btusb_submit_intr_urb(hdev, GFP_NOIO);
+		if (err < 0) {
+			clear_bit(BTUSB_INTR_RUNNING, &data->flags);
+			goto failed;
+		}
+	}
 
 	if (test_bit(BTUSB_BULK_RUNNING, &data->flags)) {
 		err = btusb_submit_bulk_urb(hdev, GFP_NOIO);

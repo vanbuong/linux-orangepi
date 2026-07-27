@@ -21,7 +21,7 @@ void *aicwf_prealloc_txq_alloc(size_t size)
 	if ((int)prealloc_txq.size != (int)size) {
 		printk("%s size is diff will to be kzalloc \r\n", __func__);
 
-		if(prealloc_txq.txq != NULL) {
+		if (prealloc_txq.txq != NULL) {
 			printk("%s txq to kfree \r\n", __func__);
 			kfree(prealloc_txq.txq);
 			prealloc_txq.txq = NULL;
@@ -34,7 +34,7 @@ void *aicwf_prealloc_txq_alloc(size_t size)
 	//check prealloc or not
 	if (!prealloc_txq.prealloced) {
 		prealloc_txq.txq = kzalloc(size, GFP_KERNEL);
-		if(!prealloc_txq.txq) {
+		if (!prealloc_txq.txq) {
 			printk("%s txq kzalloc fail \r\n", __func__);
 		} else {
 			printk("%s txq kzalloc successful \r\n", __func__);
@@ -48,7 +48,7 @@ void *aicwf_prealloc_txq_alloc(size_t size)
 }
 void aicwf_prealloc_txq_free(void)
 {
-	if(prealloc_txq.txq != NULL) {
+	if (prealloc_txq.txq != NULL) {
 		printk("%s txq to kfree \r\n", __func__);
 		kfree(prealloc_txq.txq);
 		prealloc_txq.txq = NULL;

@@ -16,6 +16,13 @@ config AW_THERMAL
 	  To compile this driver as a module, choose M here: the
 	  module will be called sunxi-thermal.
 
+config AW_EXT_THERMAL_ZONE
+	tristate "Allwinner ext Thermal Driver"
+	default n
+	help
+	  some cooling device need virtual thermal-zone,just like idle-cooling,
+	  charging-cooling and so on.
+
 config AW_CPUFREQ_CLAMP
 	tristate "Allwinner Cpufreq Clamp Driver"
 	depends on AW_THERMAL

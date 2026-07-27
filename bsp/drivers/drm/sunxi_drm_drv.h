@@ -16,6 +16,10 @@
 #include <drm/drm_drv.h>
 #include <drm/drm_connector.h>
 #include <drm/drm_encoder.h>
+#include <linux/platform_device.h>
+#include <linux/of.h>
+#include <linux/of_platform.h>
+#include <linux/version.h>
 
 #define OVL_MAX				4
 #define OVL_REMAIN			(OVL_MAX - 1)
@@ -29,7 +33,10 @@ struct sunxi_logo_info {
 	unsigned int height;
 	unsigned int bpp;
 
+	int is_safebuf;
 	void *offline_vaddr;
+	dma_addr_t offline_paddr;
+	unsigned int buf_size;
 	unsigned int offline_fmt; // offline fmt reserve
 /*	unsigned int stride;
 	unsigned int crop_l;
@@ -68,6 +75,8 @@ struct sunxi_drm_private {
 	struct drm_property *prop_backend_data;
 	struct drm_property *prop_sunxi_ctm;
 	struct drm_property *prop_feature;
+	struct drm_property *prop_hdr_type;
+	struct drm_property *prop_cdc_div_lut;
 	struct drm_property *prop_eotf;
 	struct drm_property *prop_color_space;
 	struct drm_property *prop_color_format;
@@ -75,6 +84,10 @@ struct sunxi_drm_private {
 	struct drm_property *prop_color_range;
 	struct drm_property *prop_frame_rate_change;
 	struct drm_property *prop_compressed_image_crop;
+	struct drm_property *prop_smc_master_enabled;
+	struct drm_property *prop_detail;
+	struct drm_property *prop_pq_factory;
+	struct work_struct wait_connect_work;
 	struct sunxi_drm_pri *priv;
 	struct sunxi_mode_monitor *mode_monitor;
 };
@@ -87,6 +100,18 @@ struct sunxi_mode_monitor {
 	int check_interval_ms;
 	bool is_monitoring;
 	/* char conn_type[16]; */
+};
+
+enum {
+	SUNXI_DEFAULT_PRIORITY_WRITEBACK = 1,
+	SUNXI_DEFAULT_PRIORITY_VGA,
+	SUNXI_DEFAULT_PRIORITY_Composite,
+	SUNXI_DEFAULT_PRIORITY_DisplayPort,
+	SUNXI_DEFAULT_PRIORITY_HDMI,
+	SUNXI_DEFAULT_PRIORITY_EDP,
+	SUNXI_DEFAULT_PRIORITY_LVDS,
+	SUNXI_DEFAULT_PRIORITY_DPI,
+	SUNXI_DEFAULT_PRIORITY_DSI,
 };
 
 #define to_sunxi_drm_private(drm) container_of(drm, struct sunxi_drm_private, base)
@@ -102,5 +127,8 @@ int sunxi_drm_get_device_max_fps(struct drm_device *drm);
 unsigned int sunxi_drm_get_de_max_freq(struct drm_device *drm);
 void sunxi_drm_signal_sw_enable_done(struct drm_crtc *crtc);
 struct proc_dir_entry *sunxi_drm_get_procfs_dir(void);
+int sunxi_drm_rpmsg_channel_connect(struct drm_device *drm);
+int sunxi_drm_rpmsg_before_rtos_start(struct drm_device *drm);
+int sunxi_drm_rpmsg_after_rtos_end(struct drm_device *drm);
 
 #endif

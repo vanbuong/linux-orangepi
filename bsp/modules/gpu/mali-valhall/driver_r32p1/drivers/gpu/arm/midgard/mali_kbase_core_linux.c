@@ -411,6 +411,12 @@ static struct kbase_device *to_kbase_device(struct device *dev)
 
 int assign_irqs(struct kbase_device *kbdev)
 {
+	static const char *const irq_names_caps[] = { "JOB", "MMU", "GPU" };
+
+#if IS_ENABLED(CONFIG_OF)
+	static const char *const irq_names[] = { "job", "mmu", "gpu" };
+#endif
+
 	struct platform_device *pdev;
 	int i;
 
@@ -418,34 +424,31 @@ int assign_irqs(struct kbase_device *kbdev)
 		return -ENODEV;
 
 	pdev = to_platform_device(kbdev->dev);
-	/* 3 IRQ resources */
-	for (i = 0; i < 3; i++) {
-		struct resource *irq_res;
-		int irqtag;
 
-		irq_res = platform_get_resource(pdev, IORESOURCE_IRQ, i);
-		if (!irq_res) {
-			dev_err(kbdev->dev, "No IRQ resource at index %d\n", i);
-			return -ENOENT;
-		}
+	for (i = 0; i < ARRAY_SIZE(irq_names_caps); i++) {
+		int irq;
 
 #if IS_ENABLED(CONFIG_OF)
-		if (!strncasecmp(irq_res->name, "JOB", 4)) {
-			irqtag = JOB_IRQ_TAG;
-		} else if (!strncasecmp(irq_res->name, "MMU", 4)) {
-			irqtag = MMU_IRQ_TAG;
-		} else if (!strncasecmp(irq_res->name, "GPU", 4)) {
-			irqtag = GPU_IRQ_TAG;
-		} else {
-			dev_err(&pdev->dev, "Invalid irq res name: '%s'\n",
-				irq_res->name);
-			return -EINVAL;
-		}
+		/* We recommend using Upper case for the irq names in dts, but if
+		 * there are devices in the world using Lower case then we should
+		 * avoid breaking support for them. So try using names in Upper case
+		 * first then try using Lower case names. If both attempts fail then
+		 * we assume there is no IRQ resource specified for the GPU.
+		 */
+		irq = platform_get_irq_byname(pdev, irq_names_caps[i]);
+		if (irq < 0)
+			irq = platform_get_irq_byname(pdev, irq_names[i]);
 #else
-		irqtag = i;
+		irq = platform_get_irq(pdev, i);
 #endif /* CONFIG_OF */
-		kbdev->irqs[irqtag].irq = irq_res->start;
-		kbdev->irqs[irqtag].flags = irq_res->flags & IRQF_TRIGGER_MASK;
+
+		if (irq < 0) {
+			dev_err(kbdev->dev, "No IRQ resource '%s'\n", irq_names_caps[i]);
+			return irq;
+		}
+
+		kbdev->irqs[i].irq = irq;
+		kbdev->irqs[i].flags = irqd_get_trigger_type(irq_get_irq_data(irq));
 	}
 
 	return 0;
@@ -4388,6 +4391,7 @@ void kbase_device_pm_term(struct kbase_device *kbdev)
 }
 
 #if defined(CONFIG_PM_OPP)
+#if IS_ENABLED(CONFIG_ARCH_SUN55IW3)
 static int sunxi_match_vf_table(u32 combi, u32 *index)
 {
 	struct device_node *np = NULL;
@@ -4475,8 +4479,97 @@ static void sunxi_set_gpu_opp_table_name(struct kbase_device *kbdev)
 	u_volt = u_volt / 1000;
 	sunxi_get_gpu_opp_table_name(opp_table_name, u_volt);
 	dev_info(kbdev->dev, "mali get opp_table_name is %s\n", opp_table_name);
+#if (KERNEL_VERSION(6, 0, 0) <= LINUX_VERSION_CODE)
+	kbdev->prop_token = dev_pm_opp_set_prop_name(kbdev->dev, opp_table_name);
+#else
 	dev_pm_opp_set_prop_name(kbdev->dev, opp_table_name);
+#endif
 }
+
+#elif IS_ENABLED(CONFIG_ARCH_SUN65IW1)
+#define MAX_NAME_LEN	10
+static int match_vf_table(struct kbase_device *kbdev, u32 combi, u32 *index)
+{
+	struct device_node *np = NULL;
+	int nsels, ret, i;
+	u32 tmp;
+
+	np = of_find_node_by_name(NULL, "vf_mapping_table");
+	if (!np) {
+		dev_info(kbdev->dev, "Unable to find node\n");
+		return -EINVAL;
+	}
+
+	if (!of_get_property(np, "table", &nsels))
+		return -EINVAL;
+
+	nsels /= sizeof(u32);
+	if (!nsels) {
+		dev_info(kbdev->dev, "invalid table property size\n");
+		return -EINVAL;
+	}
+
+	for (i = 0; i < nsels / 2; i++) {
+		ret = of_property_read_u32_index(np, "table", i * 2, &tmp);
+		if (ret) {
+			dev_info(kbdev->dev, "could not retrieve table property: %d\n", ret);
+			return ret;
+		}
+
+		if (tmp == combi) {
+			ret = of_property_read_u32_index(np, "table", i * 2 + 1, &tmp);
+			if (ret) {
+				dev_info(kbdev->dev, "could not retrieve table property: %d\n", ret);
+				return ret;
+			}
+
+			*index = tmp;
+			break;
+		} else
+			continue;
+	}
+
+	if (i == nsels/2)
+		dev_info(kbdev->dev, "%s %d, could not match vf table, i:%d", __func__, __LINE__, i);
+
+	return 0;
+}
+
+static void sunxi_set_gpu_opp_table_name(struct kbase_device *kbdev)
+{
+	char opp_table_name[MAX_NAME_LEN] = { 0 };
+	u32 dvfs = 0;
+	u32 index = 0x0;
+	unsigned int u_volt = 900000;
+
+	if (kbdev->regulators[0] && !kbdev->independent_power)
+		u_volt = regulator_get_voltage(kbdev->regulators[0]);
+
+	dvfs = index;
+
+#if IS_ENABLED(CONFIG_AW_SID)
+	if (sunxi_get_soc_dvfs(&dvfs))
+		dev_info(kbdev->dev, "failed to get soc dvfs, use default vf table\n");
+#else
+	dvfs = 0x1;
+	dev_err(kbdev->dev, "CONFIG_AW_SID is close, set dvfs = 0x1\n");
+#endif
+
+	match_vf_table(kbdev, dvfs, &index);
+
+	if (kbdev->independent_power)
+		snprintf(opp_table_name, MAX_NAME_LEN, "vf%07x", index);
+	else
+		snprintf(opp_table_name, MAX_NAME_LEN, "vf%04x%.3d", index, u_volt);
+
+	dev_info(kbdev->dev, "mali get opp_table_name is %s\n", opp_table_name);
+#if (KERNEL_VERSION(6, 0, 0) <= LINUX_VERSION_CODE)
+	kbdev->prop_token = dev_pm_opp_set_prop_name(kbdev->dev, opp_table_name);
+#else
+	dev_pm_opp_set_prop_name(kbdev->dev, opp_table_name);
+#endif
+}
+#endif /*CONFIG_ARCH_SUN55IW3 else CONFIG_ARCH_SUN65IW1*/
 #endif /* CONFIG_PM_OPP */
 
 int power_control_init(struct kbase_device *kbdev)
@@ -4580,8 +4673,13 @@ int power_control_init(struct kbase_device *kbdev)
 #if ((KERNEL_VERSION(4, 10, 0) <= LINUX_VERSION_CODE) && \
 	defined(CONFIG_REGULATOR))
 	if (kbdev->nr_regulators > 0) {
+#if (KERNEL_VERSION(6, 0, 0) <= LINUX_VERSION_CODE)
+		kbdev->opp_token = dev_pm_opp_set_regulators(kbdev->dev,
+			regulator_names);
+#else
 		kbdev->opp_table = dev_pm_opp_set_regulators(kbdev->dev,
 			regulator_names, kbdev->nr_regulators);
+#endif /* (KERNEL_VERSION(6, 0, 0) <= LINUX_VERSION_CODE */
 	}
 #endif /* (KERNEL_VERSION(4, 10, 0) <= LINUX_VERSION_CODE */
 
@@ -4616,12 +4714,22 @@ void power_control_term(struct kbase_device *kbdev)
 	 * If user don't call it, rmmod and reinsmod mali_kbase.ko,
 	 * dev_pm_opp_set_regulators will be failed.
 	 */
+#if (KERNEL_VERSION(6, 0, 0) <= LINUX_VERSION_CODE)
+	if (kbdev->prop_token > 0)
+		dev_pm_opp_put_prop_name(kbdev->prop_token);
+#else
 	dev_pm_opp_put_prop_name(kbdev->opp_table);
+#endif
 	dev_pm_opp_of_remove_table(kbdev->dev);
 #if ((KERNEL_VERSION(4, 10, 0) <= LINUX_VERSION_CODE) && \
 	defined(CONFIG_REGULATOR))
+#if (KERNEL_VERSION(6, 0, 0) <= LINUX_VERSION_CODE)
+	if (kbdev->opp_token > 0)
+		dev_pm_opp_put_regulators(kbdev->opp_token);
+#else
 	if (!IS_ERR_OR_NULL(kbdev->opp_table))
 		dev_pm_opp_put_regulators(kbdev->opp_table);
+#endif /* (KERNEL_VERSION(6, 0, 0) <= LINUX_VERSION_CODE */
 #endif /* (KERNEL_VERSION(4, 10, 0) <= LINUX_VERSION_CODE */
 #endif /* CONFIG_PM_OPP */
 
@@ -4636,12 +4744,19 @@ void power_control_term(struct kbase_device *kbdev)
 	}
 
 #if defined(CONFIG_OF) && defined(CONFIG_REGULATOR)
+#if (KERNEL_VERSION(6, 0, 0) <= LINUX_VERSION_CODE)
+	/* Regulators are already released by dev_pm_opp_put_regulators()
+	 * via the OPP config token, skip manual regulator_put() to avoid
+	 * double free warning.
+	 */
+#else
 	for (i = 0; i < BASE_MAX_NR_CLOCKS_REGULATORS; i++) {
 		if (kbdev->regulators[i]) {
 			regulator_put(kbdev->regulators[i]);
 			kbdev->regulators[i] = NULL;
 		}
 	}
+#endif /* (KERNEL_VERSION(6, 0, 0) <= LINUX_VERSION_CODE */
 #endif
 }
 
@@ -5297,6 +5412,12 @@ static int kbase_platform_device_probe(struct platform_device *pdev)
 	}
 
 	kbdev->dev = &pdev->dev;
+
+#if (KERNEL_VERSION(6, 0, 0) <= LINUX_VERSION_CODE)
+	kbdev->opp_token = -EPERM;
+	kbdev->prop_token = -EPERM;
+#endif
+
 	dev_set_drvdata(kbdev->dev, kbdev);
 
 	err = kbase_device_init(kbdev);
@@ -5577,6 +5698,9 @@ MODULE_VERSION(MALI_RELEASE_NAME " (UK version " \
 		__stringify(BASE_UK_VERSION_MAJOR) "." \
 		__stringify(BASE_UK_VERSION_MINOR) ")");
 MODULE_SOFTDEP("pre: memory_group_manager");
+#if (KERNEL_VERSION(6, 6, 0) <= LINUX_VERSION_CODE)
+MODULE_IMPORT_NS(DMA_BUF);
+#endif
 
 #define CREATE_TRACE_POINTS
 /* Create the trace points (otherwise we just get code to call a tracepoint) */

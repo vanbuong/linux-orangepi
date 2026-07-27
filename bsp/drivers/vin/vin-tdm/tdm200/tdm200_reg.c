@@ -1,4 +1,4 @@
-/* SPDX-License-Identifier: GPL-2.0-or-later */
+/* SPDX-License-Identifier: GPL-2.0 */
 /* Copyright(c) 2020 - 2023 Allwinner Technology Co.,Ltd. All rights reserved. */
 /*
  *
@@ -26,7 +26,7 @@
 volatile void __iomem *csic_tdm_base[VIN_MAX_TDM];
 
 #define TDM_ADDR_BIT_R_SHIFT 2
-int csic_tdm_set_base_addr(unsigned int sel, unsigned long addr)
+int csic_tdm_set_base_addr(unsigned int sel, vin_dma_addr_t addr)
 {
 	if (sel > VIN_MAX_TDM - 1)
 		return -1;
@@ -98,6 +98,11 @@ void csic_tdm_set_tx_chn_cfg_mode(unsigned int sel, enum  tx_chn_cfg_mode mode)
 			TX_CHN_CFG_MODE_MASK, mode << TX_CHN_CFG_MODE);
 }
 
+unsigned char csic_tdm_get_tx_chn_cfg_mode(unsigned int sel)
+{
+	return (vin_reg_readl(csic_tdm_base[sel] + TDM_GOLBAL_CFG0_REG_OFF) & TX_CHN_CFG_MODE_MASK) >> TX_CHN_CFG_MODE;
+}
+
 void csic_tdm_set_work_mode(unsigned int sel, enum tdm_work_mode mode)
 {
 	vin_reg_clr_set(csic_tdm_base[sel] + TDM_GOLBAL_CFG0_REG_OFF,
@@ -131,25 +136,47 @@ void csic_tdm_int_disable(unsigned int sel, enum tdm_int_sel interrupt)
 void csic_tdm_int_get_status(unsigned int sel, struct tdm_int_status *status)
 {
 	unsigned int reg_val = vin_reg_readl(csic_tdm_base[sel] + TDM_INT_STATUS0_REG_OFF);
+	unsigned int irq_enable = vin_reg_readl(csic_tdm_base[sel] + TDM_INT_BYPASS0_REG_OFF);
 
-	status->rx_frm_lost = (reg_val & RX_FRM_LOST_PD_MASK) >> RX_FRM_LOST_PD;
-	status->rx_frm_err = (reg_val & RX_FRM_ERR_PD_MASK) >> RX_FRM_ERR_PD;
-	status->rx_btype_err = (reg_val & RX_BTYPE_ERR_PD_MASK) >> RX_BTYPE_ERR_PD;
-	status->rx_buf_full = (reg_val & RX_BUF_FULL_PD_MASK) >> RX_BUF_FULL_PD;
-	status->rx_hb_short = (reg_val & RX_HB_SHORT_PD_MASK) >> RX_HB_SHORT_PD;
-	status->rx_fifo_full = (reg_val & RX_FIFO_FULL_PD_MASK) >> RX_FIFO_FULL_PD;
-	status->tdm_lbc_err = (reg_val & TDM_LBC_ERROR_PD_MASK) >> TDM_LBC_ERROR_PD;
-	status->tx_fifo_under = (reg_val & TX_FIFO_UNDER_PD_MASK) >> TX_FIFO_UNDER_PD;
-	status->rx0_frm_done = (reg_val & RX0_FRM_DONE_PD_MASK) >> RX0_FRM_DONE_PD;
-	status->rx1_frm_done = (reg_val & RX1_FRM_DONE_PD_MASK) >> RX1_FRM_DONE_PD;
-	status->rx2_frm_done = (reg_val & RX2_FRM_DONE_PD_MASK) >> RX2_FRM_DONE_PD;
-	status->rx3_frm_done = (reg_val & RX3_FRM_DONE_PD_MASK) >> RX3_FRM_DONE_PD;
-	status->tx_frm_done = (reg_val & TX_FRM_DONE_PD_MASK) >> TX_FRM_DONE_PD;
-	status->speed_dn_fifo_full = (reg_val & SPEED_DN_FIFO_FULL_PD_MASK) >> SPEED_DN_FIFO_FULL_PD;
-	status->speed_dn_hsync = (reg_val & SPEED_DN_HSYN_PD_MASK) >> SPEED_DN_HSYN_PD;
-	status->rx_chn_cfg_mode = (reg_val & RX_CHN_CFG_MODE_PD_MASK) >> RX_CHN_CFG_MODE_PD;
-	status->tx_chn_cfg_mode = (reg_val & TX_CHN_CFG_MODE_PD_MASK) >> TX_CHN_CFG_MODE_PD;
-	status->tdm_lbc_fifo_full = (reg_val & TDM_LBC_FIFO_FULL_PD_MASK) >> TDM_LBC_FIFO_FULL_PD;
+	status->rx_frm_lost = (reg_val & RX_FRM_LOST_PD_MASK) >> RX_FRM_LOST_PD & (irq_enable & RX_FRM_LOST_PD_MASK) >> RX_FRM_LOST_PD;
+	status->rx_frm_err = (reg_val & RX_FRM_ERR_PD_MASK) >> RX_FRM_ERR_PD & (irq_enable & RX_FRM_ERR_PD_MASK) >> RX_FRM_ERR_PD;
+	status->rx_btype_err = (reg_val & RX_BTYPE_ERR_PD_MASK) >> RX_BTYPE_ERR_PD & (irq_enable & RX_BTYPE_ERR_PD_MASK) >> RX_BTYPE_ERR_PD;
+	status->rx_buf_full = (reg_val & RX_BUF_FULL_PD_MASK) >> RX_BUF_FULL_PD & (irq_enable & RX_BUF_FULL_PD_MASK) >> RX_BUF_FULL_PD;
+	status->rx_hb_short = (reg_val & RX_HB_SHORT_PD_MASK) >> RX_HB_SHORT_PD & (irq_enable & RX_HB_SHORT_PD_MASK) >> RX_HB_SHORT_PD;
+	status->rx_fifo_full = (reg_val & RX_FIFO_FULL_PD_MASK) >> RX_FIFO_FULL_PD & (irq_enable & RX_FIFO_FULL_PD_MASK) >> RX_FIFO_FULL_PD;
+	status->tdm_lbc_err = (reg_val & TDM_LBC_ERROR_PD_MASK) >> TDM_LBC_ERROR_PD & (irq_enable & TDM_LBC_ERROR_PD_MASK) >> TDM_LBC_ERROR_PD;
+	status->tx_fifo_under = (reg_val & TX_FIFO_UNDER_PD_MASK) >> TX_FIFO_UNDER_PD & (irq_enable & TX_FIFO_UNDER_PD_MASK) >> TX_FIFO_UNDER_PD;
+#if IS_ENABLED(CONFIG_ARCH_SUN65IW1)
+	status->rx0_n_line_start = (reg_val & RX0_N_LINE_START_PD_MASK) >> RX0_N_LINE_START_PD & (irq_enable & RX0_N_LINE_START_PD_MASK) >> RX0_N_LINE_START_PD;
+	status->rx1_n_line_start = (reg_val & RX1_N_LINE_START_PD_MASK) >> RX1_N_LINE_START_PD & (irq_enable & RX1_N_LINE_START_PD_MASK) >> RX1_N_LINE_START_PD;
+	status->rx2_n_line_start = (reg_val & RX2_N_LINE_START_PD_MASK) >> RX2_N_LINE_START_PD & (irq_enable & RX2_N_LINE_START_PD_MASK) >> RX2_N_LINE_START_PD;
+	status->rx3_n_line_start = (reg_val & RX3_N_LINE_START_PD_MASK) >> RX3_N_LINE_START_PD & (irq_enable & RX3_N_LINE_START_PD_MASK) >> RX3_N_LINE_START_PD;
+	status->rx0_frm_start = (reg_val & RX0_FRM_START_PD_MASK) >> RX0_FRM_START_PD & (irq_enable & RX0_FRM_START_PD_MASK) >> RX0_FRM_START_PD;
+	status->rx1_frm_start = (reg_val & RX1_FRM_START_PD_MASK) >> RX1_FRM_START_PD & (irq_enable & RX1_FRM_START_PD_MASK) >> RX1_FRM_START_PD;
+	status->rx2_frm_start = (reg_val & RX2_FRM_START_PD_MASK) >> RX2_FRM_START_PD & (irq_enable & RX2_FRM_START_PD_MASK) >> RX2_FRM_START_PD;
+	status->rx3_frm_start = (reg_val & RX3_FRM_START_PD_MASK) >> RX3_FRM_START_PD & (irq_enable & RX3_FRM_START_PD_MASK) >> RX3_FRM_START_PD;
+#endif
+	status->rx0_frm_done = (reg_val & RX0_FRM_DONE_PD_MASK) >> RX0_FRM_DONE_PD & (irq_enable & RX0_FRM_DONE_PD_MASK) >> RX0_FRM_DONE_PD;
+	status->rx1_frm_done = (reg_val & RX1_FRM_DONE_PD_MASK) >> RX1_FRM_DONE_PD & (irq_enable & RX1_FRM_DONE_PD_MASK) >> RX1_FRM_DONE_PD;
+	status->rx2_frm_done = (reg_val & RX2_FRM_DONE_PD_MASK) >> RX2_FRM_DONE_PD & (irq_enable & RX2_FRM_DONE_PD_MASK) >> RX2_FRM_DONE_PD;
+	status->rx3_frm_done = (reg_val & RX3_FRM_DONE_PD_MASK) >> RX3_FRM_DONE_PD & (irq_enable & RX3_FRM_DONE_PD_MASK) >> RX3_FRM_DONE_PD;
+	status->tx_frm_done = (reg_val & TX_FRM_DONE_PD_MASK) >> TX_FRM_DONE_PD & (irq_enable & TX_FRM_DONE_PD_MASK) >> TX_FRM_DONE_PD;
+#if !defined(CONFIG_ARCH_SUN65IW1)
+	status->speed_dn_fifo_full = (reg_val & SPEED_DN_FIFO_FULL_PD_MASK) >> SPEED_DN_FIFO_FULL_PD & (irq_enable & SPEED_DN_FIFO_FULL_PD_MASK) >> SPEED_DN_FIFO_FULL_PD;
+	status->speed_dn_hsync = (reg_val & SPEED_DN_HSYN_PD_MASK) >> SPEED_DN_HSYN_PD & (irq_enable & SPEED_DN_HSYN_PD_MASK) >> SPEED_DN_HSYN_PD;
+#endif
+	status->rx_chn_cfg_mode = (reg_val & RX_CHN_CFG_MODE_PD_MASK) >> RX_CHN_CFG_MODE_PD & (irq_enable & RX_CHN_CFG_MODE_PD_MASK) >> RX_CHN_CFG_MODE_PD;
+	status->tx_chn_cfg_mode = (reg_val & TX_CHN_CFG_MODE_PD_MASK) >> TX_CHN_CFG_MODE_PD & (irq_enable & TX_CHN_CFG_MODE_PD_MASK) >> TX_CHN_CFG_MODE_PD;
+#if !defined(CONFIG_ARCH_SUN65IW1)
+	status->tdm_lbc_fifo_full = (reg_val & TDM_LBC_FIFO_FULL_PD_MASK) >> TDM_LBC_FIFO_FULL_PD & (irq_enable & TDM_LBC_FIFO_FULL_PD_MASK) >> TDM_LBC_FIFO_FULL_PD;
+#endif
+}
+
+bool csic_tdm_int_sel_get_status(unsigned int sel, enum tdm_int_sel interrupt)
+{
+	unsigned int reg_val = vin_reg_readl(csic_tdm_base[sel] + TDM_INT_STATUS0_REG_OFF);
+
+	return interrupt & reg_val ? true : false;
 }
 
 void csic_tdm_int_clear_status(unsigned int sel, enum tdm_int_sel interrupt)
@@ -506,9 +533,15 @@ void csic_tdm_rx_pkg_line_words(unsigned int sel, unsigned int ch, unsigned int 
 					TDM_RX_PKG_LINE_WORDS_MASK, words << TDM_RX_PKG_LINE_WORDS);
 }
 
-void csic_tdm_rx_set_address(unsigned int sel, unsigned int ch, unsigned long address)
+void csic_tdm_set_line_int_num(unsigned int sel, unsigned int ch, unsigned int line_num)
 {
-	vin_reg_writel(csic_tdm_base[sel] + TMD_RX0_OFFSET + ch*AMONG_RX_OFFSET + TDM_RX_CFG2_REG_OFF,
+	vin_reg_clr_set(csic_tdm_base[sel] + TMD_RX0_OFFSET + ch*AMONG_RX_OFFSET + TDM_RX_CFG2_REG_OFF,
+			TDM_RX_LINE_INT_NUM_MASK, line_num << TDM_RX_LINE_INT_NUM);
+}
+
+void csic_tdm_rx_set_address(unsigned int sel, unsigned int ch, vin_dma_addr_t address)
+{
+	vin_reg_writel(csic_tdm_base[sel] + TMD_RX0_OFFSET + ch*AMONG_RX_OFFSET + TDM_RX_ADDR_REG_OFF,
 					address >> TDM_ADDR_BIT_R_SHIFT);
 }
 

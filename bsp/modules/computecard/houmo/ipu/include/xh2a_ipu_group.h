@@ -10,6 +10,7 @@
 #include <linux/mutex.h>
 #include <linux/completion.h>
 #include <linux/atomic.h>
+#include <linux/kref.h>
 #include <linux/ktime.h>
 #include <linux/types.h>
 #include <xh2a_ipu_internal.h>
@@ -55,6 +56,33 @@ enum group_status {
 	GROUP_DESTROY,
 };
 
+/*
+ * group attribute
+ * @group_id: group handle
+ * @state: group state
+ * @flags: group flags
+ * @kernel_num: number of kernels in the group
+ * @core_num: number of cores in the group
+ * @core_mask: core mask in the group
+ */
+struct xh2a_group_info {
+	group_id_t group_id;
+	unsigned long state;
+	unsigned long flags;
+	unsigned int kernel_num;
+	unsigned int core_num;
+	unsigned int core_mask;
+};
+
+/** IPU group attribute：
+ * @group_id: group handle
+ * @core_mask: core mask in the group
+ */
+struct xh2a_group_attribute {
+	group_id_t group_id;
+	unsigned int core_mask;
+};
+
 /**
  * struct xh2a_ipu_group - Represents a kernel group for IPU.
  * @id: Unique identifier for the group.
@@ -75,13 +103,12 @@ enum group_status {
  * @sync_start: Time start when execute xh2a_execute_group function.
  * @load_start: Time when trigger booter.
  * @load_end: Time when group is done.
- * @trigger_timeout: timeout in us from execute interface to trigger booter.
  * @kernels_timeout: Total kernels execution timeout in us of the group.
  * @param_size: Total kernels params size of the group.
  * @param_type: bit0: DDR, bit1: SPM0, bit2: SPM1.
  * @param_addr: SPM physical address of the params for each core.
  * @policy_list_node: List node for linking this group in a policy-based list.
- * @launch_completion: Completion structure used for synchronizing launches.
+ * @sync_completion: Completion structure used for synchronizing launches.
  * @target: Core and queue allocation details for each core.
  *          - core_id: Identifier for the core.
  *          - queue_id: Identifier for the queue on the core.
@@ -93,12 +120,15 @@ struct xh2a_ipu_group {
 	uint32_t core_num;
 	uint32_t tile_num;
 	uint32_t kernel_num;
+	uint32_t coremask;
 	struct mutex mutex;
 	atomic_t status;
 	struct list_head kernel_list;
 
 	struct xh2a_ipu_file_handle *file_handle;
 	struct xh2a_ipu_device *ipu_dev;
+
+	struct kref ref;
 
 	struct list_head tile_list_node;
 	struct xh2a_ipu_booter_queue *queue;
@@ -108,14 +138,14 @@ struct xh2a_ipu_group {
 	ktime_t sync_start;
 	ktime_t load_start;
 	ktime_t load_end;
-	uint64_t trigger_timeout;
 	uint64_t kernels_timeout;
 
 	uint32_t param_size;
 	uint32_t param_type;
 	uint64_t param_addr[XH2A_IPU_CORE_NUM];
 	struct list_head policy_list_node;
-	struct completion launch_completion;
+	struct completion sync_completion;
+	struct delayed_work timeout_work;
 	struct {
 		int core_id;
 		int queue_id;
@@ -127,19 +157,20 @@ struct xh2a_ipu_group {
 struct xh2a_ipu_group *
 xh2a_ipu_group_create(struct xh2a_ipu_file_handle *file_handle);
 int xh2a_ipu_group_destroy(struct xh2a_ipu_group *group);
+void xh2a_ipu_group_get(struct xh2a_ipu_group *group);
+void xh2a_ipu_group_put(struct xh2a_ipu_group *group);
 void xh2a_ipu_group_free_spm(struct xh2a_ipu_group *group);
 void xh2a_group_host_param_free(struct xh2a_ipu_device *ipu_dev,
 				struct xh2a_ipu_group *group);
 int xh2a_ipu_group_add_kernel(struct xh2a_ipu_group *group,
 			      struct ipu_kernel_launch_data *kld);
-int xh2a_ipu_group_execute(struct xh2a_ipu_group *group,
-			   uint32_t trigger_timeout);
+int xh2a_ipu_group_execute(struct xh2a_ipu_group *group);
 void xh2a_ipu_group_get_result(struct xh2a_ipu_group *group,
 			       struct xh2a_group_result *result,
 			       uint32_t *group_num);
 bool xh2a_ipu_is_group_done(struct xh2a_ipu_group *group, uint32_t current_rptr,
 			    uint32_t last_rptr);
-void xh2a_ipu_group_kds_load(struct xh2a_ipu_group *group);
+void xh2a_ipu_group_load_kds(struct xh2a_ipu_group *group);
 bool priority_resource_enough(struct xh2a_ipu_group *group);
 int xh2a_ipu_group_spm_alloc(struct xh2a_ipu_group *group);
 

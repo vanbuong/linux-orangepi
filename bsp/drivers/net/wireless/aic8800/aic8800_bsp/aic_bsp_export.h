@@ -22,6 +22,7 @@ enum chip_rev_id {
 	CHIP_REV_ID_U02 = 0x3,
 	CHIP_REV_ID_U03 = 0x7,
 	CHIP_REV_ID_U04 = 0x7,
+	CHIP_REV_ID_D80_U04 = 0xF,
 };
 
 enum chip_id {
@@ -33,9 +34,13 @@ enum chip_id {
 
 enum AIC_PRODUCT_ID {
 	PRODUCT_ID_AIC8800D = 0,
+	PRODUCT_ID_AIC8801,
 	PRODUCT_ID_AIC8800DC,
 	PRODUCT_ID_AIC8800DW,
-	PRODUCT_ID_AIC8800D80
+	PRODUCT_ID_AIC8800D80,
+	PRODUCT_ID_AIC8800D81,
+	PRODUCT_ID_AIC8800D80X2,
+	PRODUCT_ID_AIC8800D81X2,
 };
 
 enum aicbsp_cpmode_type {
@@ -74,12 +79,14 @@ struct aicbsp_feature_t {
 	bool     fwlog_en;
 	struct device_match_entry *chipinfo;
 	uint8_t  cpmode;
+	uint32_t adap_test;
 };
 
 int aicbsp_set_subsys(int, int);
 int aicbsp_get_feature(struct aicbsp_feature_t *feature);
 struct sk_buff *aicbsp_resv_mem_alloc_skb(unsigned int length, uint32_t id);
 void aicbsp_resv_mem_kfree_skb(struct sk_buff *skb, uint32_t id);
+int aicbsp_parse_key_val(const char *str, const char *key, char *val);
 
 #ifdef CONFIG_DPD
 #define ROM_FMAC_CALIB_ADDR                0x00130000

@@ -173,6 +173,7 @@ static struct audio_reg_label ahub_reg_i2s2[] = {
 	REG_LABEL(SUNXI_AHUB_I2S_IN_CHMAP2(2)),
 	REG_LABEL(SUNXI_AHUB_I2S_IN_CHMAP3(2)),
 };
+#if IS_ENABLED(CONFIG_ARCH_SUN50IW9)
 static struct audio_reg_label ahub_reg_i2s3[] = {
 	REG_LABEL(SUNXI_AHUB_I2S_CTL(3)),
 	REG_LABEL(SUNXI_AHUB_I2S_FMT0(3)),
@@ -200,6 +201,7 @@ static struct audio_reg_label ahub_reg_i2s3[] = {
 	REG_LABEL(SUNXI_AHUB_I2S_IN_CHMAP2(3)),
 	REG_LABEL(SUNXI_AHUB_I2S_IN_CHMAP3(3)),
 };
+#endif
 /* DAM */
 static struct audio_reg_label ahub_reg_dam0[] = {
 	REG_LABEL(SUNXI_AHUB_DAM_CTL(0)),
@@ -254,7 +256,9 @@ static struct audio_reg_group sunxi_reg_groups[] = {
 	REG_GROUP(ahub_reg_i2s0),
 	REG_GROUP(ahub_reg_i2s1),
 	REG_GROUP(ahub_reg_i2s2),
+#if IS_ENABLED(CONFIG_ARCH_SUN50IW9)
 	REG_GROUP(ahub_reg_i2s3),
+#endif
 	REG_GROUP(ahub_reg_dam0),
 	REG_GROUP(ahub_reg_dam1),
 };
@@ -270,18 +274,18 @@ static struct regmap_config sunxi_regmap_config = {
 struct sunxi_ahub_mem sunxi_mem = {
 	.res = &sunxi_res,
 };
-static struct sunxi_ahub_clk sunxi_clk;
+static sunxi_ahub_clk_t sunxi_clk;
 
 #if IS_ENABLED(CONFIG_SND_SOC_SUNXI_DEBUG)
 static struct sunxi_ahub_dump sunxi_dump;
 #endif
 
-static int snd_sunxi_clk_init(struct platform_device *pdev, struct sunxi_ahub_clk *clk);
-static void snd_sunxi_clk_exit(struct sunxi_ahub_clk *clk);
-static int snd_sunxi_clk_enable(struct sunxi_ahub_clk *clk);
-static void snd_sunxi_clk_disable(struct sunxi_ahub_clk *clk);
 
 static struct snd_soc_dai_driver sunxi_ahub_dam_dai = {
+	/* In order to deal with the component register failed */
+	.name = "ahub_dam",
+	.playback.channels_min	= 1,
+	.capture.channels_min	= 1,
 };
 
 static int sunxi_ahub_dam_probe(struct snd_soc_component *component)
@@ -293,7 +297,6 @@ static int sunxi_ahub_dam_probe(struct snd_soc_component *component)
 
 static int sunxi_ahub_dam_suspend(struct snd_soc_component *component)
 {
-	struct sunxi_ahub_clk *clk = &sunxi_clk;
 	struct regmap *regmap = sunxi_mem.regmap;
 	unsigned int i;
 
@@ -302,21 +305,20 @@ static int sunxi_ahub_dam_suspend(struct snd_soc_component *component)
 	for (i = 0; i < ARRAY_SIZE(sunxi_reg_groups); ++i)
 		snd_sunxi_save_reg(regmap, &sunxi_reg_groups[i]);
 
-	snd_sunxi_clk_disable(clk);
+	snd_sunxi_ahub_clk_disable(sunxi_clk);
 
 	return 0;
 }
 
 static int sunxi_ahub_dam_resume(struct snd_soc_component *component)
 {
-	struct sunxi_ahub_clk *clk = &sunxi_clk;
 	struct regmap *regmap = sunxi_mem.regmap;
 	unsigned int i;
 	int ret;
 
 	SND_LOG_DEBUG("\n");
 
-	ret = snd_sunxi_clk_enable(clk);
+	ret = snd_sunxi_ahub_clk_enable(sunxi_clk);
 	if (ret) {
 		SND_LOG_ERR("clk enable failed\n");
 		return ret;
@@ -335,7 +337,9 @@ static const unsigned int ahub_mux_reg[] = {
 	SUNXI_AHUB_I2S_RXCONT(0),
 	SUNXI_AHUB_I2S_RXCONT(1),
 	SUNXI_AHUB_I2S_RXCONT(2),
+#if IS_ENABLED(CONFIG_ARCH_SUN50IW9)
 	SUNXI_AHUB_I2S_RXCONT(3),
+#endif
 	SUNXI_AHUB_DAM_RX0_SRC(0),
 	SUNXI_AHUB_DAM_RX1_SRC(0),
 	SUNXI_AHUB_DAM_RX2_SRC(0),
@@ -351,7 +355,9 @@ static const unsigned int ahub_mux_values[] = {
 	1 << I2S_RX_I2S0_TXDIF,
 	1 << I2S_RX_I2S1_TXDIF,
 	1 << I2S_RX_I2S2_TXDIF,
+#if IS_ENABLED(CONFIG_ARCH_SUN50IW9)
 	1 << I2S_RX_I2S3_TXDIF,
+#endif
 	1 << I2S_RX_DAM0_TXDIF,
 	1 << I2S_RX_DAM1_TXDIF,
 };
@@ -364,7 +370,9 @@ static const char *ahub_mux_text[] = {
 	"I2S0_TXDIF",
 	"I2S1_TXDIF",
 	"I2S2_TXDIF",
+#if IS_ENABLED(CONFIG_ARCH_SUN50IW9)
 	"I2S3_TXDIF",
+#endif
 	"DAM0_TXDIF",
 	"DAM1_TXDIF",
 };
@@ -419,7 +427,9 @@ static const struct snd_kcontrol_new sunxi_ahub_dam_controls[] = {
 	SOC_ENUM_EXT("I2S0 Src Select", ahub_mux, sunxi_ahub_mux_get, sunxi_ahub_mux_set),
 	SOC_ENUM_EXT("I2S1 Src Select", ahub_mux, sunxi_ahub_mux_get, sunxi_ahub_mux_set),
 	SOC_ENUM_EXT("I2S2 Src Select", ahub_mux, sunxi_ahub_mux_get, sunxi_ahub_mux_set),
+#if IS_ENABLED(CONFIG_ARCH_SUN50IW9)
 	SOC_ENUM_EXT("I2S3 Src Select", ahub_mux, sunxi_ahub_mux_get, sunxi_ahub_mux_set),
+#endif
 	SOC_ENUM_EXT("DAM0C0 Src Select", ahub_mux, sunxi_ahub_mux_get, sunxi_ahub_mux_set),
 	SOC_ENUM_EXT("DAM0C1 Src Select", ahub_mux, sunxi_ahub_mux_get, sunxi_ahub_mux_set),
 	SOC_ENUM_EXT("DAM0C2 Src Select", ahub_mux, sunxi_ahub_mux_get, sunxi_ahub_mux_set),
@@ -521,6 +531,7 @@ enable:
 				   0xF << DAM_CTL_RX1_NUM,
 				   (channels - 1) << DAM_CTL_RX1_NUM);
 	}
+#if IS_ENABLED(CONFIG_ARCH_SUN50IW9)
 	sunxi_ahub_dam_mux_get(12, &mux_src);
 	if (mux_src == (apb_num + 1) || mux_src == (tdm_num + 4)) {
 		dam_use = dam_use | (dam1_mask & BIT(4 + 2));
@@ -530,7 +541,7 @@ enable:
 				   0xF << DAM_CTL_RX2_NUM,
 				   (channels - 1) << DAM_CTL_RX2_NUM);
 	}
-
+#endif
 	if (dam_use & dam0_mask) {
 		regmap_update_bits(regmap, SUNXI_AHUB_RST, 1 << DAM0_RST, 1 << DAM0_RST);
 		regmap_update_bits(regmap, SUNXI_AHUB_GAT, 1 << DAM0_GAT, 1 << DAM0_GAT);
@@ -594,6 +605,7 @@ disable:
 		regmap_update_bits(regmap, SUNXI_AHUB_DAM_CTL(1),
 				   0xF << DAM_CTL_RX1_NUM, 0x0 << DAM_CTL_RX1_NUM);
 	}
+#if IS_ENABLED(CONFIG_ARCH_SUN50IW9)
 	sunxi_ahub_dam_mux_get(12, &mux_src);
 	if (mux_src == (apb_num + 1) || mux_src == (tdm_num + 4)) {
 		dam_use = dam_use & (dam1_mask & (~BIT(4 + 2)));
@@ -602,7 +614,7 @@ disable:
 		regmap_update_bits(regmap, SUNXI_AHUB_DAM_CTL(1),
 				   0xF << DAM_CTL_RX2_NUM, 0x0 << DAM_CTL_RX2_NUM);
 	}
-
+#endif
 	if (!(dam_use & dam0_mask)) {
 		regmap_update_bits(regmap, SUNXI_AHUB_RST, 1 << DAM0_RST, 0 << DAM0_RST);
 		regmap_update_bits(regmap, SUNXI_AHUB_GAT, 1 << DAM0_GAT, 0 << DAM0_GAT);
@@ -621,7 +633,11 @@ disable:
 	}
 	return;
 }
-EXPORT_SYMBOL_GPL(sunxi_ahub_dam_ctrl);
+
+sunxi_ahub_clk_t snd_sunxi_ahub_clk_get(void)
+{
+	return sunxi_clk;
+}
 
 /*******************************************************************************
  * *** kernel source ***
@@ -647,32 +663,6 @@ int snd_sunxi_ahub_mem_get(struct sunxi_ahub_mem *mem)
 
 	return 0;
 }
-EXPORT_SYMBOL_GPL(snd_sunxi_ahub_mem_get);
-
-int snd_sunxi_ahub_clk_get(struct sunxi_ahub_clk *clk)
-{
-	SND_LOG_DEBUG("\n");
-
-	if (IS_ERR_OR_NULL(sunxi_clk.clk_pll)) {
-		SND_LOG_ERR("clk_pll is invalid\n");
-		return -EINVAL;
-	}
-	if (IS_ERR_OR_NULL(sunxi_clk.clk_pllx4)) {
-		SND_LOG_ERR("clk_pllx4 is invalid\n");
-		return -EINVAL;
-	}
-	if (IS_ERR_OR_NULL(sunxi_clk.clk_module)) {
-		SND_LOG_ERR("clk_module is invalid\n");
-		return -EINVAL;
-	}
-
-	clk->clk_pll = sunxi_clk.clk_pll;
-	clk->clk_pllx4 = sunxi_clk.clk_pllx4;
-	clk->clk_module = sunxi_clk.clk_module;
-
-	return 0;
-}
-EXPORT_SYMBOL_GPL(snd_sunxi_ahub_clk_get);
 
 static int snd_sunxi_mem_init(struct platform_device *pdev, struct sunxi_ahub_mem *mem)
 {
@@ -731,152 +721,6 @@ static void snd_sunxi_mem_exit(struct platform_device *pdev, struct sunxi_ahub_m
 	devm_release_mem_region(&pdev->dev, mem->memregion->start, resource_size(mem->memregion));
 }
 
-static int snd_sunxi_clk_init(struct platform_device *pdev, struct sunxi_ahub_clk *clk)
-{
-	int ret = 0;
-	struct device_node *np = pdev->dev.of_node;
-
-	SND_LOG_DEBUG("\n");
-
-	/* get rst clk */
-	clk->clk_rst = devm_reset_control_get(&pdev->dev, NULL);
-	if (IS_ERR_OR_NULL(clk->clk_rst)) {
-		SND_LOG_ERR("clk rst get failed\n");
-		ret = -EBUSY;
-		goto err_get_rst_clk;
-	}
-
-	/* get bus clk */
-	clk->clk_bus = of_clk_get_by_name(np, "clk_bus_audio_hub");
-	if (IS_ERR_OR_NULL(clk->clk_bus)) {
-		SND_LOG_ERR("clk bus get failed\n");
-		ret = -EBUSY;
-		goto err_get_bus_clk;
-	}
-
-	/* get parent clk */
-	clk->clk_pll = of_clk_get_by_name(np, "clk_pll_audio");
-	if (IS_ERR_OR_NULL(clk->clk_pll)) {
-		SND_LOG_ERR("clk pll get failed\n");
-		ret = -EBUSY;
-		goto err_get_pll_clk;
-	}
-	clk->clk_pllx4 = of_clk_get_by_name(np, "clk_pll_audio_4x");
-	if (IS_ERR_OR_NULL(clk->clk_pllx4)) {
-		SND_LOG_ERR("clk pllx4 get failed\n");
-		ret = -EBUSY;
-		goto err_get_pllx4_clk;
-	}
-
-	/* get module clk */
-	clk->clk_module = of_clk_get_by_name(np, "clk_audio_hub");
-	if (IS_ERR_OR_NULL(clk->clk_module)) {
-		SND_LOG_ERR("clk module get failed\n");
-		ret = -EBUSY;
-		goto err_get_module_clk;
-	}
-
-	/* set ahub clk parent */
-	if (clk_set_parent(clk->clk_module, clk->clk_pllx4)) {
-		SND_LOG_ERR("set parent of clk_module to pllx4 failed\n");
-		ret = -EINVAL;
-		goto err_set_parent;
-	}
-
-	/* enable clk of ahub */
-	ret = snd_sunxi_clk_enable(clk);
-	if (ret) {
-		SND_LOG_ERR("clk enable failed\n");
-		ret = -EINVAL;
-		goto err_clk_enable;
-	}
-
-	return 0;
-
-err_clk_enable:
-err_set_parent:
-	clk_put(clk->clk_module);
-err_get_module_clk:
-	clk_put(clk->clk_pllx4);
-err_get_pllx4_clk:
-	clk_put(clk->clk_pll);
-err_get_pll_clk:
-	clk_put(clk->clk_bus);
-err_get_bus_clk:
-err_get_rst_clk:
-	return ret;
-}
-
-static void snd_sunxi_clk_exit(struct sunxi_ahub_clk *clk)
-{
-	SND_LOG_DEBUG("\n");
-
-	snd_sunxi_clk_disable(clk);
-	clk_put(clk->clk_module);
-	clk_put(clk->clk_pll);
-	clk_put(clk->clk_pllx4);
-	clk_put(clk->clk_bus);
-}
-
-static int snd_sunxi_clk_enable(struct sunxi_ahub_clk *clk)
-{
-	int ret = 0;
-
-	SND_LOG_DEBUG("\n");
-
-	if (reset_control_deassert(clk->clk_rst)) {
-		SND_LOG_ERR("deassert reset clk failed\n");
-		ret = -EBUSY;
-		goto err_deassert_rst;
-	}
-
-	if (clk_prepare_enable(clk->clk_bus)) {
-		SND_LOG_ERR("ahub clk bus enable failed\n");
-		ret = -EBUSY;
-		goto err_enable_clk_bus;
-	}
-
-	if (clk_prepare_enable(clk->clk_pll)) {
-		SND_LOG_ERR("clk_pll enable failed\n");
-		ret = -EBUSY;
-		goto err_enable_pll_clk;
-	}
-	if (clk_prepare_enable(clk->clk_pllx4)) {
-		SND_LOG_ERR("clk_pllx4 enable failed\n");
-		ret = -EBUSY;
-		goto err_enable_pllx4_clk;
-	}
-	if (clk_prepare_enable(clk->clk_module)) {
-		SND_LOG_ERR("clk_module enable failed\n");
-		ret = -EBUSY;
-		goto err_enable_module_clk;
-	}
-
-	return 0;
-
-err_enable_module_clk:
-	clk_disable_unprepare(clk->clk_pllx4);
-err_enable_pllx4_clk:
-	clk_disable_unprepare(clk->clk_pll);
-err_enable_pll_clk:
-	clk_disable_unprepare(clk->clk_bus);
-err_enable_clk_bus:
-	reset_control_assert(clk->clk_rst);
-err_deassert_rst:
-	return ret;
-}
-
-static void snd_sunxi_clk_disable(struct sunxi_ahub_clk *clk)
-{
-	SND_LOG_DEBUG("\n");
-
-	clk_disable_unprepare(clk->clk_module);
-	clk_disable_unprepare(clk->clk_pllx4);
-	clk_disable_unprepare(clk->clk_pll);
-	clk_disable_unprepare(clk->clk_bus);
-	reset_control_assert(clk->clk_rst);
-}
-
 #if IS_ENABLED(CONFIG_SND_SOC_SUNXI_DEBUG)
 /* sysfs debug */
 static void snd_sunxi_dump_version(void *priv, char *buf, size_t *count)
@@ -909,8 +753,13 @@ static void snd_sunxi_dump_help(void *priv, char *buf, size_t *count)
 	count_tmp += sprintf(buf + count_tmp, "num:\n");
 	count_tmp += sprintf(buf + count_tmp, "0(all)    1(public)\n");
 	count_tmp += sprintf(buf + count_tmp, "2(APBIF0) 3(APBIF1) 4(APBIF2)\n");
+#if IS_ENABLED(CONFIG_ARCH_SUN50IW9)
 	count_tmp += sprintf(buf + count_tmp, "5(I2S0)   6(I2S1)   7(I2S2)   8(I2S3)\n");
 	count_tmp += sprintf(buf + count_tmp, "9(DAM0)   10(DAM1)\n");
+#else
+	count_tmp += sprintf(buf + count_tmp, "5(I2S0)   6(I2S1)   7(I2S2)\n");
+	count_tmp += sprintf(buf + count_tmp, "8(DAM0)   9(DAM1)\n");
+#endif
 	count_tmp += sprintf(buf + count_tmp, "2. reg write: echo {reg} {value} > dump\n");
 	count_tmp += sprintf(buf + count_tmp, "eg. echo 0x00 0xaa > dump\n");
 
@@ -1017,7 +866,6 @@ static int sunxi_ahub_dam_dev_probe(struct platform_device *pdev)
 	int ret;
 	struct device_node *np = pdev->dev.of_node;
 	struct sunxi_ahub_mem *mem = &sunxi_mem;
-	struct sunxi_ahub_clk *clk = &sunxi_clk;
 #if IS_ENABLED(CONFIG_SND_SOC_SUNXI_DEBUG)
 	struct snd_sunxi_dump *dump = &sunxi_dump.dump;
 #endif
@@ -1031,11 +879,25 @@ static int sunxi_ahub_dam_dev_probe(struct platform_device *pdev)
 		goto err_snd_sunxi_mem_init;
 	}
 
-	ret = snd_sunxi_clk_init(pdev, clk);
-	if (ret) {
+	sunxi_clk = snd_ahub_clk_init(pdev);
+	if (IS_ERR_OR_NULL(sunxi_clk)) {
 		SND_LOG_ERR("clk init failed\n");
 		ret = -EINVAL;
-		goto err_snd_sunxi_clk_init;
+		goto err_snd_ahub_clk_init;
+	}
+
+	ret = snd_sunxi_ahub_clk_enable(sunxi_clk);
+	if (ret) {
+		SND_LOG_ERR("ahub clk enable failed\n");
+		ret = -EINVAL;
+		goto err_snd_ahub_clk_enable;
+	}
+
+	ret = snd_sunxi_ahub_clk_rate(sunxi_clk, 100000000, 100000000);
+	if (ret) {
+		SND_LOG_ERR("ahub clk set rate failed\n");
+		ret = -EINVAL;
+		goto err_snd_ahub_clk_rate;
 	}
 
 	ret = snd_soc_register_component(&pdev->dev, &sunxi_ahub_dam_dev, &sunxi_ahub_dam_dai, 1);
@@ -1066,18 +928,24 @@ static int sunxi_ahub_dam_dev_probe(struct platform_device *pdev)
 	return 0;
 
 err_snd_soc_register_component:
-	snd_sunxi_clk_exit(clk);
-err_snd_sunxi_clk_init:
+err_snd_ahub_clk_rate:
+	snd_sunxi_ahub_clk_disable(sunxi_clk);
+err_snd_ahub_clk_enable:
+	snd_sunxi_ahub_clk_exit(sunxi_clk);
+err_snd_ahub_clk_init:
 	snd_sunxi_mem_exit(pdev, mem);
 err_snd_sunxi_mem_init:
 	of_node_put(np);
 	return ret;
 }
-
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 11, 0)
+static void sunxi_ahub_dam_dev_remove(struct platform_device *pdev)
+#else
 static int sunxi_ahub_dam_dev_remove(struct platform_device *pdev)
+#endif
+
 {
 	struct sunxi_ahub_mem *mem = &sunxi_mem;
-	struct sunxi_ahub_clk *clk = &sunxi_clk;
 
 #if IS_ENABLED(CONFIG_SND_SOC_SUNXI_DEBUG)
 	struct snd_sunxi_dump *dump = &sunxi_dump.dump;
@@ -1090,12 +958,18 @@ static int sunxi_ahub_dam_dev_remove(struct platform_device *pdev)
 #endif
 	snd_soc_unregister_component(&pdev->dev);
 
+	snd_sunxi_ahub_clk_exit(sunxi_clk);
+	sunxi_clk = NULL;
+
 	snd_sunxi_mem_exit(pdev, mem);
-	snd_sunxi_clk_exit(clk);
 
 	SND_LOG_DEBUG("unregister ahub_dam platform success\n");
 
+#if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 11, 0)
+	return;
+#else
 	return 0;
+#endif
 }
 
 static const struct of_device_id sunxi_ahub_dam_of_match[] = {
@@ -1114,28 +988,13 @@ static struct platform_driver sunxi_ahub_dam_driver = {
 	.remove	= sunxi_ahub_dam_dev_remove,
 };
 
-int __init sunxi_ahub_dam_dev_init(void)
+struct platform_driver *sunxi_get_ahub_dam_drv(void)
 {
-	int ret;
-
-	ret = platform_driver_register(&sunxi_ahub_dam_driver);
-	if (ret != 0) {
-		SND_LOG_ERR("platform driver register failed\n");
-		return -EINVAL;
-	}
-
-	return ret;
+	struct platform_driver *platform_driver = &sunxi_ahub_dam_driver;
+	return platform_driver;
 }
-
-void __exit sunxi_ahub_dam_dev_exit(void)
-{
-	platform_driver_unregister(&sunxi_ahub_dam_driver);
-}
-
-late_initcall(sunxi_ahub_dam_dev_init);
-module_exit(sunxi_ahub_dam_dev_exit);
 
 MODULE_AUTHOR("Dby@allwinnertech.com");
 MODULE_LICENSE("GPL");
-MODULE_VERSION("1.0.2");
+MODULE_VERSION("1.0.4");
 MODULE_DESCRIPTION("sunxi soundcard platform of ahub_dam");

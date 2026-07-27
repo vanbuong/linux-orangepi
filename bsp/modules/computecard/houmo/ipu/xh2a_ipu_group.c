@@ -8,6 +8,7 @@
 #include <linux/mm.h>
 #include <linux/slab.h>
 #include <linux/idr.h>
+#include <linux/jiffies.h>
 
 #include <xh2a_pcie_api.h>
 #include <xh2a_spm_api.h>
@@ -17,6 +18,55 @@
 #include "xh2a_ipu_group.h"
 #include "xh2a_ipu_kernel.h"
 #include "xh2a_ipu_ioctl.h"
+
+static void xh2a_ipu_group_sync_cnt_dec(struct xh2a_ipu_device *ipu_device)
+{
+	if (atomic_dec_and_test(&ipu_device->sync_cnt))
+		wake_up_all(&ipu_device->group_sync_wq);
+}
+
+static void xh2a_ipu_group_timeout_work(struct work_struct *work)
+{
+	struct delayed_work *dwork = to_delayed_work(work);
+	struct xh2a_ipu_group *group =
+		container_of(dwork, struct xh2a_ipu_group, timeout_work);
+	struct xh2a_ipu_device *ipu_device = group->ipu_dev;
+	struct xh2a_ipu_booter_queue *queue = group->queue;
+	struct miscdevice *miscdev = &ipu_device->miscdev;
+	int old_status;
+
+	dev_err(miscdev->this_device, "group %u %p exec timeout!\n", group->id,
+		group);
+
+	old_status = atomic_xchg(&group->status, GROUP_DONE);
+	if (old_status == GROUP_DONE || old_status == GROUP_DESTROY) {
+		xh2a_ipu_group_put(group);
+		return;
+	}
+
+	if (queue) {
+		mutex_lock(&queue->tile_mutex);
+		if (!list_empty(&group->tile_list_node)) {
+			list_del_init(&group->tile_list_node);
+			xh2a_ipu_group_put(group);
+		}
+		mutex_unlock(&queue->tile_mutex);
+	}
+
+	mutex_lock(&group->mutex);
+
+	group->exec_result[0] = XH2A_GROUP_KERNELS_TIMEOUT;
+	xh2a_group_host_param_free(ipu_device, group);
+
+	if (group->param_type == XH2A_GROUP_PARAM_SPM)
+		xh2a_ipu_group_free_spm(group);
+
+	mutex_unlock(&group->mutex);
+
+	xh2a_ipu_group_sync_cnt_dec(ipu_device);
+	complete(&group->sync_completion);
+	xh2a_ipu_group_put(group);
+}
 
 struct xh2a_ipu_group *
 xh2a_ipu_group_create(struct xh2a_ipu_file_handle *file_handle)
@@ -39,6 +89,7 @@ xh2a_ipu_group_create(struct xh2a_ipu_file_handle *file_handle)
 	if (ret != 0) {
 		dev_err(miscdev->this_device,
 			"%s: mutex_lock_interruptible failed\n", __func__);
+		kfree(group);
 		return NULL;
 	}
 
@@ -64,17 +115,53 @@ xh2a_ipu_group_create(struct xh2a_ipu_file_handle *file_handle)
 	INIT_LIST_HEAD(&group->kernel_list);
 	INIT_LIST_HEAD(&group->policy_list_node);
 	INIT_LIST_HEAD(&group->tile_list_node);
-	init_completion(&group->launch_completion);
+	init_completion(&group->sync_completion);
+	INIT_DELAYED_WORK(&group->timeout_work, xh2a_ipu_group_timeout_work);
 
 	group->kernel_num = 0;
 	group->file_handle = file_handle;
 	group->ipu_dev = ipu_dev;
 	atomic_set(&group->status, GROUP_CREATED);
+	kref_init(&group->ref);
 
 	dev_dbg(miscdev->this_device, "group %u %p created\n", group->id,
 		group);
 
 	return group;
+}
+
+static void xh2a_ipu_group_release(struct kref *kref)
+{
+	struct xh2a_ipu_kernel *kernel, *n;
+	struct xh2a_ipu_group *group =
+		container_of(kref, struct xh2a_ipu_group, ref);
+	struct xh2a_ipu_device *ipu_dev = group->ipu_dev;
+	struct miscdevice *miscdev = &ipu_dev->miscdev;
+
+	dev_dbg(miscdev->this_device, "group %u %p release\n", group->id,
+		group);
+
+	if (group->param_type == XH2A_GROUP_PARAM_SPM)
+		xh2a_ipu_group_free_spm(group);
+
+	list_for_each_entry_safe(kernel, n, &group->kernel_list, node) {
+		list_del_init(&kernel->node);
+		xh2a_ipu_kernel_destroy(kernel);
+	}
+
+	kfree(group);
+}
+
+void xh2a_ipu_group_get(struct xh2a_ipu_group *group)
+{
+	if (group)
+		kref_get(&group->ref);
+}
+
+void xh2a_ipu_group_put(struct xh2a_ipu_group *group)
+{
+	if (group)
+		kref_put(&group->ref, xh2a_ipu_group_release);
 }
 
 void xh2a_ipu_group_free_spm(struct xh2a_ipu_group *group)
@@ -109,7 +196,6 @@ void xh2a_ipu_group_free_spm(struct xh2a_ipu_group *group)
 int xh2a_ipu_group_destroy(struct xh2a_ipu_group *group)
 {
 	int old_status;
-	struct xh2a_ipu_kernel *kernel, *n;
 	struct xh2a_ipu_device *ipu_dev = group->ipu_dev;
 	struct miscdevice *miscdev = &ipu_dev->miscdev;
 
@@ -130,20 +216,7 @@ int xh2a_ipu_group_destroy(struct xh2a_ipu_group *group)
 		return -EBUSY;
 	}
 
-	mutex_lock(&group->mutex);
-
-	if (group->param_type == XH2A_GROUP_PARAM_SPM)
-		xh2a_ipu_group_free_spm(group);
-
-	list_for_each_entry_safe(kernel, n, &group->kernel_list, node) {
-		list_del_init(&kernel->node);
-		xh2a_ipu_kernel_destroy(kernel);
-	}
-
-	mutex_unlock(&group->mutex);
-
-	kfree(group);
-	group = NULL;
+	xh2a_ipu_group_put(group);
 
 	return 0;
 }
@@ -156,6 +229,19 @@ int xh2a_ipu_group_add_kernel(struct xh2a_ipu_group *group,
 	struct xh2a_ipu_device *ipu_dev = file_handle->ipu_dev;
 	struct miscdevice *miscdev = &ipu_dev->miscdev;
 	uint32_t index;
+
+	if (!kld)
+		return -EINVAL;
+
+	if (kld->core_num == 0 || kld->core_num > XH2A_IPU_CORE_NUM)
+		return -EINVAL;
+
+	if (kld->tile_num == 0 || kld->tile_num > XH2A_TILE_NUM_PER_CORE)
+		return -EINVAL;
+
+	if (kld->param_type != XH2A_GROUP_PARAM_DDR &&
+	    kld->param_type != XH2A_GROUP_PARAM_SPM)
+		return -EINVAL;
 
 	if (group->kernel_num >= XH2A_GROUP_MAX_KERNEL_NUM) {
 		dev_err(ipu_dev->miscdev.this_device,
@@ -180,7 +266,8 @@ int xh2a_ipu_group_add_kernel(struct xh2a_ipu_group *group,
 		return -ENOMEM;
 	}
 
-	if (group->param_size + kld->param_size > XH2A_SPM_TOTAL_SIZE) {
+	if (kld->param_size > XH2A_SPM_TOTAL_SIZE ||
+	    group->param_size > XH2A_SPM_TOTAL_SIZE - kld->param_size) {
 		dev_err(miscdev->this_device,
 			"%s: param size exceed, group_id %d\n", __func__,
 			group->id);
@@ -207,8 +294,7 @@ int xh2a_ipu_group_add_kernel(struct xh2a_ipu_group *group,
 	return 0;
 }
 
-int xh2a_ipu_group_execute(struct xh2a_ipu_group *group,
-			   uint32_t trigger_timeout)
+int xh2a_ipu_group_execute(struct xh2a_ipu_group *group)
 {
 	int ret;
 	struct xh2a_ipu_file_handle *file_handle = group->file_handle;
@@ -221,12 +307,11 @@ int xh2a_ipu_group_execute(struct xh2a_ipu_group *group,
 	}
 
 	group->sync_start = ktime_get();
-	group->trigger_timeout = trigger_timeout;
 	dev_dbg(ipu_dev->miscdev.this_device,
-		"group %u %p, %u kernels, %u cores, start = %llu, timeout = "
-		"%llu\n",
-		group->id, group, group->kernel_num, group->core_num,
-		group->sync_start, group->trigger_timeout);
+		"group %u %p, %u kernels, %u cores, start = %llu\n", group->id,
+		group, group->kernel_num, group->core_num, group->sync_start);
+
+	reinit_completion(&group->sync_completion);
 
 	/* replace by policy api */
 	ipu_dev->policy->ops->enqueue_group(ipu_dev->policy, group);
@@ -235,35 +320,35 @@ int xh2a_ipu_group_execute(struct xh2a_ipu_group *group,
 	/* wakeup wq to execute group */
 	queue_work(ipu_dev->group_wq, &ipu_dev->group_sche_work);
 
-	ret = wait_for_completion_interruptible_timeout(
-		&group->launch_completion,
-		usecs_to_jiffies(group->trigger_timeout +
-				 group->kernels_timeout));
+	ret = wait_for_completion_interruptible(&group->sync_completion);
 
 	if (atomic_read(&ipu_dev->dev_removed)) {
 		pr_err("%s: device mark removed\n", __func__);
 		ret = -ENODEV;
 		goto exec_err;
 	}
-	if (ret == 0) {
-		dev_err(ipu_dev->miscdev.this_device,
-			"%s: group %u %p sync timeout\n", __func__, group->id,
-			group);
-		group->exec_result[0] = XH2A_GROUP_KERNELS_TIMEOUT;
-
-		ret = -ETIMEDOUT;
-		goto exec_err;
-	} else if (ret < 0) {
+	if (ret) {
 		dev_err(ipu_dev->miscdev.this_device,
 			"%s: group sync interrupted\n", __func__);
 
-		ret = -EIO;
+		ret = -EINTR;
 		goto exec_err;
 	}
 
-	if (group->exec_result[0] == XH2A_GROUP_TRIGGER_TIMEOUT) {
+	if (atomic_read(&group->status) == GROUP_CANCEL) {
 		dev_err(ipu_dev->miscdev.this_device,
-			"%s: group trigger timeout\n", __func__);
+			"%s: group %u sync canceled when ipu reset\n", __func__,
+			group->id);
+
+		ret = -ECANCELED;
+		goto exec_err;
+	}
+
+	if (group->exec_result[0] == XH2A_GROUP_KERNELS_TIMEOUT) {
+		xh2a_ipu_read_device_temp(ipu_dev);
+		dev_err(ipu_dev->miscdev.this_device,
+			"%s: group sync timeout\n", __func__);
+
 		ret = -ETIMEDOUT;
 		goto exec_err;
 	}
@@ -293,15 +378,19 @@ exec_err:
 	if (ret == -ETIMEDOUT)
 		xh2a_dump_debug_regs(ipu_dev, group);
 
-	if (ret != -EIO) {
+	if (ret != -EINTR) {
 		if (group->queue) {
 			mutex_lock(&group->queue->tile_mutex);
-			if (!list_empty(&group->tile_list_node))
+			if (!list_empty(&group->tile_list_node)) {
 				list_del_init(&group->tile_list_node);
+				xh2a_ipu_group_put(group);
+			}
 			mutex_unlock(&group->queue->tile_mutex);
 		}
 
-		atomic_set(&group->status, GROUP_DONE);
+		if (atomic_read(&group->status) != GROUP_CANCEL &&
+		    atomic_read(&group->status) != GROUP_DESTROY)
+			atomic_set(&group->status, GROUP_DONE);
 	}
 
 	return ret;
@@ -394,30 +483,30 @@ free_spm:
 	group->exec_result[0] = XH2A_GROUP_TRANSFER_SPM_FAIL;
 	xh2a_group_host_param_free(ipu_device, group);
 	mutex_unlock(&group->mutex);
-	complete(&group->launch_completion);
+	xh2a_ipu_group_sync_cnt_dec(ipu_device);
+	complete(&group->sync_completion);
 
 	return ret;
 }
 
-void xh2a_ipu_group_kds_load(struct xh2a_ipu_group *group)
+void xh2a_ipu_group_load_kds(struct xh2a_ipu_group *group)
 {
 	int i, j, ret, core_id, queue_id;
+	uint64_t timeout_jiffies;
 
 	struct xh2a_ipu_booter_queue *queue = NULL;
 	struct xh2a_ipu_device *ipu_device = group->ipu_dev;
 
-	if (ktime_before(ktime_add_ns(group->sync_start,
-				      group->trigger_timeout * NSEC_PER_USEC),
-			 ktime_get())) {
-		dev_err(ipu_device->miscdev.this_device,
-			"group %u %p timeout: %llu\n", group->id, group,
-			ktime_get());
-
-		group->exec_result[0] = XH2A_GROUP_TRIGGER_TIMEOUT;
-		complete(&group->launch_completion);
-
+	if (atomic_read(&ipu_device->reset_flag)) {
+		atomic_set(&group->status, GROUP_CANCEL);
+		complete(&group->sync_completion);
 		return;
 	}
+
+	atomic_inc(&ipu_device->sync_cnt);
+	dev_dbg(ipu_device->miscdev.this_device,
+		"ipu sync_cnt after load: %u\n",
+		atomic_read(&ipu_device->sync_cnt));
 
 	if (group->param_type & XH2A_GROUP_PARAM_SPM) {
 		ret = xh2a_ipu_group_transfer_param_to_spm(ipu_device, group);
@@ -475,6 +564,13 @@ void xh2a_ipu_group_kds_load(struct xh2a_ipu_group *group)
 	}
 
 	mutex_unlock(&group->mutex);
+
+	/* schedule timeout work */
+	timeout_jiffies = msecs_to_jiffies(1000) +
+			  usecs_to_jiffies(group->kernels_timeout);
+	xh2a_ipu_group_get(group);
+	if (!schedule_delayed_work(&group->timeout_work, timeout_jiffies))
+		xh2a_ipu_group_put(group);
 }
 
 int xh2a_ipu_group_spm_alloc(struct xh2a_ipu_group *group)

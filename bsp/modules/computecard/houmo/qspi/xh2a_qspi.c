@@ -1085,7 +1085,7 @@ static int xh2a_spi_nor_read_chip(struct xh2a_qspi_dev *qspi_dev,
 
 		remaining_len -= read_len;
 		current_offset += read_len;
-		buf += read_len;
+		buf = (uint8_t *)buf + read_len;
 	}
 
 	if (qspi_dev->is_dma)
@@ -1929,7 +1929,7 @@ static ssize_t xh2a_device_type_show(struct device *dev,
 	struct xh2a_qspi_dev *qspi_dev =
 		container_of(miscdev, struct xh2a_qspi_dev, miscdev);
 
-	return sprintf(buf, "%d\n", qspi_dev->flash_id);
+	return sprintf(buf, "%u\n", qspi_dev->flash_id);
 }
 
 static DEVICE_ATTR_RO(xh2a_device_type);
@@ -1942,7 +1942,7 @@ static ssize_t xh2a_device_paddr_show(struct device *dev,
 	struct xh2a_qspi_dev *qspi_dev =
 		container_of(miscdev, struct xh2a_qspi_dev, miscdev);
 
-	return sprintf(buf, "0x%llx\n", qspi_dev->device_paddr);
+	return sprintf(buf, "0x%llx\n", (unsigned long long)qspi_dev->device_paddr);
 }
 
 static DEVICE_ATTR_RO(xh2a_device_paddr);

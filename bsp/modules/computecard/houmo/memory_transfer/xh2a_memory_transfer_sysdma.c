@@ -432,7 +432,7 @@ static int xh2a_memory_trasfer_sysdma_one_block(
 		return -EBUSY;
 	}
 
-	if (size & DWC_DMAC_MAX_DATA_WIDTH_SHIFT)
+	if (size & (BIT(DWC_DMAC_MAX_DATA_WIDTH_SHIFT) - 1))
 		data_width = 0;
 	else
 		data_width = DWC_DMAC_MAX_DATA_WIDTH_SHIFT;

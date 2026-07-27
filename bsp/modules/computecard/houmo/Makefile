@@ -1,7 +1,8 @@
-
 KERNEL_SRC_DIR := $(LICHEE_KERN_DIR)
 MODULE_INS_DIR := $(LICHEE_MOD_DIR)
 KERNEL_OUT_DIR := $(O)
+KERNEL_DIR     := $(KERNEL_SRC_DIR)
+TARGET_ARCH    := $(LICHEE_ARCH)
 
 # Re-setup it
 KERNEL_SRC_DIR := $(word 1, $(KERNEL_SRC_DIR) $(KERNEL_SRC))
@@ -24,8 +25,9 @@ HOUMO_MOD_OUT_DIR  := $(patsubst $(KERNEL_SRC_DIR)/%,$(KERNEL_OUT_DIR)/%,$(shell
 
 PWD		:= $(realpath $(dir $(lastword $(MAKEFILE_LIST))))
 
-KERNEL_DIR	?= $(KERNEL_SRC_DIR)
-TARGET_ARCH	?= $(LICHEE_ARCH)
+KERNEL_DIR	?= /lib/modules/$(shell uname -r)/build
+TARGET_ARCH	?= $(shell uname -m | sed -e s/i.86/x86/ -e s/x86_64/x86/ \
+			-e s/arm.*/arm/ -e s/aarch64.*/arm64/)
 
 Q		?= @
 MAKEFLAGS	+= --no-print-directory
@@ -33,7 +35,7 @@ MAKEFLAGS	+= --no-print-directory
 DEVICE_NOR ?= UNKNOWN
 
 # must be same as PACKAGE_VERSION in dkms.conf
-XH2A_HOST_DRIVER_RELEASE	:= v0.7.0
+XH2A_HOST_DRIVER_RELEASE	:= v1.2.0
 XH2A_HOST_DRIVER_BUILDTIME	:= $(shell date  +"%Y-%m-%d %H:%M:%S %Z")
 
 
@@ -51,15 +53,13 @@ ifeq ($(TARGET_ARCH),arm64)
 ccflags-y	+= -DHOST_KERNEL_VERSION_ABOVE_5_5
 endif
 
-# enable runtime PM
-ccflags-y	+= -DHM_RUNTIME_PM_ENABLE
-
 ccflags-y	+= -I$(PWD)/include
 ccflags-y	+= -I$(PWD)/public
 
-HM_ADDRESS_LAYOUT_FILE := $(PWD)/include/houmo_address_layout.h
+HM_ADDRESS_LAYOUT_FILE := $(PWD)/public/houmo_address_layout.h
 
 xh2a_drv-objs := xh2a_host_drv.o
+xh2a_drv-objs += ctl/xh2a_ctl.o ctl/xh2a_ctl_lock.o
 xh2a_drv-objs += pcie/xh2a_pcie.o pcie/xh2a_pcie_hdma.o pcie/xh2a_pcie_api.o pcie/xh2a_pcie_misc.o pcie/xh2a_pcie_efuse.o
 xh2a_drv-objs += sys/xh2a_sys.o sys/xh2a_ctc.o
 ifneq ($(wildcard $(HM_ADDRESS_LAYOUT_FILE)),)

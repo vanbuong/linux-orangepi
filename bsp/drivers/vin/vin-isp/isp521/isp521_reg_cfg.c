@@ -263,12 +263,12 @@ void bsp_isp_update_table(unsigned long id, unsigned short table_update)
 	isp_regs[id].isp_update_ctrl0->bits.s1_linear_update = !!(table_update & S1_LINEAR_UPDATE);
 }
 
-void bsp_isp_set_load_addr0(unsigned long id, dma_addr_t addr)
+void bsp_isp_set_load_addr0(unsigned long id, vin_dma_addr_t addr)
 {
 	writel(addr >> ISP_ADDR_BIT_R_SHIFT, isp_regs[id].isp_load_addr0);
 }
 
-void bsp_isp_set_load_addr1(unsigned long id, dma_addr_t addr)
+void bsp_isp_set_load_addr1(unsigned long id, vin_dma_addr_t addr)
 {
 	writel(addr >> ISP_ADDR_BIT_R_SHIFT, isp_regs[id].isp_load_addr1);
 }
@@ -278,7 +278,7 @@ void bsp_isp_set_saved_addr(unsigned long id, unsigned long addr)
 	writel(addr >> ISP_ADDR_BIT_R_SHIFT, isp_regs[id].isp_save_addr);
 }
 
-void bsp_isp_set_statistics_addr(unsigned long id, dma_addr_t addr)
+void bsp_isp_set_statistics_addr(unsigned long id, vin_dma_addr_t addr)
 {
 	writel(addr >> ISP_ADDR_BIT_R_SHIFT, isp_regs[id].isp_save_addr);
 }
@@ -397,22 +397,22 @@ void bsp_isp_set_d3d_stride(unsigned long id, int k_stride, int raw_stride)
 	isp_regs[id].isp_d3d_dma_stride->bits.d3d_ref_k_dma_len = k_stride;
 }
 
-void bsp_isp_set_wdr_addr0(unsigned long id, dma_addr_t addr)
+void bsp_isp_set_wdr_addr0(unsigned long id, vin_dma_addr_t addr)
 {
 	writel(addr >> ISP_ADDR_BIT_R_SHIFT, isp_regs[id].isp_wdr_exp_addr0);
 }
 
-void bsp_isp_set_d3d_ref_k_addr(unsigned long id, dma_addr_t addr)
+void bsp_isp_set_d3d_ref_k_addr(unsigned long id, vin_dma_addr_t addr)
 {
 	writel(addr >> ISP_ADDR_BIT_R_SHIFT, isp_regs[id].isp_d3d_ref_k_addr);
 }
 
-void bsp_isp_set_d3d_ref_raw_addr(unsigned long id, dma_addr_t addr)
+void bsp_isp_set_d3d_ref_raw_addr(unsigned long id, vin_dma_addr_t addr)
 {
 	writel(addr >> ISP_ADDR_BIT_R_SHIFT, isp_regs[id].isp_d3d_ref_raw_addr);
 }
 
-void bsp_isp_set_d3d_ltf_raw_addr(unsigned long id, dma_addr_t addr)
+void bsp_isp_set_d3d_ltf_raw_addr(unsigned long id, vin_dma_addr_t addr)
 {
 	writel(addr >> ISP_ADDR_BIT_R_SHIFT, isp_regs[id].isp_d3d_ltf_raw_addr);
 }

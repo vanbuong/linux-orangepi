@@ -313,7 +313,7 @@ static const char *const pmu_name[] = {
 
 #if IS_ENABLED(CONFIG_AW_NSI)
 extern int nsi_port_setpri(enum nsi_pmu port, unsigned int pri);
-extern int nsi_port_setqos(enum nsi_pmu port, unsigned int qos);
+extern int nsi_port_sethpr(enum nsi_pmu port, unsigned int qos);
 extern bool nsi_probed(void);
 extern int sunxi_nsi_ecc_init(struct platform_device *pdev);
 extern void sunxi_nsi_ecc_exit(struct platform_device *pdev);
@@ -363,8 +363,14 @@ extern struct nsi_pmu_data hw_nsi_pmu;
 
 #if IS_ENABLED(CONFIG_ARCH_SUN55I) || IS_ENABLED(CONFIG_ARCH_SUN60I) || IS_ENABLED(CONFIG_ARCH_SUN65I)
 #define IAG_QOS_CFG(n)		   (0x000C + (0x200 * (n)))
+#define IAG_QOS_SHIFT(port)		16
+#define IAG_QOS_SET(qos, port)	   ((qos & 0x1) << IAG_QOS_SHIFT(port))
+#define IAG_QOS_GET(val, port)   ((val >> IAG_QOS_SHIFT(port)) & 0x1)
 #else
 #define IAG_QOS_CFG(n)		   (0x0094 + (0x200 * 23) + (0x4 * ((n) / 16)))
+#define IAG_QOS_SHIFT(port)		((port % 16) * 2)
+#define IAG_QOS_SET(qos, port)	   ((qos & 0x3) << IAG_QOS_SHIFT(port))
+#define IAG_QOS_GET(val, port)   ((val >> IAG_QOS_SHIFT(port)) & 0x3)
 #endif
 
 /* Counter n = 0 ~ 19 */
@@ -379,9 +385,9 @@ extern struct nsi_pmu_data hw_nsi_pmu;
 #define MBUS_PMU_LA_WR(n)          (0x00e0 + (0x200 * (n)))
 
 #define MBUS_PORT_MODE          (MBUS_PMU_MAX + 0)
-#define MBUS_PORT_PRI           (MBUS_PMU_MAX + 1)
+#define MBUS_PORT_QOS_PRI           (MBUS_PMU_MAX + 1)
 #define MBUS_INPUT_OUTPUT       (MBUS_PMU_MAX + 2)
-#define MBUS_PORT_QOS           (MBUS_PMU_MAX + 3)
+#define MBUS_PORT_HPR           (MBUS_PMU_MAX + 3)
 #define MBUS_PORT_ABS_BWL	(MBUS_PMU_MAX + 4)
 #define MBUS_PORT_ABS_BWLEN	(MBUS_PMU_MAX + 5)
 

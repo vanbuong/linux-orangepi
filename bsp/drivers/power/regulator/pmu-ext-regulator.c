@@ -509,6 +509,15 @@ static const struct regulator_desc ocp2131_regulators[] = {
 		OCP2131_NEG_OUTPUT_AVEE, 0x1f),
 };
 
+static const struct linear_range sy8810_dcdc_ranges[] = {
+	REGULATOR_LINEAR_RANGE(600000, 0, 90, 10000),
+};
+
+static const struct regulator_desc sy8810_regulators[] = {
+	PMU_EXT_REGULATOR_RANGE_VOL_DELAY(SY8810, DCDC0, "dcdc0", "vin1", sy8810_dcdc_ranges,
+			(90 - 0 + 1), SY8810_VSEL0, GENMASK(6, 0), SY8810_CONTROL, BIT(7)),
+};
+
 static int pmu_ext_regulator_probe(struct platform_device *pdev)
 {
 	struct regulator_dev *rdev;
@@ -543,6 +552,10 @@ static int pmu_ext_regulator_probe(struct platform_device *pdev)
 	case OCP2131_ID:
 		regulators = ocp2131_regulators;
 		nregulators = OCP2131_REG_ID_MAX;
+		break;
+	case SY8810_ID:
+		regulators = sy8810_regulators;
+		nregulators = SY8810_REG_ID_MAX;
 		break;
 	default:
 		PMIC_DEV_ERR(&pdev->dev, "Unsupported pmu_ext variant: %ld\n",
@@ -590,6 +603,7 @@ static int pmu_ext_regulator_remove(struct platform_device *pdev)
 static struct of_device_id pmu_ext_match_table[] = {
 	{ .compatible = "ext,aw37501-regulator" },
 	{ .compatible = "ext,ocp2131-regulator" },
+	{ .compatible = "ext,sy8810-regulator" },
 	{ /* sentinel */ },
 };
 

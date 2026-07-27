@@ -33,7 +33,19 @@ int isp_virtual_find_ch[ISP600_MAX_NUM] = {
 	0, 1, 2, 3,
 };
 
-#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN60IW2)
+#if IS_ENABLED(CONFIG_ARCH_SUN300IW1)
+int isp_virtual_find_logic[ISP600_MAX_NUM + 1] = {
+       0, 0, 0, 0, 4,
+};
+
+int isp_virtual_find_sel[ISP600_MAX_NUM + 1] = {
+       0, 0, 0, 0, 1,
+};
+
+int isp_ch_find[ISP600_MAX_NUM + 1] = {
+       0, 1, 2, 3, 0,
+};
+#else
 int isp_virtual_find_logic[ISP600_MAX_NUM + 3] = {
        0, 0, 0, 0, 4, 5, 6,
 };
@@ -45,12 +57,7 @@ int isp_virtual_find_sel[ISP600_MAX_NUM + 3] = {
 int isp_ch_find[ISP600_MAX_NUM + 3] = {
        0, 1, 2, 3, 0, 0, 0,
 };
-#else
-int isp_virtual_find_logic[ISP600_MAX_NUM] = {
-       0, 0, 0, 0,
-};
 #endif
-
 
 /*
  *  Load ISP register variables
@@ -76,6 +83,8 @@ struct isp600_reg {
 	ISP_GLOBAL_CFG1_REG_t *isp_global_cfg1;
 	ISP_LBC_TIME_CYCLE_REG_t *isp_lbc_time_cycle;
 	unsigned int *isp_save_load_addr;
+	ISP_FDBK_TDM_RDMA_FIFO_REG_t *isp_fdbk_tdm_rdma_fifo;
+	ISP_FDBK_TDM_WDMA_FIFO_REG_t *isp_fdbk_tdm_wdma_fifo;
 	ISP_INPUT_SIZE_REG_t *isp_input_size;
 	ISP_VALID_SIZE_REG_t *isp_valid_size;
 	ISP_VALID_START_REG_t *isp_valid_start;
@@ -86,9 +95,16 @@ struct isp600_reg {
 	unsigned int *isp_d3d_k0_addr;
 	unsigned int *isp_d3d_k1_addr;
 	unsigned int *isp_d3d_status_addr;
+	ISP_RDMA_CFG1_REG_t *isp_rdma_cfg1;
 	ISP_VIN_CFG0_REG_t *isp_vin_cfg0;
+	ISP_CH0_EXPAND_OFFSET0_REG_t *isp_ch0_expand_offset0;
+	ISP_CH0_EXPAND_OFFSET1_REG_t *isp_ch0_expand_offset1;
 	ISP_CH0_EXPAND_CFG0_REG_t *isp_ch0_expand_cfg0;
+	ISP_CH1_EXPAND_OFFSET0_REG_t *isp_ch1_expand_offset0;
+	ISP_CH1_EXPAND_OFFSET1_REG_t *isp_ch1_expand_offset1;
 	ISP_CH1_EXPAND_CFG0_REG_t *isp_ch1_expand_cfg0;
+	ISP_CH2_EXPAND_OFFSET0_REG_t *isp_ch2_expand_offset0;
+	ISP_CH2_EXPAND_OFFSET1_REG_t *isp_ch2_expand_offset1;
 	ISP_CH2_EXPAND_CFG0_REG_t *isp_ch2_expand_cfg0;
 	ISP_D3D_LBC_CFG0_REG_t *isp_d3d_lbc_cfg0;
 	ISP_D3D_LBC_CFG1_REG_t *isp_d3d_lbc_cfg1;
@@ -97,6 +113,8 @@ struct isp600_reg {
 	ISP_D3D_LBC_CFG4_REG_t *isp_d3d_lbc_cfg4;
 	ISP_D3D_LBC_CFG5_REG_t *isp_d3d_lbc_cfg5;
 	ISP_D3D_CFG0_REG_t *isp_d3d_cfg0;
+	ISP_BLC_OFFSET0_REG_t *isp_blc_offset0;
+	ISP_BLC_OFFSET1_REG_t *isp_blc_offset1;
 
 	ISP_RANDOM_SEED_REG_t *isp_random_seed;
 
@@ -105,7 +123,7 @@ struct isp600_reg {
 
 struct isp600_reg isp_regs[ISP600_MAX_NUM];
 
-void bsp_isp_map_reg_addr(unsigned long id, unsigned long base)
+void bsp_isp_map_reg_addr(unsigned long id, vin_dma_addr_t base)
 {
 	base += isp_virtual_find_ch[id] * addr_base_offset;
 
@@ -123,7 +141,7 @@ void bsp_isp_map_reg_addr(unsigned long id, unsigned long base)
 	isp_regs[id].isp_inter_status1 = (ISP_INT_STATUS1_REG_t *) (base + ISP_AHB_REG_OFFSET + id * ISP_AHB_AMONG_OFFSET + ISP_INTER_STATUS1_REG);
 	isp_regs[id].isp_inter_status2 = (ISP_INT_STATUS2_REG_t *) (base + ISP_AHB_REG_OFFSET + id * ISP_AHB_AMONG_OFFSET + ISP_INTER_STATUS2_REG);
 	isp_regs[id].isp_save_addr = (unsigned int *) (base + ISP_AHB_REG_OFFSET + id * ISP_AHB_AMONG_OFFSET + ISP_SAVE_ADDR_REG);
-#if !defined CONFIG_ARCH_SUN55IW3
+#if !IS_ENABLED(CONFIG_ARCH_SUN55IW3)
 	isp_regs[id].isp_save_load_addr = (unsigned int *) (base + ISP_AHB_REG_OFFSET + id * ISP_AHB_AMONG_OFFSET + ISP_SAVE_LOAD_ADDR_REG);
 #endif
 
@@ -133,6 +151,11 @@ void bsp_isp_map_reg_addr(unsigned long id, unsigned long base)
 	isp_regs[id].isp_lbc_time_cycle = (ISP_LBC_TIME_CYCLE_REG_t *) (base + ISP_LOAD_REG_OFFSET + ISP_LBC_TIME_CYCLE_REG);
 #if IS_ENABLED(CONFIG_ARCH_SUN55IW3)
 	isp_regs[id].isp_save_load_addr = (unsigned int *) (base + ISP_LOAD_REG_OFFSET + ISP_SAVE_LOAD_ADDR_REG);
+#endif
+
+#if defined CONFIG_ARCH_SUN65IW1
+	isp_regs[id].isp_fdbk_tdm_rdma_fifo = (ISP_FDBK_TDM_RDMA_FIFO_REG_t *) (base + ISP_LOAD_REG_OFFSET + ISP_FDBK_TDM_RDMA_FIFO_REG);
+	isp_regs[id].isp_fdbk_tdm_wdma_fifo = (ISP_FDBK_TDM_WDMA_FIFO_REG_t *) (base + ISP_LOAD_REG_OFFSET + ISP_FDBK_TDM_WDMA_FIFO_REG);
 #endif
 	isp_regs[id].isp_input_size = (ISP_INPUT_SIZE_REG_t *) (base + ISP_LOAD_REG_OFFSET + ISP_INPUT_SIZE_REG);
 	isp_regs[id].isp_valid_size = (ISP_VALID_SIZE_REG_t *) (base + ISP_LOAD_REG_OFFSET + ISP_VALID_SIZE_REG);
@@ -144,6 +167,7 @@ void bsp_isp_map_reg_addr(unsigned long id, unsigned long base)
 	isp_regs[id].isp_d3d_k0_addr = (unsigned int *) (base + ISP_LOAD_REG_OFFSET + ISP_D3D_K0_ADDR_REG);
 	isp_regs[id].isp_d3d_k1_addr = (unsigned int *) (base + ISP_LOAD_REG_OFFSET + ISP_D3D_K1_ADDR_REG);
 	isp_regs[id].isp_d3d_status_addr = (unsigned int *) (base + ISP_LOAD_REG_OFFSET + ISP_D3D_STATUS_ADDR_REG);
+	isp_regs[id].isp_rdma_cfg1 = (ISP_RDMA_CFG1_REG_t *) (base + ISP_LOAD_REG_OFFSET + ISP_RDMA_CFG1_REG);
 	isp_regs[id].isp_vin_cfg0 = (ISP_VIN_CFG0_REG_t *) (base + ISP_LOAD_REG_OFFSET + ISP_VIN_CFG0_REG);
 	isp_regs[id].isp_ch0_expand_cfg0 = (ISP_CH0_EXPAND_CFG0_REG_t *) (base + ISP_LOAD_REG_OFFSET + ISP_CH0_EXPAND_CFG0_REG);
 	isp_regs[id].isp_ch1_expand_cfg0 = (ISP_CH1_EXPAND_CFG0_REG_t *) (base + ISP_LOAD_REG_OFFSET + ISP_CH1_EXPAND_CFG0_REG);
@@ -160,7 +184,7 @@ void bsp_isp_map_reg_addr(unsigned long id, unsigned long base)
 /*
  * Load DRAM Register Address
  */
-void bsp_isp_map_load_dram_addr(unsigned long id, unsigned long base)
+void bsp_isp_map_load_dram_addr(unsigned long id, vin_dma_addr_t base)
 {
 #ifndef USE_DEF_PARA
 	isp_regs[id].isp_update_flag = (ISP_AHB_CFG0_REG_t *) (base + ISP_AHB_REG_OFFSET + id * ISP_AHB_AMONG_OFFSET + ISP_AHB_CFG0_REG);
@@ -169,6 +193,11 @@ void bsp_isp_map_load_dram_addr(unsigned long id, unsigned long base)
 	isp_regs[id].isp_lbc_time_cycle = (ISP_LBC_TIME_CYCLE_REG_t *) (base + ISP_LOAD_REG_OFFSET + ISP_LBC_TIME_CYCLE_REG);
 #if IS_ENABLED(CONFIG_ARCH_SUN55IW3)
 	isp_regs[id].isp_save_load_addr = (unsigned int *) (base + ISP_LOAD_REG_OFFSET + ISP_SAVE_LOAD_ADDR_REG);
+#endif
+
+#if defined CONFIG_ARCH_SUN65IW1
+	isp_regs[id].isp_fdbk_tdm_rdma_fifo = (ISP_FDBK_TDM_RDMA_FIFO_REG_t *) (base + ISP_LOAD_REG_OFFSET + ISP_FDBK_TDM_RDMA_FIFO_REG);
+	isp_regs[id].isp_fdbk_tdm_wdma_fifo = (ISP_FDBK_TDM_WDMA_FIFO_REG_t *) (base + ISP_LOAD_REG_OFFSET + ISP_FDBK_TDM_WDMA_FIFO_REG);
 #endif
 	isp_regs[id].isp_input_size = (ISP_INPUT_SIZE_REG_t *) (base + ISP_LOAD_REG_OFFSET + ISP_INPUT_SIZE_REG);
 	isp_regs[id].isp_valid_size = (ISP_VALID_SIZE_REG_t *) (base + ISP_LOAD_REG_OFFSET + ISP_VALID_SIZE_REG);
@@ -180,9 +209,16 @@ void bsp_isp_map_load_dram_addr(unsigned long id, unsigned long base)
 	isp_regs[id].isp_d3d_k0_addr = (unsigned int *) (base + ISP_LOAD_REG_OFFSET + ISP_D3D_K0_ADDR_REG);
 	isp_regs[id].isp_d3d_k1_addr = (unsigned int *) (base + ISP_LOAD_REG_OFFSET + ISP_D3D_K1_ADDR_REG);
 	isp_regs[id].isp_d3d_status_addr = (unsigned int *) (base + ISP_LOAD_REG_OFFSET + ISP_D3D_STATUS_ADDR_REG);
+	isp_regs[id].isp_rdma_cfg1 = (ISP_RDMA_CFG1_REG_t *) (base + ISP_LOAD_REG_OFFSET + ISP_RDMA_CFG1_REG);
 	isp_regs[id].isp_vin_cfg0 = (ISP_VIN_CFG0_REG_t *) (base + ISP_LOAD_REG_OFFSET + ISP_VIN_CFG0_REG);
+	isp_regs[id].isp_ch0_expand_offset0 = (ISP_CH0_EXPAND_OFFSET0_REG_t *) (base + ISP_LOAD_REG_OFFSET + ISP_CH0_EXPAND_OFFSET0_REG);
+	isp_regs[id].isp_ch0_expand_offset1 = (ISP_CH0_EXPAND_OFFSET1_REG_t *) (base + ISP_LOAD_REG_OFFSET + ISP_CH0_EXPAND_OFFSET1_REG);
 	isp_regs[id].isp_ch0_expand_cfg0 = (ISP_CH0_EXPAND_CFG0_REG_t *) (base + ISP_LOAD_REG_OFFSET + ISP_CH0_EXPAND_CFG0_REG);
+	isp_regs[id].isp_ch1_expand_offset0 = (ISP_CH1_EXPAND_OFFSET0_REG_t *) (base + ISP_LOAD_REG_OFFSET + ISP_CH1_EXPAND_OFFSET0_REG);
+	isp_regs[id].isp_ch1_expand_offset1 = (ISP_CH1_EXPAND_OFFSET1_REG_t *) (base + ISP_LOAD_REG_OFFSET + ISP_CH1_EXPAND_OFFSET1_REG);
 	isp_regs[id].isp_ch1_expand_cfg0 = (ISP_CH1_EXPAND_CFG0_REG_t *) (base + ISP_LOAD_REG_OFFSET + ISP_CH1_EXPAND_CFG0_REG);
+	isp_regs[id].isp_ch2_expand_offset0 = (ISP_CH2_EXPAND_OFFSET0_REG_t *) (base + ISP_LOAD_REG_OFFSET + ISP_CH2_EXPAND_OFFSET0_REG);
+	isp_regs[id].isp_ch2_expand_offset1 = (ISP_CH2_EXPAND_OFFSET1_REG_t *) (base + ISP_LOAD_REG_OFFSET + ISP_CH2_EXPAND_OFFSET1_REG);
 	isp_regs[id].isp_ch2_expand_cfg0 = (ISP_CH2_EXPAND_CFG0_REG_t *) (base + ISP_LOAD_REG_OFFSET + ISP_CH2_EXPAND_CFG0_REG);
 	isp_regs[id].isp_d3d_lbc_cfg0 = (ISP_D3D_LBC_CFG0_REG_t *) (base + ISP_LOAD_REG_OFFSET + ISP_D3D_LBC_CFG0_REG);
 	isp_regs[id].isp_d3d_lbc_cfg1 = (ISP_D3D_LBC_CFG1_REG_t *) (base + ISP_LOAD_REG_OFFSET + ISP_D3D_LBC_CFG1_REG);
@@ -191,13 +227,15 @@ void bsp_isp_map_load_dram_addr(unsigned long id, unsigned long base)
 	isp_regs[id].isp_d3d_lbc_cfg4 = (ISP_D3D_LBC_CFG4_REG_t *) (base + ISP_LOAD_REG_OFFSET + ISP_D3D_LBC_CFG4_REG);
 	isp_regs[id].isp_d3d_lbc_cfg5 = (ISP_D3D_LBC_CFG5_REG_t *) (base + ISP_LOAD_REG_OFFSET + ISP_D3D_LBC_CFG5_REG);
 	isp_regs[id].isp_d3d_cfg0 = (ISP_D3D_CFG0_REG_t *) (base + ISP_LOAD_REG_OFFSET + ISP_D3D_CFG0_REG);
+	isp_regs[id].isp_blc_offset0 = (ISP_BLC_OFFSET0_REG_t *) (base + ISP_LOAD_REG_OFFSET + ISP_BLC_OFFSET0_REG);
+	isp_regs[id].isp_blc_offset1 = (ISP_BLC_OFFSET1_REG_t *) (base + ISP_LOAD_REG_OFFSET + ISP_BLC_OFFSET1_REG);
 #endif
 }
 
 /*
  * save Load DRAM Register Address
  */
-void bsp_isp_map_save_load_dram_addr(unsigned long id, unsigned long base)
+void bsp_isp_map_save_load_dram_addr(unsigned long id, vin_dma_addr_t base)
 {
 	isp_regs[id].isp_random_seed = (ISP_RANDOM_SEED_REG_t *) (base + ISP_RANDOM_SEED_REG);
 }
@@ -205,16 +243,16 @@ void bsp_isp_map_save_load_dram_addr(unsigned long id, unsigned long base)
 /*
  * syscfg Register Address
  */
-void bsp_isp_map_syscfg_addr(unsigned long id, unsigned long base)
+void bsp_isp_map_syscfg_addr(unsigned long id, vin_dma_addr_t base)
 {
-#if IS_ENABLED(CONFIG_ARCH_SUN8IW21)
+#if IS_ENABLED(CONFIG_ARCH_SUN300IW1)
 	isp_regs[id].isp_sram_ctrl = (ISP_SRAM_CTRL_REG_t *) (base + 0x4);
 #endif
 }
 
 void bsp_isp_sram_boot_mode_ctrl(unsigned long id, unsigned int mode)
 {
-#if IS_ENABLED(CONFIG_ARCH_SUN8IW21)
+#if IS_ENABLED(CONFIG_ARCH_SUN300IW1)
 	isp_regs[id].isp_sram_ctrl->bits.sram_bmode_ctrl = mode;
 #endif
 }
@@ -274,11 +312,15 @@ unsigned int bsp_isp_get_max_width(unsigned long id)
 void bsp_isp_capture_start(unsigned long id)
 {
 	isp_regs[id].isp_update_ctrl->bits.cap_en = 1;
+	isp_regs[id].isp_update_ctrl->bits.rec_rdma_feedback_en = 1;
+	isp_regs[id].isp_update_ctrl->bits.rec_wdma_feedback_en = 1;
 }
 
 void bsp_isp_capture_stop(unsigned long id)
 {
 	isp_regs[id].isp_update_ctrl->bits.cap_en = 0;
+	isp_regs[id].isp_update_ctrl->bits.rec_rdma_feedback_en = 0;
+	isp_regs[id].isp_update_ctrl->bits.rec_wdma_feedback_en = 0;
 }
 
 void bsp_isp_set_para_ready(unsigned long id, int ready)
@@ -297,10 +339,13 @@ void bsp_isp_update_table(unsigned long id, unsigned int table_update)
 	isp_regs[id].isp_update_ctrl->bits.pltm_update = !!(table_update & PLTM_UPDATE);
 	isp_regs[id].isp_update_ctrl->bits.cem_update = !!(table_update & CEM_UPDATE);
 	isp_regs[id].isp_update_ctrl->bits.msc_update = !!(table_update & MSC_UPDATE);
+	isp_regs[id].isp_update_ctrl->bits.fe0_msc_update = !!(table_update & FE0_MSC_UPDATE);
 	isp_regs[id].isp_update_ctrl->bits.nr_msc_update = !!(table_update & NR_MSC_UPDATE);
+	isp_regs[id].isp_update_ctrl->bits.fe1_msc_update = !!(table_update & FE1_MSC_UPDATE);
+	isp_regs[id].isp_update_ctrl->bits.fe2_msc_update = !!(table_update & FE2_MSC_UPDATE);
 }
 
-void bsp_isp_set_load_addr(unsigned long id, dma_addr_t addr)
+void bsp_isp_set_load_addr(unsigned long id, vin_dma_addr_t addr)
 {
 	writel(addr >> ISP_ADDR_BIT_R_SHIFT, isp_regs[id].isp_load_addr);
 }
@@ -317,7 +362,7 @@ void bsp_isp_irq_disable(unsigned long id, unsigned int irq_flag)
 
 unsigned int bsp_isp_get_irq_status(unsigned long id, unsigned int flag)
 {
-	return isp_regs[id].isp_int_status->dwval & flag;
+	return (isp_regs[id].isp_int_status->dwval & flag) & (isp_regs[id].isp_int_bypass->dwval & flag);
 }
 
 void bsp_isp_clr_irq_status(unsigned long id, unsigned int flag)
@@ -355,17 +400,17 @@ void bsp_isp_clr_internal_status2(unsigned long id, unsigned int flag)
 	isp_regs[id].isp_inter_status2->dwval = flag;
 }
 
-void bsp_isp_set_saved_addr(unsigned long id, unsigned long addr)
+void bsp_isp_set_saved_addr(unsigned long id, vin_dma_addr_t addr)
 {
 	writel(addr >> ISP_ADDR_BIT_R_SHIFT, isp_regs[id].isp_save_addr);
 }
 
-void bsp_isp_set_statistics_addr(unsigned long id, dma_addr_t addr)
+void bsp_isp_set_statistics_addr(unsigned long id, vin_dma_addr_t addr)
 {
 	writel(addr >> ISP_ADDR_BIT_R_SHIFT, isp_regs[id].isp_save_addr);
 }
 
-void bsp_isp_set_save_load_addr(unsigned long id, dma_addr_t addr)
+void bsp_isp_set_save_load_addr(unsigned long id, vin_dma_addr_t addr)
 {
 	writel(addr >> ISP_ADDR_BIT_R_SHIFT, isp_regs[id].isp_save_load_addr);
 }
@@ -452,22 +497,22 @@ void bsp_isp_d3d_ref_frm_mode(unsigned long id, unsigned int d3d_ref)
 	isp_regs[id].isp_module_mode0->bits.d3d_ref_frm_mode = d3d_ref;
 }
 
-void bsp_isp_set_d3d_bayer_addr(unsigned long id, dma_addr_t addr)
+void bsp_isp_set_d3d_bayer_addr(unsigned long id, vin_dma_addr_t addr)
 {
 	writel(addr >> ISP_ADDR_BIT_R_SHIFT, isp_regs[id].isp_d3d_bayer_addr);
 }
 
-void bsp_isp_set_d3d_k0_addr(unsigned long id, dma_addr_t addr)
+void bsp_isp_set_d3d_k0_addr(unsigned long id, vin_dma_addr_t addr)
 {
 	writel(addr >> ISP_ADDR_BIT_R_SHIFT, isp_regs[id].isp_d3d_k0_addr);
 }
 
-void bsp_isp_set_d3d_k1_addr(unsigned long id, dma_addr_t addr)
+void bsp_isp_set_d3d_k1_addr(unsigned long id, vin_dma_addr_t addr)
 {
 	writel(addr >> ISP_ADDR_BIT_R_SHIFT, isp_regs[id].isp_d3d_k1_addr);
 }
 
-void bsp_isp_set_d3d_status_addr(unsigned long id, dma_addr_t addr)
+void bsp_isp_set_d3d_status_addr(unsigned long id, vin_dma_addr_t addr)
 {
 	writel(addr >> ISP_ADDR_BIT_R_SHIFT, isp_regs[id].isp_d3d_status_addr);
 }
@@ -517,4 +562,92 @@ void bsp_isp_set_d3d_lbc_cfg(unsigned long id, struct isp_lbc_cfg d3d_lbc)
 	isp_regs[id].isp_d3d_lbc_cfg4->bits.line_max_bit = d3d_lbc.line_max_bits;
 
 	isp_regs[id].isp_d3d_lbc_cfg5->bits.line_stride = d3d_lbc.line_stride;
+}
+
+void bsp_isp_set_d3d_raw_fifo(unsigned long id, unsigned int fifo_num)
+{
+	isp_regs[id].isp_rdma_cfg1->bits.isp_d3d_raw = fifo_num;
+}
+
+void bsp_isp_set_rec_rdma_fifo_low_limit(unsigned long id, unsigned int limit_l)
+{
+	isp_regs[id].isp_fdbk_tdm_rdma_fifo->bits.rec_fifo_low_limit = limit_l;
+}
+
+void bsp_isp_set_rec_rdma_fifo_high_limit(unsigned long id, unsigned int limit_h)
+{
+	isp_regs[id].isp_fdbk_tdm_rdma_fifo->bits.rec_fifo_high_limit = limit_h;
+}
+
+void bsp_isp_set_rec_wdma_fifo_low_limit(unsigned long id, unsigned int limit_l)
+{
+	isp_regs[id].isp_fdbk_tdm_wdma_fifo->bits.rec_fifo_low_limit = limit_l;
+}
+
+void bsp_isp_set_rec_wdma_fifo_high_limit(unsigned long id, unsigned int limit_h)
+{
+	isp_regs[id].isp_fdbk_tdm_wdma_fifo->bits.rec_fifo_high_limit = limit_h;
+}
+
+void bsp_isp_set_blc_offset_shift(unsigned long id, unsigned int shift_bit)
+{
+	unsigned int act_shift_bit;
+	short offset_change[4] = {0, 0, 0, 0};
+
+	if (shift_bit & 0xff) {
+		act_shift_bit = shift_bit & 0xff;
+		isp_regs[id].isp_blc_offset0->bits.r_offset = isp_regs[id].isp_blc_offset0->bits.r_offset << act_shift_bit;
+		isp_regs[id].isp_blc_offset0->bits.gr_offset = isp_regs[id].isp_blc_offset0->bits.gr_offset << act_shift_bit;
+		isp_regs[id].isp_blc_offset1->bits.gb_offset = isp_regs[id].isp_blc_offset1->bits.gb_offset << act_shift_bit;
+		isp_regs[id].isp_blc_offset1->bits.b_offset = isp_regs[id].isp_blc_offset1->bits.b_offset << act_shift_bit;
+
+		isp_regs[id].isp_ch0_expand_offset0->bits.r_offset = isp_regs[id].isp_ch0_expand_offset0->bits.r_offset << act_shift_bit;
+		isp_regs[id].isp_ch0_expand_offset0->bits.gr_offset = isp_regs[id].isp_ch0_expand_offset0->bits.gr_offset << act_shift_bit;
+		isp_regs[id].isp_ch0_expand_offset1->bits.gb_offset = isp_regs[id].isp_ch0_expand_offset1->bits.gb_offset << act_shift_bit;
+		isp_regs[id].isp_ch0_expand_offset1->bits.b_offset = isp_regs[id].isp_ch0_expand_offset1->bits.b_offset << act_shift_bit;
+
+		isp_regs[id].isp_ch1_expand_offset0->bits.r_offset = isp_regs[id].isp_ch1_expand_offset0->bits.r_offset << act_shift_bit;
+		isp_regs[id].isp_ch1_expand_offset0->bits.gr_offset = isp_regs[id].isp_ch1_expand_offset0->bits.gr_offset << act_shift_bit;
+		isp_regs[id].isp_ch1_expand_offset1->bits.gb_offset = isp_regs[id].isp_ch1_expand_offset1->bits.gb_offset << act_shift_bit;
+		isp_regs[id].isp_ch1_expand_offset1->bits.b_offset = isp_regs[id].isp_ch1_expand_offset1->bits.b_offset << act_shift_bit;
+
+		isp_regs[id].isp_ch2_expand_offset0->bits.r_offset = isp_regs[id].isp_ch2_expand_offset0->bits.r_offset << act_shift_bit;
+		isp_regs[id].isp_ch2_expand_offset0->bits.gr_offset = isp_regs[id].isp_ch2_expand_offset0->bits.gr_offset << act_shift_bit;
+		isp_regs[id].isp_ch2_expand_offset1->bits.gb_offset = isp_regs[id].isp_ch2_expand_offset1->bits.gb_offset << act_shift_bit;
+		isp_regs[id].isp_ch2_expand_offset1->bits.b_offset = isp_regs[id].isp_ch2_expand_offset1->bits.b_offset << act_shift_bit;
+	} else if (shift_bit & (0xff << 8)) {
+		act_shift_bit = (shift_bit & (0xff << 8)) >> 8;
+		offset_change[0] = isp_regs[id].isp_blc_offset0->bits.r_offset | 0xe000;
+		offset_change[1] = isp_regs[id].isp_blc_offset0->bits.gr_offset | 0xe000;
+		offset_change[2] = isp_regs[id].isp_blc_offset1->bits.gb_offset | 0xe000;
+		offset_change[3] = isp_regs[id].isp_blc_offset1->bits.b_offset | 0xe000;
+		offset_change[0] = (~offset_change[0] + 1) >> act_shift_bit;
+		offset_change[1] = (~offset_change[1] + 1) >> act_shift_bit;
+		offset_change[2] = (~offset_change[2] + 1) >> act_shift_bit;
+		offset_change[3] = (~offset_change[3] + 1) >> act_shift_bit;
+		offset_change[0] = (~offset_change[0] + 1) & 0x1FFF;
+		offset_change[1] = (~offset_change[1] + 1) & 0x1FFF;
+		offset_change[2] = (~offset_change[2] + 1) & 0x1FFF;
+		offset_change[3] = (~offset_change[3] + 1) & 0x1FFF;
+
+		isp_regs[id].isp_blc_offset0->bits.r_offset = offset_change[0];
+		isp_regs[id].isp_blc_offset0->bits.gr_offset = offset_change[1];
+		isp_regs[id].isp_blc_offset1->bits.gb_offset = offset_change[2];
+		isp_regs[id].isp_blc_offset1->bits.b_offset = offset_change[3];
+
+		isp_regs[id].isp_ch0_expand_offset0->bits.r_offset = offset_change[0];
+		isp_regs[id].isp_ch0_expand_offset0->bits.gr_offset = offset_change[1];
+		isp_regs[id].isp_ch0_expand_offset1->bits.gb_offset = offset_change[2];
+		isp_regs[id].isp_ch0_expand_offset1->bits.b_offset = offset_change[3];
+
+		isp_regs[id].isp_ch1_expand_offset0->bits.r_offset = offset_change[0];
+		isp_regs[id].isp_ch1_expand_offset0->bits.gr_offset = offset_change[1];
+		isp_regs[id].isp_ch1_expand_offset1->bits.gb_offset = offset_change[2];
+		isp_regs[id].isp_ch1_expand_offset1->bits.b_offset = offset_change[3];
+
+		isp_regs[id].isp_ch2_expand_offset0->bits.r_offset = offset_change[0];
+		isp_regs[id].isp_ch2_expand_offset0->bits.gr_offset = offset_change[1];
+		isp_regs[id].isp_ch2_expand_offset1->bits.gb_offset = offset_change[2];
+		isp_regs[id].isp_ch2_expand_offset1->bits.b_offset = offset_change[3];
+	}
 }

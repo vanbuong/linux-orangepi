@@ -45,6 +45,9 @@
 #define AOSS_SYSCTRL_IPUSS_RESET_STATUS 0x700003E0
 #define IPUSS_RESET_REQUEST_BIT		8
 
+#define XH2A_TEMP_DDR_BASE 0x2007CFF000ULL
+#define XH2A_TEMP_MAGIC	   0x58483241U
+
 #define AOSS_NIU_BASE	      0x70030000
 #define IPU_NIU_CTRL_OFFSET   0x80
 #define IPU_NIU_STATUS_OFFSET 0x84
@@ -254,6 +257,33 @@ static int xh2a_ipu_readl(struct xh2a_ipu_device *ipu_dev, uint32_t addr,
 	return ret;
 }
 
+void xh2a_ipu_read_device_temp(struct xh2a_ipu_device *ipu_dev)
+{
+	int ret;
+	uint32_t temp_data[8];
+	uint32_t magic, temp;
+
+	ret = xh2a_pcie_pio_read_mem(ipu_dev->private_data,
+				     (u64)XH2A_TEMP_DDR_BASE, temp_data,
+				     sizeof(temp_data));
+	if (ret) {
+		dev_err(ipu_dev->miscdev.this_device, "Failed to read "
+						      "temperature data\n");
+		return;
+	}
+
+	magic = le32_to_cpu(temp_data[0]);
+	temp = le32_to_cpu(temp_data[7]);
+
+	if (magic != XH2A_TEMP_MAGIC) {
+		dev_err(ipu_dev->miscdev.this_device, "Invalid temperature "
+						      "magic\n");
+		return;
+	}
+
+	dev_info(ipu_dev->miscdev.this_device, "temperature: %u mC\n", temp);
+}
+
 void xh2a_booter_queue_trigger(struct xh2a_ipu_device *ipu_device,
 			       struct xh2a_ipu_booter_queue *queue,
 			       struct xh2a_ipu_group *group)
@@ -415,6 +445,7 @@ void xh2a_booter_queue_enqueue_group(struct xh2a_ipu_device *ipu_dev,
 	/* record wptr of the first queue and add group to tile list */
 	if (queue->flag & XH2A_IPU_TILE_QUEUE_FLAG_INTERRUPT) {
 		group->queue = queue;
+		xh2a_ipu_group_get(group);
 		list_add_tail(&group->tile_list_node, &queue->group_list);
 		queue->flag &= ~XH2A_IPU_TILE_QUEUE_FLAG_INTERRUPT;
 		dev_dbg(ipu_dev->miscdev.this_device,
@@ -594,10 +625,10 @@ static void xh2a_ipu_booter_queue_init(struct xh2a_ipu_device *ipu_device,
 
 	queue->entry_capacity = XH2A_IPU_TILE_ENTRY_NUM;
 
-	queue->queue_addr =
-		(void *)XH2A_DEVICE_DDR_BOOTER_START +
-		(core_id * 4 + tile_id) *
-			(queue->entry_capacity * sizeof(struct kernel_desc_s));
+	queue->queue_addr = (void *)((uintptr_t)XH2A_DEVICE_DDR_BOOTER_START +
+				     (core_id * 4 + tile_id) *
+					     (queue->entry_capacity *
+					      sizeof(struct kernel_desc_s)));
 
 	dev_dbg(miscdev->this_device, "queue->queue_addr = 0x%lx\n",
 		(uintptr_t)queue->queue_addr);
@@ -668,7 +699,7 @@ int xh2a_ipu_get_efuse_info(struct xh2a_ipu_device *ipu_device)
 	return 0;
 }
 
-static void ipuss_lcrg_enable(struct xh2a_ipu_device *ipu_dev)
+static void ipuss_lcrg_enable(struct xh2a_ipu_device *ipu_dev, bool is_reset)
 {
 	int ret;
 	unsigned long timeout;
@@ -676,6 +707,9 @@ static void ipuss_lcrg_enable(struct xh2a_ipu_device *ipu_dev)
 	uint32_t niu_val, trycnt;
 	uint32_t niu_ctrl_addr = AOSS_NIU_BASE + IPU_NIU_CTRL_OFFSET;
 	uint32_t niu_status_addr = AOSS_NIU_BASE + IPU_NIU_STATUS_OFFSET;
+
+	if (!is_reset && (atomic_read(&ipu_dev->dev_initialized) == 1))
+		return;
 
 	/* disconnect niu for lowpower process */
 	trycnt = 0;
@@ -701,7 +735,8 @@ static void ipuss_lcrg_enable(struct xh2a_ipu_device *ipu_dev)
 
 	if (ret != 0) {
 		dev_err(ipu_dev->miscdev.this_device,
-			"%s: write msgbit fail, keep ipu niu disconnected.\n",
+			"%s: write msgbit fail, keep ipu niu "
+			"disconnected.\n",
 			__func__);
 		return;
 	}
@@ -719,9 +754,11 @@ static void ipuss_lcrg_enable(struct xh2a_ipu_device *ipu_dev)
 	xh2a_ipu_readl(ipu_dev, AOSS_SYSCTRL_IPUSS_RESET_STATUS, &reg_val);
 	if (!(reg_val & 0x1)) {
 		dev_err(ipu_dev->miscdev.this_device,
-			"%s: get ipureset fail, check firmware version...\n",
+			"%s: get ipureset fail, check firmware "
+			"version...\n",
 			__func__);
-		/*  compatible with different firmware. DO not return here. */
+		/*  compatible with different firmware. DO not return
+		 * here. */
 	}
 
 	trycnt = 0;
@@ -793,12 +830,12 @@ static void xh2a_ipu_sw_interleave_init(struct xh2a_ipu_device *ipu_device)
 	}
 }
 
-void xh2a_ipu_hw_startup(struct xh2a_ipu_device *ipu_device)
+void xh2a_ipu_hw_startup(struct xh2a_ipu_device *ipu_device, bool is_reset)
 {
 	uint32_t core_id, tile_id, booter_reg_addr;
 	struct booter_device_reg_s *booter_reg = NULL;
 
-	ipuss_lcrg_enable(ipu_device);
+	ipuss_lcrg_enable(ipu_device, is_reset);
 
 	for (core_id = 0; core_id < XH2A_IPU_CORE_NUM; core_id++) {
 		booter_reg_addr = IPUSS_CFG_BASE +
@@ -819,11 +856,14 @@ void xh2a_ipu_hw_startup(struct xh2a_ipu_device *ipu_device)
 	dev_dbg(ipu_device->miscdev.this_device, "ipuss hw startup done\n");
 }
 
-void xh2a_ipu_hw_shutdown(struct xh2a_ipu_device *ipu_dev)
+void xh2a_ipu_hw_shutdown(struct xh2a_ipu_device *ipu_dev, bool is_reset)
 {
 	uint32_t niu_val, trycnt;
 	uint32_t niu_ctrl_addr = AOSS_NIU_BASE + IPU_NIU_CTRL_OFFSET;
 	uint32_t niu_status_addr = AOSS_NIU_BASE + IPU_NIU_STATUS_OFFSET;
+
+	if (!is_reset)
+		return;
 
 	/* ONLY disconnect NIU when shutdown ipu. DO NOT reset it! */
 	trycnt = 0;

@@ -19,6 +19,10 @@
 static DEFINE_IDR(xh2a_minor_idr);
 static DEFINE_MUTEX(xh2a_minor_idr_mutex);
 
+static bool hm_runtime_pm_enable = true;
+module_param_named(runtime_pm_enable, hm_runtime_pm_enable, bool, 0644);
+MODULE_PARM_DESC(runtime_pm_enable, "Enable runtime PM (default: true)");
+
 static pci_ers_result_t xh2a_pcie_err_error_detected(struct pci_dev *pdev,
 						     pci_channel_state_t state)
 {
@@ -29,10 +33,6 @@ static pci_ers_result_t xh2a_pcie_err_error_detected(struct pci_dev *pdev,
 static pci_ers_result_t xh2a_pcie_err_slot_reset(struct pci_dev *pdev)
 {
 	return PCI_ERS_RESULT_NEED_RESET;
-}
-
-static void xh2a_pcie_err_resume(struct pci_dev *pdev)
-{
 }
 
 static int xh2a_pcie_pm_notifier(struct notifier_block *nb,
@@ -105,16 +105,17 @@ static int xh2a_pcie_pm_prepare(struct device *dev)
 		return -ENODEV;
 	}
 
-	p_xh2a->pdev->d3cold_allowed = p_xh2a->d3cold_allowed_saved;
-
-	if (pm_suspend_target_state == PM_SUSPEND_TO_IDLE)
+	if (pm_suspend_target_state == PM_SUSPEND_TO_IDLE) {
+		p_xh2a->pdev->d3cold_allowed = 0;
 		xh2a_rpmsg_lite_ext_send(p_xh2a, XH2A_LPCTRL_START_SLEEP_ID,
 					 XH2A_LPCTRL_START_SLEEP_STR,
 					 XH2A_LPCTRL_START_SLEEP_LEN);
-	else
+	} else {
+		p_xh2a->pdev->d3cold_allowed = p_xh2a->d3cold_allowed_saved;
 		xh2a_rpmsg_lite_ext_send(p_xh2a, XH2A_LPCTRL_START_HIBERNATE_ID,
 					 XH2A_LPCTRL_START_HIBERNATE_STR,
 					 XH2A_LPCTRL_START_HIBERNATE_LEN);
+	}
 
 	dev_info(dev,
 		 "%s: step1, sent rpmsg to notify device start hibernate, "
@@ -189,12 +190,10 @@ static void xh2a_pcie_pm_complete(struct device *dev)
 		return;
 	}
 
-	xh2a_pcie_probe_post(p_xh2a);
-
 	xh2a_pcie_write_bar_msgbit(p_xh2a, XH2A_LPCTRL_EXIT_IDLE_OR_L1_CODE,
 				   XH2A_PCIE_MSG_TO_E2);
 
-	dev_info(dev, "%s: step1, pcie_probe_post, jiffies %ld, HZ %d\n",
+	dev_info(dev, "%s: step1, start check pwrsts, jiffies %ld, HZ %d\n",
 		 __func__, jiffies, HZ);
 
 	/* wait max 5s for device ready */
@@ -216,6 +215,14 @@ static void xh2a_pcie_pm_complete(struct device *dev)
 
 	dev_info(dev, "%s: step2, polled pwrsts get %d, jiffies %ld\n",
 		 __func__, pwrsts, jiffies);
+
+	/* for compatible firmware:
+	 *   resumed from scp sleep, no image restoring;
+	 *   resumed from scp (hib w/ power), noc ready after e2_wait_host;
+	 *   resumed from fsbl (hib w/o power), noc ready afeter e2_wait_host;
+	 * for non-compatible firmware:
+	 *   noc ready immediately.*/
+	xh2a_pcie_probe_post(p_xh2a);
 
 	/* mark that device can start image restoring */
 	if (pwrsts == XH2A_LPSTS_E2_WAIT_HOST)
@@ -254,68 +261,7 @@ static void xh2a_pcie_pm_complete(struct device *dev)
 	dev_info(dev, "%s: step5, each submodule complete. jiffies %ld\n",
 		 __func__, jiffies);
 
-	p_xh2a->d3cold_allowed_saved = p_xh2a->pdev->d3cold_allowed;
 	p_xh2a->pdev->d3cold_allowed = 0;
-}
-
-static int xh2a_pcie_pm_suspend(struct device *dev)
-{
-	return 0;
-}
-
-static int xh2a_pcie_pm_resume(struct device *dev)
-{
-	return 0;
-}
-
-static int xh2a_pcie_pm_freeze(struct device *dev)
-{
-	return 0;
-}
-
-static int xh2a_pcie_pm_thaw(struct device *dev)
-{
-	return 0;
-}
-
-static int xh2a_pcie_pm_poweroff(struct device *dev)
-{
-	return 0;
-}
-
-static int xh2a_pcie_pm_restore(struct device *dev)
-{
-	return 0;
-}
-
-static int xh2a_pcie_pm_suspend_noirq(struct device *dev)
-{
-	return 0;
-}
-
-static int xh2a_pcie_pm_resume_noirq(struct device *dev)
-{
-	return 0;
-}
-
-static int xh2a_pcie_pm_freeze_noirq(struct device *dev)
-{
-	return 0;
-}
-
-static int xh2a_pcie_pm_thaw_noirq(struct device *dev)
-{
-	return 0;
-}
-
-static int xh2a_pcie_pm_poweroff_noirq(struct device *dev)
-{
-	return 0;
-}
-
-static int xh2a_pcie_pm_restore_noirq(struct device *dev)
-{
-	return 0;
 }
 
 static int xh2a_pcie_pm_runtime_suspend(struct device *dev)
@@ -331,7 +277,9 @@ static int xh2a_pcie_pm_runtime_suspend(struct device *dev)
 		return -ENODEV;
 	}
 
-	dev_info(&p_xh2a->pdev->dev, "%s: runtime suspend\n", __func__);
+	dev_info(&p_xh2a->pdev->dev,
+		 "%s: runtime suspend start. jiffies %ld, HZ %d\n", __func__,
+		 jiffies, HZ);
 
 	list_for_each_entry_safe(pos, n, &p_xh2a->client_list, node) {
 		if (pos->runtime_suspend_cb)
@@ -341,6 +289,10 @@ static int xh2a_pcie_pm_runtime_suspend(struct device *dev)
 	xh2a_rpmsg_lite_ext_send(p_xh2a, XH2A_LPCTRL_START_SLEEP_ID,
 				 XH2A_LPCTRL_START_SLEEP_STR,
 				 XH2A_LPCTRL_START_SLEEP_LEN);
+
+	dev_info(&p_xh2a->pdev->dev,
+		 "%s: runtime suspend wait firmware. jiffies %ld, HZ %d\n",
+		 __func__, jiffies, HZ);
 
 	/* wait max 1000ms for xh2a enter lp mode */
 	timeout = jiffies + msecs_to_jiffies(1000);
@@ -358,6 +310,10 @@ static int xh2a_pcie_pm_runtime_suspend(struct device *dev)
 		usleep_range(10, 100);
 	}
 
+	dev_info(&p_xh2a->pdev->dev,
+		 "%s: runtime suspended. jiffies %ld, HZ %d\n", __func__,
+		 jiffies, HZ);
+
 	return 0;
 }
 
@@ -374,9 +330,9 @@ static int xh2a_pcie_pm_runtime_resume(struct device *dev)
 		return -ENODEV;
 	}
 
-	dev_info(&p_xh2a->pdev->dev, "%s: runtime resume\n", __func__);
-
-	xh2a_pcie_probe_post(p_xh2a);
+	dev_info(&p_xh2a->pdev->dev,
+		 "%s: runtime resume start. jiffies %ld, HZ %d\n", __func__,
+		 jiffies, HZ);
 
 	ret = xh2a_pcie_check_pwrsts(p_xh2a, &pwrsts);
 
@@ -391,9 +347,6 @@ static int xh2a_pcie_pm_runtime_resume(struct device *dev)
 					   XH2A_PCIE_MSG_TO_E2);
 
 	/* wait max 2000ms for xh2a resume from idle or sleep */
-	dev_info(&p_xh2a->pdev->dev,
-		 "%s: wait for xh2a runtime resume. jiffies %ld, HZ %d\n",
-		 __func__, jiffies, HZ);
 	timeout = jiffies + msecs_to_jiffies(2000);
 	while (time_before(jiffies, timeout)) {
 		ret = xh2a_pcie_check_pwrsts(p_xh2a, &pwrsts);
@@ -409,20 +362,24 @@ static int xh2a_pcie_pm_runtime_resume(struct device *dev)
 
 		usleep_range(10, 100);
 	}
+
 	dev_info(&p_xh2a->pdev->dev,
-		 "%s: xh2a runtime resumed. jiffies %ld, HZ %d\n", __func__,
-		 jiffies, HZ);
+		 "%s: runtime resume waited firmware. jiffies %ld, HZ %d\n",
+		 __func__, jiffies, HZ);
+
+	/* for compatible firmware, noc ready after e2_exit_lp;
+	 * for non-compatible firmware, noc ready immediately. */
+	xh2a_pcie_probe_post(p_xh2a);
 
 	list_for_each_entry_safe(pos, n, &p_xh2a->client_list, node) {
 		if (pos->runtime_resume_cb)
 			pos->runtime_resume_cb(p_xh2a);
 	}
 
-	return 0;
-}
+	dev_info(&p_xh2a->pdev->dev,
+		 "%s: runtime resumed. jiffies %ld, HZ %d\n", __func__, jiffies,
+		 HZ);
 
-static int xh2a_pcie_pm_runtime_idle(struct device *dev)
-{
 	return 0;
 }
 
@@ -611,8 +568,15 @@ static int xh2a_pcie_probe(struct pci_dev *pdev,
 			   const struct pci_device_id *ent)
 {
 	struct xh2a_pcie_dev *p_xh2a = NULL;
+	struct xh2a_ctl_ctx *ctl_ctx;
 	struct device *dev = &pdev->dev;
 	int ret, i;
+
+	ret = xh2a_ctl_get_ctx(&ctl_ctx);
+	if (ret) {
+		dev_err(dev, "xh2a_ctl_get_ctx failed %d\n", ret);
+		return ret;
+	}
 
 	p_xh2a = devm_kzalloc(&pdev->dev, sizeof(struct xh2a_pcie_dev),
 			      GFP_KERNEL);
@@ -689,6 +653,12 @@ static int xh2a_pcie_probe(struct pci_dev *pdev,
 		goto notifier_err;
 	}
 
+	ret = xh2a_ctl_register_dev(ctl_ctx, p_xh2a->minor, p_xh2a);
+	if (ret) {
+		dev_err(dev, "xh2a_ctl_register_dev failed %d\n", ret);
+		goto notifier_err;
+	}
+
 	p_xh2a->pm_notifier.notifier_call = xh2a_pcie_pm_notifier;
 	register_pm_notifier(&p_xh2a->pm_notifier);
 
@@ -698,11 +668,13 @@ static int xh2a_pcie_probe(struct pci_dev *pdev,
 	/* force disable d3cold */
 	p_xh2a->d3cold_allowed_saved = pdev->d3cold_allowed;
 	pdev->d3cold_allowed = 0;
-#ifdef HM_RUNTIME_PM_ENABLE
-	pm_runtime_allow(dev);
-#else
-	pm_runtime_forbid(dev);
-#endif
+
+	if (hm_runtime_pm_enable) {
+		pm_runtime_allow(dev);
+	} else {
+		pm_runtime_forbid(dev);
+	}
+
 	pm_runtime_mark_last_busy(dev);
 	pm_runtime_put_sync(dev);
 
@@ -729,6 +701,8 @@ get_minor_err:
 
 static void xh2a_pcie_remove(struct pci_dev *pdev)
 {
+	int ret;
+	struct xh2a_ctl_ctx *ctl_ctx;
 	struct xh2a_pcie_dev *p_xh2a = pci_get_drvdata(pdev);
 	struct device *dev = &pdev->dev;
 
@@ -736,6 +710,14 @@ static void xh2a_pcie_remove(struct pci_dev *pdev)
 		dev_err(dev, "%s cannot find xh2a device\n", __func__);
 		return;
 	}
+
+	ret = xh2a_ctl_get_ctx(&ctl_ctx);
+	if (ret) {
+		dev_err(dev, "xh2a_ctl_get_ctx failed %d\n", ret);
+		return;
+	}
+
+	xh2a_ctl_unregister_dev(ctl_ctx, p_xh2a->minor);
 
 	pm_runtime_dont_use_autosuspend(dev);
 	pm_runtime_get_sync(dev);
@@ -779,27 +761,14 @@ static void xh2a_pcie_shutdown(struct pci_dev *pdev)
 static const struct pci_error_handlers xh2a_pcie_err_handler = {
 	.error_detected = xh2a_pcie_err_error_detected,
 	.slot_reset = xh2a_pcie_err_slot_reset,
-	.resume = xh2a_pcie_err_resume,
+	.resume = NULL,
 };
 
 static const struct dev_pm_ops xh2a_pcie_pm_ops = {
 	.prepare = xh2a_pcie_pm_prepare,
 	.complete = xh2a_pcie_pm_complete,
-	.suspend = xh2a_pcie_pm_suspend,
-	.resume = xh2a_pcie_pm_resume,
-	.freeze = xh2a_pcie_pm_freeze,
-	.thaw = xh2a_pcie_pm_thaw,
-	.poweroff = xh2a_pcie_pm_poweroff,
-	.restore = xh2a_pcie_pm_restore,
-	.suspend_noirq = xh2a_pcie_pm_suspend_noirq,
-	.resume_noirq = xh2a_pcie_pm_resume_noirq,
-	.freeze_noirq = xh2a_pcie_pm_freeze_noirq,
-	.thaw_noirq = xh2a_pcie_pm_thaw_noirq,
-	.poweroff_noirq = xh2a_pcie_pm_poweroff_noirq,
-	.restore_noirq = xh2a_pcie_pm_restore_noirq,
-	.runtime_suspend = xh2a_pcie_pm_runtime_suspend,
-	.runtime_resume = xh2a_pcie_pm_runtime_resume,
-	.runtime_idle = xh2a_pcie_pm_runtime_idle,
+	SET_RUNTIME_PM_OPS(xh2a_pcie_pm_runtime_suspend,
+			   xh2a_pcie_pm_runtime_resume, NULL)
 };
 
 static ssize_t driver_version_show(struct device_driver *drv, char *buf)

@@ -35,9 +35,15 @@
 #define CE_REG_XCSA			0x54
 #define CE_REG_XCDA			0x58
 #define CE_REG_VER			0x90
+#if IS_ENABLED(CONFIG_ARCH_SUN8IW22)
+#define CE_REG_LPC			0x08
+#define CE_LOW_POWER_EN		BIT(30)
+#else
+#define CE_REG_LPC			0xD0
+#define CE_LOW_POWER_EN		BIT(0)
+#endif
 
 #define CE_CHAN_INT_ENABLE		1
-
 
 #define CE_REG_TLR_METHOD_TYPE_SHIFT	8
 
@@ -56,14 +62,19 @@
 
 #define CE_CHAN_PENDING			0x3
 
-#if defined(CONFIG_ARCH_SUN60IW2)
-#define CE_REG_LPC			0xD0
+#if IS_ENABLED(CONFIG_ARCH_SUN55IW6) || IS_ENABLED(CONFIG_ARCH_SUN8IW22) ||\
+	IS_ENABLED(CONFIG_ARCH_SUN252IW1)
+#define CE_REG_TRNG_ENT			CE_REG_ICR
+#define CE_DBL_ENT_SRC_EN		BIT(31)
+#elif IS_ENABLED(CONFIG_ARCH_SUN65IW1) || IS_ENABLED(CONFIG_ARCH_SUN60IW2) ||\
+	IS_ENABLED(CONFIG_ARCH_SUN55IW7) || IS_ENABLED(CONFIG_ARCH_SUN60IW3)
 #define CE_REG_TRNG_ENT			CE_REG_LPC
 #define CE_DBL_ENT_SRC_EN		BIT(1)
-#define CE_LOW_POWER_EN			BIT(0)
 #endif
 
-#if defined(CONFIG_ARCH_SUN55IW3) || defined(CONFIG_ARCH_SUN60IW2)
+#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN65IW1) ||\
+	 IS_ENABLED(CONFIG_ARCH_SUN60IW2) || IS_ENABLED(CONFIG_ARCH_SUN55IW7) ||\
+	 IS_ENABLED(CONFIG_ARCH_SUN60IW3)
 #define CE_REG_TLR_SYMM_TYPE_SHIFT	0
 #define CE_REG_TLR_ASYM_TYPE_SHIFT	5
 #define CE_REG_TLR_HASH_RBG_TYPE_SHIFT	10
@@ -246,6 +257,7 @@
 #define CE_ECC_OP_DEC                   5 /* decryption */
 #define CE_ECC_OP_SIGN                  6 /* sign */
 #define CE_ECC_OP_VERIFY                7 /* verification */
+#define CE_SM2_VERIFY                   3
 
 #define SS_SEED_SIZE			24
 
@@ -277,6 +289,9 @@ void ss_rsa_op_mode_set(int mode, ce_task_desc_t *task);
 
 void ss_ecc_width_set(int size, ce_task_desc_t *task);
 void ss_ecc_op_mode_set(int mode, ce_task_desc_t *task);
+
+void ss_sm2_width_set(int size, ce_task_desc_t *task);
+void ss_sm2_op_mode_set(int mode, ce_task_desc_t *task);
 
 void ss_cts_last(ce_task_desc_t *task);
 
@@ -327,6 +342,7 @@ void ce_iv_phyaddr_set(dma_addr_t phy_addr, ce_task_desc_t *task);
 phys_addr_t ce_task_addr_get(u8 *dst);
 void ss_hash_cmd_set(int channel_id, ce_new_task_desc_t *task);
 void ss_ctrl_hash_start(ce_new_task_desc_t *task, int type, int mode);
+void ss_low_power_en(void);
 #ifdef CE_DBL_ENT_SRC_EN
 void ss_trng_dbl_ent_en(void);
 #endif

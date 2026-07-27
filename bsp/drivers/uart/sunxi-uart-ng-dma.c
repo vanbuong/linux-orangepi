@@ -129,12 +129,13 @@ void sunxi_uart_dma_rx_callback(void *arg)
 void sunxi_uart_release_dma_tx(struct sunxi_uart_port *uart_port)
 {
 	struct sunxi_uart_dma *uart_dma = uart_port->dma;
-
+	struct uart_port *port = &(uart_port->port);
+	sunxi_uart_xmit *xmit = sunxi_uart_get_xmit(port);
 	if (uart_dma && uart_dma->tx_dma_inited) {
 		sunxi_uart_stop_dma_tx(uart_port);
 		dma_free_coherent(uart_port->port.dev, uart_port->dma->tb_size,
 				uart_port->dma->tx_buffer, uart_port->dma->tx_phy_addr);
-		uart_port->port.state->xmit.buf = NULL;
+		sunxi_uart_set_xmit_fifo(port, xmit, NULL);
 		dma_release_channel(uart_dma->dma_chan_tx);
 		uart_dma->dma_chan_tx = NULL;
 		uart_dma->tx_dma_inited = 0;
@@ -190,19 +191,25 @@ void dma_tx_callback(void *data)
 	struct uart_port *port = data;
 	struct sunxi_uart_port *uart_port = container_of(port,
 			struct sunxi_uart_port, port);
-	struct circ_buf *xmit = &port->state->xmit;
+	sunxi_uart_xmit *xmit = sunxi_uart_get_xmit(port);
 	struct sunxi_uart_dma *uart_dma = uart_port->dma;
 	struct scatterlist *sgl = &uart_dma->tx_sgl;
 	unsigned long flags;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 7, 0))
+	struct tty_port *tport = &port->state->port;
+#endif
 
 	SERIAL_DBG(port->dev, "dma_tx_callback\n");
 
 	spin_lock_irqsave(&port->lock, flags);
 	dma_unmap_sg(uart_port->port.dev, sgl, 1, DMA_TO_DEVICE);
-
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 7, 0))
+	kfifo_skip_count(&tport->xmit_fifo, uart_dma->tx_bytes);
+#else
 	xmit->tail = (xmit->tail + uart_dma->tx_bytes) & (UART_XMIT_SIZE - 1);
+#endif
 	port->icount.tx += uart_dma->tx_bytes;
-	if (uart_circ_chars_pending(xmit) < WAKEUP_CHARS)
+	if (sunxi_uart_circ_chars_pending(xmit, port) < WAKEUP_CHARS)
 		uart_write_wakeup(port);
 
 	sunxi_uart_enable_ier_thri(port);
@@ -214,12 +221,16 @@ int sunxi_uart_start_dma_tx(struct sunxi_uart_port *uart_port)
 {
 	int count = 0;
 	struct uart_port *port = &uart_port->port;
-	struct circ_buf *xmit = &port->state->xmit;
 	struct sunxi_uart_dma *uart_dma = uart_port->dma;
 	struct scatterlist *sgl = &uart_dma->tx_sgl;
 	struct dma_async_tx_descriptor *desc;
 	int ret;
-
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 7, 0))
+	unsigned int tail;
+	struct tty_port *tport = &port->state->port;
+#else
+	sunxi_uart_xmit *xmit = sunxi_uart_get_xmit(port);
+#endif
 	if (!uart_dma->use_dma)
 		goto err_out;
 
@@ -233,10 +244,15 @@ int sunxi_uart_start_dma_tx(struct sunxi_uart_port *uart_port)
 	/**********************************/
 	/* mask the stop now */
 	sunxi_uart_disable_ier_thri(port);
-
-	count = SERIAL_CIRC_CNT_TO_END(xmit);
-	uart_dma->tx_bytes = count;
+#if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 7, 0))
+	count = kfifo_out_linear(&tport->xmit_fifo, &tail, UART_XMIT_SIZE);
+	sg_init_table(sgl, 1);
+	kfifo_dma_out_prepare(&tport->xmit_fifo, sgl, 1, count);
+#else
+	count = CIRC_CNT_TO_END(xmit->head, xmit->tail, UART_XMIT_SIZE);
 	sg_init_one(sgl, phys_to_virt(uart_dma->tx_phy_addr) + xmit->tail, count);
+#endif
+	uart_dma->tx_bytes = count;
 	ret = dma_map_sg(port->dev, sgl, 1, DMA_TO_DEVICE);
 
 	if (ret == 0) {

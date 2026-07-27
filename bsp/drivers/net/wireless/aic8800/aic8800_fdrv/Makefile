@@ -71,6 +71,7 @@ CONFIG_FILTER_TCP_ACK = y
 CONFIG_MCC = y
 CONFIG_ONE_TXQ = n
 CONFIG_PREALLOC_TXQ = y
+CONFIG_PREALLOC_STA_TABLE = n
 CONFIG_APF = y
 CONFIG_PREALLOC_RX_SKB = n
 CONFIG_FOR_IPCAM = y
@@ -98,6 +99,18 @@ CONFIG_RWNX_MON_DATA =y
 CONFIG_RWNX_SW_PROFILING ?= n
 CONFIG_RWNX_DBG ?= y
 
+# config for usb interface
+ifeq ($(CONFIG_USB_SUPPORT),y)
+CONFIG_FOR_IPCAM = n
+CONFIG_USB_BT = y
+CONFIG_ALIGN_8BYTES = y
+CONFIG_USB_ALIGN_DATA = y
+CONFIG_USB_MSG_OUT_EP = y
+CONFIG_USB_MSG_IN_EP = y
+CONFIG_PLATFORM_HI = y
+CONFIG_TXRX_THREAD_PRIO = y
+endif
+
 obj-$(CONFIG_AIC8800_WLAN_SUPPORT) := aic8800_fdrv.o
 aic8800_fdrv-y := \
 	rwnx_wakelock.o        \
@@ -121,6 +134,7 @@ aic8800_fdrv-y := \
 	ipc_host.o             \
 	rwnx_tdls.o            \
 	aic_vendor.o           \
+	aicwf_nan.o            \
 	aicwf_8800dc.o         \
 	aicwf_8800d80.o        \
 
@@ -144,12 +158,17 @@ aic8800_fdrv-$(CONFIG_PCIE_SUPPORT)    += rwnx_pci.o
 
 ccflags-y += -Wno-implicit-fallthrough
 ccflags-y += -Wno-frame-larger-than
+ccflags-y += -Wno-missing-prototypes
+ccflags-y += -Wno-missing-declarations
+ccflags-y += -Wno-attribute-warning
 
 ccflags-$(CONFIG_DEBUG_FS) += -DCONFIG_RWNX_DEBUGFS
 ccflags-$(CONFIG_DEBUG_FS) += -DCONFIG_RWNX_UM_HELPER_DFLT=\"$(CONFIG_RWNX_UM_HELPER_DFLT)\"
 ccflags-$(CONFIG_RWNX_P2P_DEBUGFS) += -DCONFIG_RWNX_P2P_DEBUGFS
 ccflags-$(CONFIG_GKI_OPT_FEATURES) += -DCONFIG_GKI_OPT_FEATURES
 
+ccflags-$(CONFIG_PLATFORM_HI) += -DANDROID_PLATFORM
+ccflags-$(CONFIG_PLATFORM_HI) += -DCONFIG_PLATFORM_HI
 ifeq ($(CONFIG_SDIO_SUPPORT), y)
 ccflags-$(CONFIG_SDIO_PWRCTRL) += -DCONFIG_SDIO_PWRCTRL
 endif
@@ -205,6 +224,7 @@ ccflags-$(CONFIG_FILTER_TCP_ACK) += -DCONFIG_FILTER_TCP_ACK
 ccflags-$(CONFIG_MCC) += -DCONFIG_MCC
 ccflags-$(CONFIG_ONE_TXQ)  += -DCONFIG_ONE_TXQ
 ccflags-$(CONFIG_PREALLOC_TXQ) += -DCONFIG_PREALLOC_TXQ
+ccflags-$(CONFIG_PREALLOC_STA_TABLE) += -DCONFIG_PREALLOC_STA_TABLE
 ccflags-$(CONFIG_APF) += -DCONFIG_APF
 ccflags-$(CONFIG_PREALLOC_RX_SKB) += -DCONFIG_PREALLOC_RX_SKB
 ccflags-$(CONFIG_FOR_IPCAM) += -DCONFIG_FOR_IPCAM
@@ -239,4 +259,9 @@ ccflags-$(CONFIG_ARP_OFFLOAD) += -DAICWF_ARP_OFFLOAD
 ccflags-$(CONFIG_RADAR_DETECT) += -DRADAR_OR_IR_DETECT
 ccflags-$(CONFIG_DOWNLOAD_FW)  += -DCONFIG_DOWNLOAD_FW
 ccflags-$(CONFIG_USB_BT)  += -DCONFIG_USB_BT
-ccflags-$(CONFIG_USB_MSG_EP) += -DCONFIG_USB_MSG_EP
+ccflags-$(CONFIG_ALIGN_8BYTES)  += -DCONFIG_ALIGN_8BYTES
+ccflags-$(CONFIG_USB_MSG_OUT_EP) += -DCONFIG_USB_MSG_OUT_EP
+ccflags-$(CONFIG_USB_MSG_IN_EP) += -DCONFIG_USB_MSG_IN_EP
+ccflags-$(CONFIG_USB_ALIGN_DATA) += -DCONFIG_USB_ALIGN_DATA
+ccflags-$(CONFIG_PREALLOC_RX_SKB) += -DCONFIG_PREALLOC_RX_SKB
+ccflags-$(CONFIG_TXRX_THREAD_PRIO) += -DCONFIG_TXRX_THREAD_PRIO

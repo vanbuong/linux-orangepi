@@ -22,7 +22,7 @@
 #include "pmu-ext.h"
 
 static const char *const pmu_ext_model_names[] = {
-	"TCS4838", "SY8827G", "AXP1530", "AW37501", "OCP2131"
+	"TCS4838", "SY8827G", "AXP1530", "AW37501", "OCP2131", "SY8810"
 };
 
 #define PMU_EXT_DCDC0 "dcdc0"
@@ -154,6 +154,21 @@ static struct mfd_cell ocp2131_cells[] = {
 	},
 };
 
+static struct mfd_cell sy8810_cells[] = {
+	{
+		.of_compatible = "ext,sy8810-regulator",
+		.name = "sy8810-regulator",
+	},
+	{
+		.of_compatible = "xpower-vregulator,ext-dcdc0",
+		.name = "reg-virt-consumer",
+		.id = PLATFORM_DEVID_AUTO,
+		.platform_data = PMU_EXT_DCDC0,
+		.pdata_size = sizeof(PMU_EXT_DCDC0),
+
+	},
+};
+
 /* For AXP323/AXP1530 */
 static const struct regmap_range axp1530_writeable_ranges[] = {
 	regmap_reg_range(AXP1530_ON_INDICATE, AXP1530_END),
@@ -222,6 +237,15 @@ static const struct regmap_access_table ocp2131_writeable_table = {
 	.n_yes_ranges = ARRAY_SIZE(ocp2131_writeable_ranges),
 };
 
+static const struct regmap_range sy8810_volatile_ranges[] = {
+	regmap_reg_range(SY8810_VSEL0, SY8810_PWR_GOOD),
+};
+
+static const struct regmap_access_table sy8810_volatile_table = {
+	.yes_ranges = sy8810_volatile_ranges,
+	.n_yes_ranges = ARRAY_SIZE(sy8810_volatile_ranges),
+};
+
 /* For AXP323/AXP1530 */
 static const struct regmap_config axp1530_regmap_config = {
 	.reg_bits	= 8,
@@ -274,6 +298,16 @@ static const struct regmap_config ocp2131_regmap_config = {
 	.cache_type     = REGCACHE_RBTREE,
 };
 
+static const struct regmap_config sy8810_regmap_config = {
+	.reg_bits = 8,
+	.val_bits = 8,
+	.volatile_table = &sy8810_volatile_table,
+	.max_register   = SY8810_PWR_GOOD,
+	.use_single_read = true,
+	.use_single_write = true,
+	.cache_type     = REGCACHE_RBTREE,
+};
+
 static void axp1530_dts_parse(struct sunxi_power_dev *ext)
 {
 }
@@ -305,6 +339,45 @@ static void sy8827g_dts_parse(struct sunxi_power_dev *ext)
 	if (val) {
 		val = val << 4;
 		regmap_update_bits(map, SY8827G_CTRL, GENMASK(6, 4), val);
+	}
+}
+
+static void sy8810_dts_parse(struct sunxi_power_dev *ext)
+{
+	struct device_node *node = ext->dev->of_node;
+	struct regmap *map = ext->regmap;
+	u32 val;
+
+	/* init regs */
+	if (of_property_read_bool(node, "sy8810,reset_regs_to_default_val")) {
+		val = 1 << 1;
+		PMIC_DEV_DEBUG(ext->dev, "reset_regs_to_default_val\n");
+		regmap_update_bits(map, SY8810_CONTROL, GENMASK(1, 1), val);
+	}
+	if (!of_property_read_u32(node, "sy8810,bulk_en", &val)) {
+		PMIC_DEV_DEBUG(ext->dev, "bulk_en = %u\n", val);
+		val = (val & 0x1) << 7;
+		regmap_update_bits(map, SY8810_CONTROL, GENMASK(7, 7), val);
+	}
+	if (!of_property_read_u32(node, "sy8810,forced_pwm_mode", &val)) {
+		PMIC_DEV_DEBUG(ext->dev, "forced_pwm_mode = %u\n", val);
+		val = (val & 0x1) << 6;
+		regmap_update_bits(map, SY8810_CONTROL, GENMASK(6, 6), val);
+	}
+	if (!of_property_read_u32(node, "sy8810,discharge_resistor", &val)) {
+		PMIC_DEV_DEBUG(ext->dev, "discharge_resistor = %u\n", val);
+		val = (val & 0x1) << 5;
+		regmap_update_bits(map, SY8810_CONTROL, GENMASK(5, 5), val);
+	}
+	if (!of_property_read_u32(node, "sy8810,slew_rate", &val)) {
+		PMIC_DEV_DEBUG(ext->dev, "slew_rate = %u\n", val);
+		val = (val & 0x7) << 2;
+		regmap_update_bits(map, SY8810_CONTROL, GENMASK(4, 2), val);
+	}
+	if (!of_property_read_u32(node, "sy8810,output_voltage", &val)) {
+		PMIC_DEV_DEBUG(ext->dev, "output_voltage = %u\n", val);
+		val = (val & 0x7f) << 0;
+		regmap_update_bits(map, SY8810_VSEL0, GENMASK(6, 0), val);
 	}
 }
 
@@ -363,6 +436,13 @@ int pmu_ext_match_device(struct sunxi_power_dev *ext)
 		ext->nr_cells = ARRAY_SIZE(ocp2131_cells);
 		ext->cells = ocp2131_cells;
 		ext->regmap_cfg = &ocp2131_regmap_config;
+		break;
+/**************************************/
+	case SY8810_ID:
+		ext->nr_cells = ARRAY_SIZE(sy8810_cells);
+		ext->cells = sy8810_cells;
+		ext->regmap_cfg = &sy8810_regmap_config;
+		ext->dts_parse = sy8810_dts_parse;
 		break;
 	default:
 		PMIC_DEV_ERR_STD(E_PMU_EXT_MFD_SYS_PORBE_ERR, dev, "unsupported ext ID %lu\n", ext->variant);

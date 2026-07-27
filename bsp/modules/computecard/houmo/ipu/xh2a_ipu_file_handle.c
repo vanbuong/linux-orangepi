@@ -37,6 +37,7 @@ xh2a_ipu_file_handle_create(struct xh2a_ipu_device *ipu_dev)
 	if (ret != 0) {
 		dev_err(miscdev->this_device,
 			"%s: mutex_lock_interruptible failed\n", __func__);
+		kfree(file_handle);
 		return ERR_PTR(ret);
 	}
 
@@ -54,11 +55,13 @@ xh2a_ipu_file_handle_create(struct xh2a_ipu_device *ipu_dev)
 	return file_handle;
 }
 
-static void
-file_handle_destroy_all_groups(struct xh2a_ipu_file_handle *file_handle)
+static void file_handle_cancel_groups(struct xh2a_ipu_file_handle *file_handle,
+				      bool remove_idr, bool destroy_groups)
 {
 	int ret, id = file_handle->min_id;
+	int group_id;
 	struct xh2a_ipu_group *group;
+	bool canceled;
 
 	while (true) {
 		mutex_lock(&file_handle->file_mutex);
@@ -69,19 +72,34 @@ file_handle_destroy_all_groups(struct xh2a_ipu_file_handle *file_handle)
 			break;
 		}
 
+		group_id = id;
 		id++;
+		if (remove_idr)
+			idr_remove(&file_handle->group_idr, group_id);
 
 		mutex_unlock(&file_handle->file_mutex);
 
-		ret = xh2a_ipu_group_destroy(group);
-		if (ret == -EBUSY)
-			atomic_set(&group->status, GROUP_CANCEL);
+		canceled = cancel_delayed_work_sync(&group->timeout_work);
+		if (canceled)
+			xh2a_ipu_group_put(group);
 
-		dev_dbg(file_handle->ipu_dev->miscdev.this_device,
-			"removing group[%d].\n", id - 1);
+		if (!destroy_groups) {
+			atomic_set(&group->status, GROUP_CANCEL);
+			complete_all(&group->sync_completion);
+			continue;
+		}
+
+		ret = xh2a_ipu_group_destroy(group);
+		if (ret == -EBUSY) {
+			atomic_set(&group->status, GROUP_CANCEL);
+			complete_all(&group->sync_completion);
+		}
+		if (ret)
+			xh2a_ipu_group_put(group);
 	}
 
-	file_handle->min_id = INT_MAX;
+	if (remove_idr)
+		file_handle->min_id = INT_MAX;
 }
 
 void xh2a_ipu_file_handle_destroy(struct xh2a_ipu_file_handle *file_handle)
@@ -105,7 +123,7 @@ void xh2a_ipu_file_handle_destroy(struct xh2a_ipu_file_handle *file_handle)
 	dev_dbg(miscdev->this_device, "%s: file_handle=%p\n", __func__,
 		file_handle);
 
-	file_handle_destroy_all_groups(file_handle);
+	file_handle_cancel_groups(file_handle, true, true);
 
 	mutex_lock(&file_handle->file_mutex);
 	idr_destroy(&file_handle->group_idr);
@@ -151,22 +169,5 @@ xh2a_ipu_file_handle_get_group_result(struct xh2a_ipu_file_handle *file_handle)
 
 void xh2a_ipu_file_handle_stop_group(struct xh2a_ipu_file_handle *file_handle)
 {
-	int id = file_handle->min_id;
-	struct xh2a_ipu_group *group;
-
-	while (true) {
-		mutex_lock(&file_handle->file_mutex);
-
-		group = idr_get_next(&file_handle->group_idr, &id);
-		if (!group) {
-			mutex_unlock(&file_handle->file_mutex);
-			break;
-		}
-
-		id++;
-
-		mutex_unlock(&file_handle->file_mutex);
-
-		complete_all(&group->launch_completion);
-	}
+	file_handle_cancel_groups(file_handle, false, false);
 }

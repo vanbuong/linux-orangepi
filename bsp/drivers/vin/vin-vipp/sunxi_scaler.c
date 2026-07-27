@@ -694,6 +694,10 @@ static int sunxi_scaler_subdev_s_stream(struct v4l2_subdev *sd, int enable)
 	struct vipp_crop crop;
 	enum vipp_format out_fmt;
 	enum vipp_format sc_fmt;
+#if IS_ENABLED(CONFIG_ARCH_SUN65IW1)
+	struct vipp_ds_config ds_cfg;
+	struct vipp_ds_size ds_size;
+#endif
 
 #if defined VIPP_200
 	if (scaler->noneed_register) {
@@ -842,6 +846,15 @@ static int sunxi_scaler_subdev_s_stream(struct v4l2_subdev *sd, int enable)
 			out_fmt = YUV420;
 			break;
 		}
+#if IS_ENABLED(CONFIG_ARCH_SUN65IW1)
+		ds_cfg.ds_w_num = scaler->ds_para.w_num;
+		ds_cfg.ds_h_num = scaler->ds_para.h_num;
+		ds_cfg.ds_phase = scaler->ds_para.ds_phase;
+		ds_size.ds_width = scaler->ds_para.width;
+		ds_size.ds_height = scaler->ds_para.height;
+		vipp_downsample_cfg(scaler->id, &ds_cfg);
+		vipp_downsample_output_size(scaler->id, &ds_size);
+#endif
 		scaler_cfg.sc_out_fmt = sc_fmt;
 		scaler_cfg.sc_x_ratio = scaler->para.xratio;
 		scaler_cfg.sc_y_ratio = scaler->para.yratio;
@@ -864,6 +877,10 @@ static int sunxi_scaler_subdev_s_stream(struct v4l2_subdev *sd, int enable)
 			vipp_yuv2rgb_coef_cfg(scaler->id);
 #endif
 		}
+#endif
+
+#if IS_ENABLED(CONFIG_ARCH_SUN65IW1)
+		vipp_downsample_en(scaler->id, 0);
 #endif
 		vipp_scaler_en(scaler->id, 1);
 		vipp_osd_en(scaler->id, 1);
@@ -897,6 +914,9 @@ static int sunxi_scaler_subdev_s_stream(struct v4l2_subdev *sd, int enable)
 		vipp_chroma_ds_en(scaler->id, 0);
 		vipp_osd_en(scaler->id, 0);
 		vipp_scaler_en(scaler->id, 0);
+#if IS_ENABLED(CONFIG_ARCH_SUN65IW1)
+		vipp_downsample_en(scaler->id, 0);
+#endif
 #if defined VIPP_200 && IS_ENABLED(CONFIG_VIPP_YUV2RGB)
 		if (res->res_pix_fmt == V4L2_PIX_FMT_RGB24 || \
 			res->res_pix_fmt == V4L2_PIX_FMT_BGR24 || \
@@ -1313,7 +1333,8 @@ static int scaler_probe(struct platform_device *pdev)
 			ret = -EINVAL;
 			goto unmap;
 		}
-#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN60IW2)
+#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN60IW2) ||\
+	IS_ENABLED(CONFIG_ARCH_SUN65IW1)
 		vin_iommu_en(CSI_IOMMU_MASTER, true);
 #endif
 		scaler->delay_para_ready = 0;

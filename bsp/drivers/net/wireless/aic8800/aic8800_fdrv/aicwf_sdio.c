@@ -376,9 +376,11 @@ static int aicwf_sdio_probe(struct sdio_func *func,
 
 	host->ops->enable_sdio_irq(host, true);
 
-	err = rwnx_register_hostwake_irq(sdiodev->dev);
-	if (err != 0)
-		goto init_hostif_fail;
+	if (aicwf_feature.cpmode == AICBSP_CPMODE_WORK) {
+		err = rwnx_register_hostwake_irq(sdiodev->dev);
+		if (err != 0)
+			goto init_hostif_fail;
+	}
 
 	aicwf_hostif_ready();
 
@@ -571,7 +573,9 @@ void aicwf_sdio_exit(void)
 			del_timer_sync(&g_rwnx_plat->sdiodev->timer);
 		}
 #endif
-		rwnx_unregister_hostwake_irq(g_rwnx_plat->sdiodev->dev);
+		if (aicwf_feature.cpmode == AICBSP_CPMODE_WORK) {
+			rwnx_unregister_hostwake_irq(g_rwnx_plat->sdiodev->dev);
+		}
 		rwnx_platform_deinit(g_rwnx_plat->sdiodev->rwnx_hw);
 	}
 
@@ -1255,7 +1259,7 @@ static inline void aic_thread_wait_stop(void)
 {
 #if 1// PLATFORM_LINUX
 	#if 0
-	while (!kthread_should_stop()){
+	while (!kthread_should_stop()) {
 		printk("%s waiting for thread_stop notify \r\n", __func__);
 		msleep(100);
 	}
@@ -1314,6 +1318,12 @@ int sdio_bustx_thread(void *data)
 			if (sdiodev->bus_if->state == BUS_DOWN_ST)
 				break;
 
+			while (atomic_read(&sdiodev->is_bus_suspend) == 1) {
+				sdio_dbg("%s waiting for sdio bus resume\n", __func__);
+				msleep(10);
+				continue;
+			}
+
 			rwnx_wakeup_lock(sdiodev->rwnx_hw->ws_tx);
 			while ((int)(atomic_read(&sdiodev->tx_priv->tx_pktcnt) > 0) || (sdiodev->tx_priv->cmd_txstate == true)) {
 				aicwf_sdio_tx_process(sdiodev);
@@ -1361,12 +1371,15 @@ int sdio_busrx_thread(void *data)
 #endif
 			if (bus_if->state == BUS_DOWN_ST)
 				break;
+
+			while (atomic_read(&bus_if->bus_priv.sdio->is_bus_suspend) == 1) {
+				sdio_dbg("%s waiting for sdio bus resume\n", __func__);
+				msleep(10);
+				continue;
+			}
+
 #ifdef CONFIG_OOB
 #ifdef CONFIG_SDIO_PWRCTRL
-			while (atomic_read(&bus_if->bus_priv.sdio->is_bus_suspend) == 1) {
-				sdio_dbg("%s waiting for sdio bus resume \r\n", __func__);
-				msleep(100);
-			}
 			aicwf_sdio_pwr_stctl(bus_if->bus_priv.sdio, SDIO_ACTIVE_ST);
 #endif // CONFIG_SDIO_PWRCTRL
 			aicwf_sdio_hal_irqhandler(bus_if->bus_priv.sdio->func);
@@ -1530,7 +1543,7 @@ void aicwf_sdio_hal_irqhandler(struct sdio_func *func)
 			aicwf_sdio_enq_rxpkt(sdiodev, pkt);
 
 		if (atomic_read(&sdiodev->rx_priv->rx_cnt) == 1 &&
-			sdiodev->oob_enable == false){
+			sdiodev->oob_enable == false) {
 			complete(&bus_if->busrx_trgg);
 		}
 	} else if (sdiodev->rwnx_hw->chipid == PRODUCT_ID_AIC8800D80) {
@@ -1595,7 +1608,7 @@ void aicwf_sdio_hal_irqhandler(struct sdio_func *func)
 			aicwf_sdio_enq_rxpkt(sdiodev, pkt);
 
 		if (atomic_read(&sdiodev->rx_priv->rx_cnt) == 1 &&
-			sdiodev->oob_enable == false){
+			sdiodev->oob_enable == false) {
 			complete(&bus_if->busrx_trgg);
 		}
 	}
@@ -1671,8 +1684,7 @@ void aicwf_sdio_release(struct aic_sdio_dev *sdiodev)
 	sdio_dbg("%s:pwrctl stopped\n", __func__);
 #endif
 
-	if (sdiodev->cmd_mgr.state == RWNX_CMD_MGR_STATE_INITED)
-		rwnx_cmd_mgr_deinit(&sdiodev->cmd_mgr);
+	rwnx_cmd_mgr_deinit(&sdiodev->cmd_mgr);
 	sdio_dbg("exit %s\n", __func__);
 }
 

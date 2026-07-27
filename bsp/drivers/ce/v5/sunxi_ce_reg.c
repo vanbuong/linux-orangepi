@@ -28,6 +28,15 @@ inline void ss_writel(u32 offset, u32 val)
 	writel(val, ss_membase() + offset);
 }
 
+void ss_low_power_en(void)
+{
+	u32 reg_val;
+
+	reg_val = ss_readl(CE_REG_LPC);
+	reg_val |= CE_LOW_POWER_EN;
+	ss_writel(CE_REG_LPC, reg_val);
+}
+
 #ifdef CE_DBL_ENT_SRC_EN
 void ss_trng_dbl_ent_en(void)
 {
@@ -216,7 +225,7 @@ void ss_iv_mode_set(int mode, ce_task_desc_t *task)
 	task->comm_ctl |= mode << CE_COMM_CTL_IV_MODE_SHIFT;
 }
 
-void ss_cntsize_set(int size, ce_task_desc_t *task)
+static void ss_cntsize_set(int size, ce_task_desc_t *task)
 {
 	task->sym_ctl |= size << CE_SYM_CTL_CTR_SIZE_SHIFT;
 }
@@ -367,6 +376,16 @@ void ss_ecc_width_set(int size, ce_task_desc_t *task)
 }
 
 void ss_ecc_op_mode_set(int mode, ce_task_desc_t *task)
+{
+	task->asym_ctl |= mode<<CE_ASYM_CTL_RSA_OP_SHIFT;
+}
+
+void ss_sm2_width_set(int size, ce_task_desc_t *task)
+{
+	task->asym_ctl |= DIV_ROUND_UP(size, 4);
+}
+
+void ss_sm2_op_mode_set(int mode, ce_task_desc_t *task)
 {
 	task->asym_ctl |= mode<<CE_ASYM_CTL_RSA_OP_SHIFT;
 }

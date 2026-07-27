@@ -1780,14 +1780,16 @@ static int vinc_irq_control(void *dev, void *data, int len)
 			vin_err("failed to install CSI DMA irq (%d)\n", ret);
 			return -ENXIO;
 		}
-#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN60IW2)
+#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN60IW2) ||\
+	IS_ENABLED(CONFIG_ARCH_SUN65IW1)
 		vin_iommu_en(CSI_IOMMU_MASTER, true);
 #endif
 	} else if (!strncmp(data, "get", len)) {
 		if (vinc->irq > 0)
 			free_irq(vinc->irq, &vinc->vid_cap);
 
-#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN60IW2)
+#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN60IW2) ||\
+	 IS_ENABLED(CONFIG_ARCH_SUN65IW1)
 		vin_iommu_en(CSI_IOMMU_MASTER, false);
 #endif
 	} else if (!strncmp(data, "rv_start", len)) {
@@ -1840,7 +1842,11 @@ static int vin_irq_request(struct vin_core *vinc, int i)
 				vin_err("vinc%d get rpmsg_ser_name falid\n", vinc->id);
 				return -ENXIO;
 			} else
-				rpmsg_notify_add(vinc->rpmsg_ser_name, name, vinc_irq_enable, vinc);
+#if IS_ENABLED(CONFIG_ARCH_SUN65IW1)
+			rpmsg_notify_add(vinc->rpmsg_ser_name, name, vinc_irq_control, vinc);
+#else
+			rpmsg_notify_add(vinc->rpmsg_ser_name, name, vinc_irq_enable, vinc);
+#endif
 #endif
 #endif
 		}
@@ -2235,7 +2241,8 @@ static int vin_core_probe(struct platform_device *pdev)
 
 	vin_irq_request(vinc, 0);
 #if !defined CONFIG_VIN_INIT_MELIS
-#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN55IW6) || IS_ENABLED(CONFIG_ARCH_SUN60IW2)
+#if IS_ENABLED(CONFIG_ARCH_SUN55IW3) || IS_ENABLED(CONFIG_ARCH_SUN55IW6) ||\
+	 IS_ENABLED(CONFIG_ARCH_SUN60IW2) || IS_ENABLED(CONFIG_ARCH_SUN65IW1)
 	vin_iommu_en(CSI_IOMMU_MASTER, true);
 #endif
 #endif

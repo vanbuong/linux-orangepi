@@ -796,7 +796,6 @@ void sunxi_drm_dsi_encoder_atomic_enable(struct drm_encoder *encoder,
 		return;
 	}
 	DRM_INFO("[DSI] %s vrr_setp:%d start\n", __FUNCTION__, dsi->dsi_para.vrr_setp);
-	dsi->enable = true;
 
 	if (dsi->phy) {
 		phy_mipi_dphy_get_default_config(dsi->dsi_para.timings.pixel_clk,
@@ -807,6 +806,9 @@ void sunxi_drm_dsi_encoder_atomic_enable(struct drm_encoder *encoder,
 
 	/* dual dsi use tcon's irq, single dsi use its own irq */
 	if (!disp_cfg.slave_dsi || (sunxi_get_soc_ver() != 0 && dsi->dsc)) {
+		dsi_enable_vblank(&dsi->dsi_lcd, false);
+		dsi_irq_query(&dsi->dsi_lcd, DSI_IRQ_VIDEO_VBLK);
+
 		dsi->irq_handler = sunxi_crtc_event_proc;
 		dsi->irq_data = scrtc_state->base.crtc;
 		ret = devm_request_irq(dsi->dev, dsi->irq_no, sunxi_dsi_irq_event_proc,
@@ -815,6 +817,7 @@ void sunxi_drm_dsi_encoder_atomic_enable(struct drm_encoder *encoder,
 			DRM_ERROR("Couldn't request the IRQ for dsi\n");
 		}
 	}
+	dsi->enable = true;
 
 	if (dsi->dsi_para.mode_flags & MIPI_DSI_MODE_VIDEO_BURST)
 		dsi->dsi_para.timings.pixel_clk = dsi->dsi_para.timings.pixel_clk * 10 / 9;
@@ -918,6 +921,9 @@ void sunxi_drm_dsi_encoder_atomic_disable(struct drm_encoder *encoder,
 		DRM_DEBUG_DRIVER("[DSI] skip disable/enable for VRR modeset\n");
 		return;
 	}
+	if (!(dsi->slave || (dsi->dsi_para.mode_flags & MIPI_DSI_SLAVE_MODE)) ||
+			(sunxi_get_soc_ver() != 0 && dsi->dsc))
+		devm_free_irq(dsi->dev, dsi->irq_no, dsi);
 
 #if LINUX_VERSION_CODE >= KERNEL_VERSION(6, 6, 0)
 	dsi->sdrm.panel->prepare_prev_first = false;
@@ -954,10 +960,6 @@ void sunxi_drm_dsi_encoder_atomic_disable(struct drm_encoder *encoder,
 		sunxi_lcd_pin_set_state(dsi->slave->dev, "sleep");
 	sunxi_dsi_disable_output(dsi);
 	sunxi_tcon_mode_exit(dsi->sdrm.tcon_dev);
-
-	if (!(dsi->slave || (dsi->dsi_para.mode_flags & MIPI_DSI_SLAVE_MODE)) ||
-			(sunxi_get_soc_ver() != 0 && dsi->dsc))
-		devm_free_irq(dsi->dev, dsi->irq_no, dsi);
 
 	dsi->enable = false;
 	DRM_DEBUG_DRIVER("%s finish\n", __FUNCTION__);
