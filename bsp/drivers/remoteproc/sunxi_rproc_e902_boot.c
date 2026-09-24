@@ -31,6 +31,10 @@
 /*
  * E902_CFG registers (Allwinner A733 User Manual V0.92, section 5.2)
  * Base address: 0x07032000
+ *
+ * Address spaces of note:
+ * - E902 iSRAM 0x40000000..0x40033FFF aliases ARM SRAM A2 0x00040000..0x00073FFF
+ * - RST_START_ADDR default 0x40014000 is mid-iSRAM (ARM phys 0x00054000)
  */
 #define E902_AUTO_GATING_REG		(0x0004)
 #define E902_DDR_REMAP_REG		(0x0020)

@@ -1250,11 +1250,19 @@
         status = "okay";
 };
 
-&e902_rproc {
-	status = "okay";
-	/* Use only-boot until firmware ships a resource table. */
-	only-boot;
-};
+/*
+ * E902 is the CPUS/ARISC core and is normally started by TF-A (SMC).
+ * Enable only when Linux remoteproc should own it instead of ARISC/SCP:
+ *
+ * &e902ddr_reserved { status = "okay"; };
+ * &e902_vdev0buffer { status = "okay"; };
+ * &e902_vdev0vring0 { status = "okay"; };
+ * &e902_vdev0vring1 { status = "okay"; };
+ * &e902_rproc {
+ *	status = "okay";
+ *	only-boot;
+ * };
+ */
 
 &hwspinlock {
         status = "okay";

@@ -86,29 +86,34 @@
 		};
 
 		/*
-		 * E902 (CPUS RISC-V) firmware / IPC carveouts.
-		 * Place after BL31 (0x48000000..0x49000000). Firmware may also
-		 * execute from SRAM A2 at 0x00040000 (see memory-mappings).
+		 * Optional E902 (CPUS RISC-V) firmware / IPC carveouts.
+		 * Keep disabled unless Linux remoteproc owns the core (not TF-A
+		 * ARISC/SCP). Place after BL31 (0x48000000..0x49000000).
+		 * Primary boot SRAM is A2: ARM 0x00040000 == E902 0x40000000.
 		 */
 		e902ddr_reserved: e902ddr@4a100000 {
 			reg = <0x0 0x4a100000 0x0 0x00100000>;
 			no-map;
+			status = "disabled";
 		};
 
 		e902_vdev0buffer: vdev0buffer@4a200000 {
 			compatible = "shared-dma-pool";
 			reg = <0x0 0x4a200000 0x0 0x40000>;
 			no-map;
+			status = "disabled";
 		};
 
 		e902_vdev0vring0: vdev0vring0@4a240000 {
 			reg = <0x0 0x4a240000 0x0 0x2000>;
 			no-map;
+			status = "disabled";
 		};
 
 		e902_vdev0vring1: vdev0vring1@4a242000 {
 			reg = <0x0 0x4a242000 0x0 0x2000>;
 			no-map;
+			status = "disabled";
 		};
 	};
 
@@ -2421,8 +2426,10 @@
 
 		/*
 		 * XuanTie openE902 CPUS RISC-V co-processor (A733).
-		 * E902_CFG base 0x07032000; RST_START_ADDR @ 0x0204;
-		 * DDR_REMAP @ 0x0020. Core/cfg clocks from sun60iw2-r-ccu.
+		 * E902_CFG base 0x07032000; RST_START_ADDR @ 0x0204 (default
+		 * 0x40014000 = 80KB into E902 iSRAM / ARM phys 0x00054000);
+		 * DDR_REMAP @ 0x0020. Normally owned by TF-A ARISC/SCP — leave
+		 * disabled unless Linux remoteproc takes ownership.
 		 */
 		e902_rproc: e902_rproc@7032000 {
 			compatible = "allwinner,e902-rproc";
@@ -2448,16 +2455,14 @@
 					<&e902_vdev0vring1>;
 			memory-mappings =
 				/* < DA		len		PA > */
-				/* SRAM A2 ~208KB (CPUS local SRAM) */
-				< 0x00040000	0x00034000	0x00040000 >,
-				/* DDR firmware carveout (link ELF here or to SRAM) */
+				/* E902 iSRAM 208KB <-> ARM SRAM A2 */
+				< 0x40000000	0x00034000	0x00040000 >,
+				/* DDR carveout / RPMsg (1:1 above SRAM overlay) */
 				< 0x4a100000	0x00100000	0x4a100000 >,
-				/* RPMsg shared buffer / vrings */
 				< 0x4a200000	0x00044000	0x4a200000 >,
 				/*
 				 * E902 1GB remap window at 0x80000000.
-				 * With ddr-remap = 0 this is phys 0x80000000..;
-				 * update both this entry and ddr-remap together.
+				 * Keep in sync with ddr-remap.
 				 */
 				< 0x80000000	0x40000000	0x80000000 >;
 			status = "disabled";
