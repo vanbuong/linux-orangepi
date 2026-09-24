@@ -58,6 +58,15 @@ config AW_REMOTEPROC_E906_STANDBY
 	help
 	  Say y here to support Allwinner SOC processors e906 standby
 
+config AW_REMOTEPROC_E902_BOOT
+	tristate "Allwinner remoteproc e902 boot"
+	depends on AW_REMOTEPROC
+	default n
+	help
+	  Say y here to support boot Allwinner SOC processors e902
+	  (XuanTie openE902 / A733 CPUS RISC-V) via the remote
+	  processor framework.
+
 config AW_REMOTEPROC_E907_BOOT
 	tristate "Allwinner remoteproc e907 boot"
 	depends on AW_REMOTEPROC

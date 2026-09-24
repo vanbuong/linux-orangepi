@@ -1250,6 +1250,12 @@
         status = "okay";
 };
 
+&e902_rproc {
+	status = "okay";
+	/* Use only-boot until firmware ships a resource table. */
+	only-boot;
+};
+
 &hwspinlock {
         status = "okay";
 };

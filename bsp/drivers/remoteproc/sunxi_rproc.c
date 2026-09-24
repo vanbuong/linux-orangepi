@@ -1413,6 +1413,7 @@ static const struct of_device_id sunxi_rproc_match[] = {
 	{ .compatible = "allwinner,hifi4-rproc", .data = "hifi4" },
 	{ .compatible = "allwinner,c906-rproc", .data = "c906" },
 	{ .compatible = "allwinner,e906-rproc", .data = "e906" },
+	{ .compatible = "allwinner,e902-rproc", .data = "e902" },
 	{ .compatible = "allwinner,e907-rproc", .data = "e907" },
 	{ .compatible = "allwinner,arm-rtos-rproc", .data = "arm_rtos" },
 	{ .compatible = "allwinner,arm-barematal-rproc", .data = "arm_baremetal" },
