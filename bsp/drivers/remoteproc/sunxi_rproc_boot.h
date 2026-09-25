@@ -72,6 +72,17 @@ struct sunxi_rproc_e906_cfg {
 	void __iomem  *e906_cfg;
 };
 
+struct sunxi_rproc_e902_cfg {
+	struct clk *mod_clk;		/* E902 core clock (CLK_RISCV) */
+	struct clk *cfg_clk;		/* E902 CFG clock (CLK_RISCV_CFG) */
+	struct clk *ts_clk;		/* optional timestamp 24M clock */
+	struct reset_control *cfg_rst;	/* RST_BUS_RISCV_CFG */
+	struct reset_control *mod_rst;	/* optional core/mod reset */
+	void __iomem *e902_cfg;		/* E902_CFG @ 0x07032000 */
+	u32 ddr_remap;			/* E902_DDR_REMAP bits[3:0] */
+	bool ddr_remap_valid;
+};
+
 struct sunxi_rproc_e907_cfg {
 	uint32_t core_freq;
 	uint32_t axi_freq;
