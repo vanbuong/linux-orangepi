@@ -1,0 +1,136 @@
+# Orange Pi 4 Pro (Allwinner A733 / sun60iw2) kernel CI
+#
+# Runs in linux-orangepi (this repo), not orangepi-build.
+# orangepi-build owns full image assembly (U-Boot pack + rootfs); kernel Image/dtb
+# compile verification belongs here so E902 remoteproc changes are gated quickly.
+#
+# U-Boot (vanbuong/u-boot-orangepi v2018.05-sun60iw2): no change required for this
+# CI or for stock SCP/ARISC ownership. Board boot_package already packs scp.fex and
+# sun60iw2p1_t736_defconfig sets CONFIG_ARISC_DEASSERT_BEFORE_KERNEL=y. Only change
+# U-Boot if Linux should own E902 instead of TF-A SCP (stop packing/starting scp).
+name: Orange Pi 4 Pro kernel
+
+on:
+  push:
+    branches:
+      - orange-pi-6.6-sun60iw2
+      - cursor/**
+    paths:
+      - 'arch/arm64/**'
+      - 'bsp/drivers/remoteproc/**'
+      - 'drivers/remoteproc/**'
+      - 'include/**'
+      - 'Makefile'
+      - '.github/workflows/orangepi4pro-kernel.yml'
+      - '.github/ci/**'
+      - 'arch/arm64/configs/sun60iw2-e902-remoteproc.config'
+  pull_request:
+    paths:
+      - 'arch/arm64/**'
+      - 'bsp/drivers/remoteproc/**'
+      - 'drivers/remoteproc/**'
+      - 'include/**'
+      - 'Makefile'
+      - '.github/workflows/orangepi4pro-kernel.yml'
+      - '.github/ci/**'
+      - 'arch/arm64/configs/sun60iw2-e902-remoteproc.config'
+  workflow_dispatch:
+
+concurrency:
+  group: orangepi4pro-kernel-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Image + dtbs (orangepi4pro / a733)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 180
+    env:
+      ARCH: arm64
+      CROSS_COMPILE: aarch64-linux-gnu-
+      BOARD_DTB: sun60i-a733-orangepi-4-pro.dtb
+      BOARD_CONFIG: .github/ci/linux-sun60iw2-current-a733.config
+      E902_FRAGMENT: arch/arm64/configs/sun60iw2-e902-remoteproc.config
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            bc bison flex gcc gcc-aarch64-linux-gnu \
+            libssl-dev libncurses-dev make python3 rsync xz-utils
+
+      - name: Configure (a733 board config + E902 remoteproc fragment)
+        run: |
+          set -euo pipefail
+          test -f "${BOARD_CONFIG}"
+          test -f "${E902_FRAGMENT}"
+          cp "${BOARD_CONFIG}" .config
+          ./scripts/kconfig/merge_config.sh -m .config "${E902_FRAGMENT}"
+          make olddefconfig
+          echo "== required remoteproc symbols =="
+          for s in AW_REMOTEPROC AW_REMOTEPROC_E902_BOOT AW_MSGBOX REMOTEPROC RPMSG MAILBOX; do
+            grep -E "^(CONFIG_${s}=|# CONFIG_${s} is not set)" .config || {
+              echo "missing symbol: ${s}" >&2
+              exit 1
+            }
+          done
+          grep -q '^CONFIG_AW_REMOTEPROC=y' .config
+          grep -q '^CONFIG_AW_REMOTEPROC_E902_BOOT=y' .config
+          KERNELRELEASE="$(make -s kernelrelease)"
+          echo "KERNELRELEASE=${KERNELRELEASE}" >> "${GITHUB_ENV}"
+          echo "Kernel release: ${KERNELRELEASE}"
+
+      - name: Build Image and Orange Pi 4 Pro dtb
+        run: |
+          set -euo pipefail
+          make -j"$(nproc)" Image dtbs
+          test -f arch/arm64/boot/Image
+          test -f "arch/arm64/boot/dts/allwinner/${BOARD_DTB}"
+
+      - name: Verify E902 objects linked when enabled
+        run: |
+          set -euo pipefail
+          # Module or built-in object from the E902 boot driver must exist.
+          if [[ -f bsp/drivers/remoteproc/sunxi_rproc_e902_boot.o ]] || \
+             [[ -f bsp/drivers/remoteproc/sunxi_rproc_e902_boot.ko ]]; then
+            ls -l bsp/drivers/remoteproc/sunxi_rproc_e902_boot.*
+          else
+            echo "E902 boot object not found; AW_REMOTEPROC_E902_BOOT may not have built" >&2
+            ls -la bsp/drivers/remoteproc/ || true
+            exit 1
+          fi
+
+      - name: Stage artifacts
+        run: |
+          set -euo pipefail
+          STAGE="${GITHUB_WORKSPACE}/orangepi4pro-kernel-artifact"
+          mkdir -p "${STAGE}/dtbs"
+          cp arch/arm64/boot/Image "${STAGE}/Image"
+          if [[ -f arch/arm64/boot/Image.gz ]]; then
+            cp arch/arm64/boot/Image.gz "${STAGE}/Image.gz"
+          else
+            gzip -c arch/arm64/boot/Image > "${STAGE}/Image.gz"
+          fi
+          cp "arch/arm64/boot/dts/allwinner/${BOARD_DTB}" "${STAGE}/dtbs/"
+          cp .config "${STAGE}/config-${KERNELRELEASE}"
+          cat > "${STAGE}/README.txt" <<EOF
+          Orange Pi 4 Pro kernel CI artifact
+          KERNELRELEASE=${KERNELRELEASE}
+          BOARD_DTB=${BOARD_DTB}
+          Config base: ${BOARD_CONFIG} (from orangepi-build linux-sun60iw2-current-a733)
+          Merged: ${E902_FRAGMENT}
+          U-Boot: no change required while SCP/ARISC owns E902.
+          EOF
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: orangepi4pro-kernel-${{ env.KERNELRELEASE }}
+          path: orangepi4pro-kernel-artifact/
+          if-no-files-found: error
+          retention-days: 14
