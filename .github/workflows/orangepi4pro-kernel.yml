@@ -88,7 +88,8 @@ jobs:
       - name: Build Image and Orange Pi 4 Pro dtb
         run: |
           set -euo pipefail
-          make -j"$(nproc)" Image dtbs
+          # Prefer the board DTB only (full `dtbs` also builds sibling boards).
+          make -j"$(nproc)" Image "allwinner/${BOARD_DTB}"
           test -f arch/arm64/boot/Image
           test -f "arch/arm64/boot/dts/allwinner/${BOARD_DTB}"
 
